@@ -3,6 +3,7 @@ import BackgroundStage from './BackgroundStage.tsx';
 import AboutModal from './AboutModal.tsx';
 import { BG_TITLE } from '../game/data/media.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
+import { playHover, playClick } from '../game/audio/soundEngine.ts';
 
 export interface TitleScreenProps {
   onStart: () => void;
@@ -12,6 +13,10 @@ export interface TitleScreenProps {
 export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
   const [showAbout, setShowAbout] = useState(false);
   const hasSave = useGameStore((s) => s.chosenSite) !== null;
+
+  const handleStart = () => { playClick(); onStart(); };
+  const handleContinue = () => { playClick(); onContinue(); };
+  const handleAboutOpen = () => { playClick(); setShowAbout(true); };
 
   return (
     <>
@@ -74,7 +79,9 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
           {hasSave ? (
             <>
               <button
-                onClick={onContinue}
+                onClick={handleContinue}
+                onMouseEnter={playHover}
+                onFocus={playHover}
                 style={{
                   background: 'var(--accent)',
                   color: '#fff',
@@ -88,7 +95,9 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
                 ☀️ Continue
               </button>
               <button
-                onClick={onStart}
+                onClick={handleStart}
+                onMouseEnter={playHover}
+                onFocus={playHover}
                 style={{
                   background: 'rgba(255,252,246,0.25)',
                   backdropFilter: 'blur(8px)',
@@ -106,7 +115,9 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
             </>
           ) : (
             <button
-              onClick={onStart}
+              onClick={handleStart}
+              onMouseEnter={playHover}
+              onFocus={playHover}
               style={{
                 background: 'var(--accent)',
                 color: '#fff',
@@ -122,7 +133,9 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
           )}
 
           <button
-            onClick={() => setShowAbout(true)}
+            onClick={handleAboutOpen}
+            onMouseEnter={playHover}
+            onFocus={playHover}
             style={{
               background: 'rgba(255,252,246,0.2)',
               backdropFilter: 'blur(8px)',
@@ -140,7 +153,7 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
         </div>
       </div>
 
-      {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
+      {showAbout && <AboutModal onClose={() => { playClick(); setShowAbout(false); }} />}
     </>
   );
 }

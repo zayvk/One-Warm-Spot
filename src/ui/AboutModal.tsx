@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { playHover } from '../game/audio/soundEngine.ts';
 
 export interface AboutModalProps {
   onClose: () => void;
@@ -70,8 +71,9 @@ export default function AboutModal({ onClose }: AboutModalProps) {
 
         <p style={{ marginBottom: 'var(--space-md)', lineHeight: 1.7 }}>
           You're a lone survivor — not a warrior, just someone who wants a safe
-          place to sleep, a small garden, and a reason to keep going. Search the
-          valley, pick a shelter, and rebuild it one careful step at a time.
+          place to sleep, a small garden, and a reason to keep going. The valley
+          holds quiet traces of travelers who came before — half-broken camps
+          waiting to be patched up into a lasting, cozy home.
         </p>
 
         <h3
@@ -110,6 +112,8 @@ export default function AboutModal({ onClose }: AboutModalProps) {
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>v0.1.0 — Early Prototype</span>
           <button
             onClick={onClose}
+            onMouseEnter={playHover}
+            onFocus={playHover}
             style={{
               background: 'var(--accent)',
               color: '#fff',

@@ -5,6 +5,7 @@ import type { MediaEntry } from '../game/data/media.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import type { SiteId } from '../game/types/game.ts';
 import BackgroundStage from './BackgroundStage.tsx';
+import { playHover, playClick, playClaim, playLocked, startSiteAmbience } from '../game/audio/soundEngine.ts';
 
 export interface SiteSelectorProps {
   onBack: () => void;
@@ -21,20 +22,35 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
   const handleHover = useCallback((siteId: SiteId, unlocked: boolean) => {
     setBgMedia(BG_SHELTERS[siteId]);
     setBgDimmed(!unlocked);
+    playHover();
+    startSiteAmbience(siteId, !unlocked);
   }, []);
 
   const handleLeave = useCallback(() => {
     setBgMedia(BG_VALLEY);
     setBgDimmed(false);
+    startSiteAmbience(null);
   }, []);
 
   const handleClaim = useCallback(
     (siteId: SiteId) => {
+      playClaim();
+      startSiteAmbience(null);
       chooseSite(siteId);
       onChosen();
     },
     [chooseSite, onChosen],
   );
+
+  const handleLockedClick = useCallback(() => {
+    playLocked();
+  }, []);
+
+  const handleBack = useCallback(() => {
+    playClick();
+    startSiteAmbience(null);
+    onBack();
+  }, [onBack]);
 
   /* Split sites into unlocked / locked */
   const unlocked = SITES.filter((s) => s.unlocked);
@@ -68,7 +84,9 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
           }}
         >
           <button
-            onClick={onBack}
+            onClick={handleBack}
+            onMouseEnter={playHover}
+            onFocus={playHover}
             style={{
               background: 'rgba(255,252,246,0.3)',
               backdropFilter: 'blur(8px)',
@@ -106,7 +124,7 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
             fontSize: '0.95rem',
           }}
         >
-          Search the valley and pick one place to call home.
+          Others passed through before you and left half-built camps behind. Pick one weathered spot to repair and make your own.
         </p>
 
         {/* Unlocked shelter cards */}
@@ -162,6 +180,7 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
                   locked
                   onHover={() => handleHover(site.id, false)}
                   onLeave={handleLeave}
+                  onLockedClick={handleLockedClick}
                 />
               ))}
             </div>
@@ -180,9 +199,10 @@ interface SiteCardProps {
   onHover: () => void;
   onLeave: () => void;
   onClaim?: () => void;
+  onLockedClick?: () => void;
 }
 
-function SiteCard({ site, locked, onHover, onLeave, onClaim }: SiteCardProps) {
+function SiteCard({ site, locked, onHover, onLeave, onClaim, onLockedClick }: SiteCardProps) {
   const [imgFailed, setImgFailed] = useState(false);
   const bgImage = BG_SHELTERS[site.id];
 
@@ -195,6 +215,7 @@ function SiteCard({ site, locked, onHover, onLeave, onClaim }: SiteCardProps) {
       onMouseLeave={onLeave}
       onFocus={onHover}
       onBlur={onLeave}
+      onClick={locked ? onLockedClick : undefined}
       tabIndex={0}
       style={{
         padding: 'var(--space-md)',
@@ -263,6 +284,20 @@ function SiteCard({ site, locked, onHover, onLeave, onClaim }: SiteCardProps) {
       </p>
       <p style={{ fontSize: '0.82rem', color: 'var(--charcoal)', flex: 1 }}>{site.description}</p>
 
+      {/* "Found here" note for unlocked tiles */}
+      {!locked && site.leftBehind && (
+        <p style={{
+          fontSize: '0.75rem',
+          color: 'var(--text-muted)',
+          borderTop: '1px solid var(--border)',
+          paddingTop: 'var(--space-xs)',
+          marginTop: 'var(--space-xs)',
+          lineHeight: 1.5,
+        }}>
+          🧰 Found here: {site.leftBehind}
+        </p>
+      )}
+
       {!locked && onClaim ? (
         <button
           onClick={onClaim}
@@ -275,7 +310,7 @@ function SiteCard({ site, locked, onHover, onLeave, onClaim }: SiteCardProps) {
             fontWeight: 600,
           }}
         >
-          Claim this shelter
+          Restore this shelter
         </button>
       ) : (
         <span

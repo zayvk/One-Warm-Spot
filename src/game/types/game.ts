@@ -11,6 +11,8 @@ export interface Site {
   description: string;
   unlocked: boolean;
   unlockHint?: string;
+  /** Traces left behind by a previous traveler */
+  leftBehind?: string;
   /** Base color for the placeholder silhouette */
   silhouetteColor: number;
 }

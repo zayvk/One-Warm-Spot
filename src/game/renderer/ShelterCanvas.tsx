@@ -90,7 +90,7 @@ export default function ShelterCanvas() {
       app.stage.addChild(tarp);
 
       const tarpLabel = new Text({
-        text: '⛺ Canvas Tarp',
+        text: '⛺ Tarp Repaired',
         style: new TextStyle({ fontSize: 13, fill: 0x3d3832 }),
       });
       tarpLabel.anchor.set(0.5);

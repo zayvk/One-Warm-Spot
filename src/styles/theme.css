@@ -1,0 +1,112 @@
+/* ───── One Warm Spot — Cozy Post-Apocalyptic Palette ───── */
+
+:root {
+  /* Sage greens */
+  --sage-100: #e8efe4;
+  --sage-200: #c5d6bc;
+  --sage-400: #8aad7a;
+  --sage-600: #5b7d4e;
+
+  /* Terracotta / warm earth */
+  --terra-100: #f5ebe0;
+  --terra-200: #e8cdb5;
+  --terra-400: #c8956c;
+  --terra-600: #9e6b42;
+
+  /* Sky / accent */
+  --sky-100: #e3edf7;
+  --sky-200: #b7cfe3;
+  --sky-400: #6fa3cc;
+
+  /* Neutrals */
+  --warm-white: #faf8f5;
+  --warm-gray: #b0a89e;
+  --charcoal: #3d3832;
+
+  /* Semantic */
+  --bg: var(--warm-white);
+  --text: var(--charcoal);
+  --text-muted: var(--warm-gray);
+  --accent: var(--sage-600);
+  --accent-light: var(--sage-200);
+  --surface: var(--terra-100);
+  --surface-alt: var(--sage-100);
+  --border: var(--terra-200);
+  --locked: var(--warm-gray);
+
+  /* Typography */
+  --font-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-display: Georgia, 'Times New Roman', serif;
+
+  /* Game title font — swap between the two loaded Google Fonts here: */
+  --font-game-title: 'Yusei Magic', cursive;
+  /* Alternative: --font-game-title: 'Cinzel', serif; */
+
+  /* Spacing scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+
+  /* Borders */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  /* Transitions */
+  --fade-speed: 400ms;
+}
+
+/* ───── Reset & Base ───── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.95rem;
+  transition: background 0.2s, transform 0.1s, opacity 0.2s;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ───── Frosted-glass card utility ───── */
+
+.frosted-card {
+  background: rgba(255, 252, 246, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(232, 205, 181, 0.5);
+  border-radius: var(--radius-md);
+}

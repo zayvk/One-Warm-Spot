@@ -4,14 +4,16 @@ import { useGameStore } from './game/store/useGameStore.ts';
 import { unlock, startMenuMusic, fadeOutMenuMusic, fadeInMenuMusic } from './game/audio/soundEngine.ts';
 import TitleScreen from './ui/TitleScreen.tsx';
 import SiteSelector from './ui/SiteSelector.tsx';
+import ArrivalCutscene from './ui/ArrivalCutscene.tsx';
 import TopBar from './ui/TopBar.tsx';
 import ShelterCanvas from './game/renderer/ShelterCanvas.tsx';
 import AudioToggle from './ui/AudioToggle.tsx';
 
-type Screen = 'title' | 'site-select' | 'shelter';
+type Screen = 'title' | 'site-select' | 'arrival' | 'shelter';
 
 export default function App() {
   const chosenSite = useGameStore((s) => s.chosenSite);
+  const travelerGender = useGameStore((s) => s.travelerGender);
   const tarpPitched = useGameStore((s) => s.tarpPitched);
   const pitchTarp = useGameStore((s) => s.pitchTarp);
   const resources = useGameStore((s) => s.resources);
@@ -34,10 +36,15 @@ export default function App() {
     };
   }, []);
 
-  /* ── Navigation callbacks with music control ── */
+  /* ── Navigation ── */
   const goToSiteSelect = useCallback(() => {
     fadeInMenuMusic();
     setScreen('site-select');
+  }, []);
+
+  const goToArrival = useCallback(() => {
+    // New game: play arrival cutscene before shelter
+    setScreen('arrival');
   }, []);
 
   const goToShelter = useCallback(() => {
@@ -65,10 +72,7 @@ export default function App() {
     return (
       <>
         <AudioToggle />
-        <TitleScreen
-          onStart={goToSiteSelect}
-          onContinue={handleContinue}
-        />
+        <TitleScreen onStart={goToSiteSelect} onContinue={handleContinue} />
       </>
     );
   }
@@ -78,9 +82,20 @@ export default function App() {
     return (
       <>
         <AudioToggle />
-        <SiteSelector
-          onBack={goToTitle}
-          onChosen={goToShelter}
+        <SiteSelector onBack={goToTitle} onChosen={goToArrival} />
+      </>
+    );
+  }
+
+  /* ── Arrival Cutscene ── */
+  if (screen === 'arrival' && chosenSite) {
+    return (
+      <>
+        <AudioToggle />
+        <ArrivalCutscene
+          siteId={chosenSite}
+          gender={travelerGender}
+          onComplete={goToShelter}
         />
       </>
     );
@@ -91,7 +106,6 @@ export default function App() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <AudioToggle />
       <TopBar />
-
       <main
         style={{
           flex: 1,
@@ -105,35 +119,15 @@ export default function App() {
         }}
       >
         <ShelterCanvas />
-
-        {/* Action area */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 'var(--space-md)',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-          }}
-        >
+        <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap', justifyContent: 'center' }}>
           {!tarpPitched && (
-            <button
-              onClick={pitchTarp}
-              disabled={resources.cloth < 1}
-              style={{
-                background: resources.cloth >= 1 ? 'var(--terra-400)' : 'var(--warm-gray)',
-                color: '#fff',
-                padding: 'var(--space-sm) var(--space-lg)',
-                fontSize: '1rem',
-              }}
-            >
+            <button onClick={pitchTarp} disabled={resources.cloth < 1}
+              style={{ background: resources.cloth >= 1 ? 'var(--terra-400)' : 'var(--warm-gray)', color: '#fff', padding: 'var(--space-sm) var(--space-lg)', fontSize: '1rem' }}>
               ⛺ Pitch Canvas Tarp (1 🧵)
             </button>
           )}
-
           {tarpPitched && (
-            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
-              ⛺ Tarp pitched — your first upgrade!
-            </span>
+            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>⛺ Tarp pitched — your first upgrade!</span>
           )}
         </div>
       </main>

@@ -42,6 +42,16 @@ export const BG_SHELTERS: Record<SiteId, MediaEntry> = {
     fallbackGradient:
       'linear-gradient(165deg, #e8efe4 0%, #8aad7a 50%, #5b7d4e 100%)',
   },
+  countryhouse: {
+    src: '/source/bg-countryhouse.webp',
+    fallbackGradient:
+      'linear-gradient(165deg, #f5ebe0 0%, #c5d6bc 45%, #b8a090 100%)',
+  },
+  farmhouse: {
+    src: '/source/bg-farmhouse.webp',
+    fallbackGradient:
+      'linear-gradient(165deg, #f5ebe0 0%, #e8cdb5 45%, #c4a86c 100%)',
+  },
   cave: {
     src: '/source/bg-cave.webp',
     fallbackGradient:
@@ -51,6 +61,16 @@ export const BG_SHELTERS: Record<SiteId, MediaEntry> = {
     src: '/source/bg-bunker.webp',
     fallbackGradient:
       'linear-gradient(165deg, #e8efe4 0%, #b0a89e 50%, #3d3832 100%)',
+  },
+  beachhouse: {
+    src: '/source/bg-beachhouse.webp',
+    fallbackGradient:
+      'linear-gradient(165deg, #e3edf7 0%, #b7cfe3 45%, #8ab4c8 100%)',
+  },
+  island: {
+    src: '/source/bg-island.webp',
+    fallbackGradient:
+      'linear-gradient(165deg, #e3edf7 0%, #c5d6bc 40%, #6a9e7e 100%)',
   },
 };
 

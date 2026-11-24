@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ResourceId, SaveState, SiteId } from '../types/game.ts';
+import type { GameMode, ResourceId, SaveState, SiteId, TravelerGender } from '../types/game.ts';
 import { RESOURCES } from '../data/resources.ts';
 import { clearSave, loadFromDisk, saveToDisk } from '../engine/saveSystem.ts';
 
@@ -11,15 +11,18 @@ function defaultResources(): Record<ResourceId, number> {
   ) as Record<ResourceId, number>;
 }
 
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 function freshState(): Pick<
   GameState,
-  'day' | 'chosenSite' | 'resources' | 'unlockedUpgrades' | 'kitCollected' | 'tarpPitched'
+  | 'day' | 'chosenSite' | 'selectedMode' | 'travelerGender'
+  | 'resources' | 'unlockedUpgrades' | 'kitCollected' | 'tarpPitched'
 > {
   return {
     day: 1,
     chosenSite: null,
+    selectedMode: 'cozy',
+    travelerGender: 'female',
     resources: defaultResources(),
     unlockedUpgrades: [],
     kitCollected: false,
@@ -32,6 +35,8 @@ function freshState(): Pick<
 export interface GameState {
   day: number;
   chosenSite: SiteId | null;
+  selectedMode: GameMode;
+  travelerGender: TravelerGender;
   resources: Record<ResourceId, number>;
   unlockedUpgrades: string[];
   kitCollected: boolean;
@@ -39,6 +44,8 @@ export interface GameState {
 
   /* Actions */
   chooseSite: (id: SiteId) => void;
+  setMode: (m: GameMode) => void;
+  setGender: (g: TravelerGender) => void;
   pitchTarp: () => void;
   resetGame: () => void;
   _save: () => void;
@@ -49,6 +56,8 @@ function stateToSave(s: GameState): SaveState {
     version: SAVE_VERSION,
     day: s.day,
     chosenSite: s.chosenSite,
+    selectedMode: s.selectedMode,
+    travelerGender: s.travelerGender,
     resources: s.resources,
     unlockedUpgrades: s.unlockedUpgrades,
     kitCollected: s.kitCollected,
@@ -65,6 +74,8 @@ export const useGameStore = create<GameState>()((set, get) => {
     ? {
         day: loaded.day,
         chosenSite: loaded.chosenSite,
+        selectedMode: loaded.selectedMode ?? 'cozy',
+        travelerGender: loaded.travelerGender ?? 'female',
         resources: loaded.resources,
         unlockedUpgrades: loaded.unlockedUpgrades,
         kitCollected: loaded.kitCollected,
@@ -80,9 +91,18 @@ export const useGameStore = create<GameState>()((set, get) => {
       get()._save();
     },
 
+    setMode(m: GameMode) {
+      set({ selectedMode: m });
+    },
+
+    setGender(g: TravelerGender) {
+      set({ travelerGender: g });
+      get()._save();
+    },
+
     pitchTarp() {
       const s = get();
-      if (s.resources.cloth < 1) return;           // costs 1 cloth
+      if (s.resources.cloth < 1) return;
       const upgrades = [...s.unlockedUpgrades, 'tarp-pitched'];
       set({
         tarpPitched: true,

@@ -1,7 +1,15 @@
 /* ───── Core Game Types ───── */
 
+/** Game difficulty mode */
+export type GameMode = 'cozy' | 'challenge';
+
+/** Player avatar gender */
+export type TravelerGender = 'female' | 'male';
+
 /** Identifier for a shelter site */
-export type SiteId = 'terrace' | 'pipe' | 'tree' | 'cave' | 'bunker';
+export type SiteId =
+  | 'terrace' | 'pipe' | 'tree' | 'countryhouse' | 'farmhouse'
+  | 'cave' | 'bunker' | 'beachhouse' | 'island';
 
 /** A shelter site the player can choose */
 export interface Site {
@@ -13,6 +21,8 @@ export interface Site {
   unlockHint?: string;
   /** Traces left behind by a previous traveler */
   leftBehind?: string;
+  /** Which mode tab this site belongs to */
+  mode: GameMode;
   /** Base color for the placeholder silhouette */
   silhouetteColor: number;
 }
@@ -55,6 +65,8 @@ export interface SaveState {
   version: number;
   day: number;
   chosenSite: SiteId | null;
+  selectedMode: GameMode;
+  travelerGender: TravelerGender;
   resources: Record<ResourceId, number>;
   unlockedUpgrades: string[];
   kitCollected: boolean;

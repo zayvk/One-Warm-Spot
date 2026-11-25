@@ -11,6 +11,7 @@ import {
   stopLiftHum,
 } from '../game/audio/soundEngine.ts';
 import type { SiteId } from '../game/types/game.ts';
+import { preloadSceneBackdrop } from '../game/renderer/shelterScene.ts';
 
 export interface ArrivalCutsceneProps {
   siteId: SiteId;
@@ -44,6 +45,8 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
   /* Fade menu music; the lift swells its own ambience when the doors open */
   useEffect(() => {
     fadeOutMenuMusic();
+    /* Decode the shelter's stage into Pixi's cache so the live scene reveals without a pop-in */
+    preloadSceneBackdrop(siteId);
     if (!isLift) startSiteAmbience(siteId);
     return () => startSiteAmbience(null);
   }, [siteId, isLift]);

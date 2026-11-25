@@ -20,7 +20,6 @@ import type {
 } from '../data/scenes/types.ts';
 import { BG_SHELTERS, travelerSpriteSrc, SCENE_STAGES } from '../data/media.ts';
 import type { TravelerPose } from '../data/media.ts';
-import { SITES } from '../data/sites.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
 import { getSceneConfig } from '../data/scenes/index.ts';
 import { loadTerraceState, saveTerraceState, type TerraceState } from '../engine/terraceState.ts';
@@ -121,6 +120,21 @@ const FALLBACK_IDLE = { x: 0.42, y: 0.76 };
 
 /** Assumed backdrop aspect until the stage texture has loaded (painted stages are 1376×768) */
 const DEFAULT_STAGE_ASPECT = 1376 / 768;
+
+/** Warm neutral base shown only if a stage backdrop fails to load */
+const NEUTRAL_BACKDROP = 0xf5efe4;
+/** Soft fade of the whole scene once the backdrop is decoded */
+const STAGE_REVEAL_MS = 220;
+
+/** The painted stage for a shelter, or its selector background as a fallback */
+export function sceneBackdropSrc(siteId: SiteId): string {
+  return SCENE_STAGES[siteId] ?? BG_SHELTERS[siteId].src;
+}
+
+/** Warm the Pixi asset cache (e.g. during the arrival cutscene) so the scene reveals instantly */
+export function preloadSceneBackdrop(siteId: SiteId): void {
+  void Assets.load<Texture>(sceneBackdropSrc(siteId)).catch(() => {});
+}
 
 /** On-screen rectangle of the cover-fitted backdrop; all scene coords are normalized to it */
 interface StageRect {
@@ -309,6 +323,9 @@ export class ShelterScene {
   private width: number;
   private height: number;
   private entryDone = false;
+  private entryStarted = false;
+  /** Backdrop texture resolved (or failed) — the stage veil may lift */
+  private backdropReady = false;
   private terrace: TerraceState;
   private disposed = false;
   /** Cover-fitted backdrop rect — props, colliders and walk bounds are anchored to it */
@@ -379,14 +396,15 @@ export class ShelterScene {
 
     this.sceneConfig = getSceneConfig(initial.siteId);
     this.preloadTravelerPoses(initial.gender);
-    this.loadBackground(initial.siteId);
     this.buildHotspots();
     this.buildBuildables();
     this.loadTraveler(initial.gender, 'idle');
     this.restoreTerraceState();
     this.layout();
     this.applyLighting();
-    this.startEntryAnimation();
+    /* Stage stays veiled until the backdrop is ready; the reveal then starts the entry walk */
+    app.stage.alpha = 0;
+    this.loadBackground(initial.siteId);
 
     app.ticker.add(this.update, this);
   }
@@ -535,13 +553,13 @@ export class ShelterScene {
 
   private loadBackground(siteId: SiteId | null): void {
     const token = ++this.bgToken;
-    this.drawFallback(siteId);
-    if (!siteId) return;
+    this.drawFallback();
+    if (!siteId) {
+      this.revealStage();
+      return;
+    }
 
-    const stageUrl = SCENE_STAGES[siteId];
-    const src = stageUrl ?? BG_SHELTERS[siteId].src;
-
-    Assets.load<Texture>(src)
+    Assets.load<Texture>(sceneBackdropSrc(siteId))
       .then((texture) => {
         if (this.disposed || token !== this.bgToken || !texture) return;
         if (this.bgSprite) {
@@ -550,31 +568,37 @@ export class ShelterScene {
         }
         const sprite = new Sprite(texture);
         sprite.anchor.set(0.5);
-        sprite.alpha = this.state.reduceMotion ? 1 : 0;
         sprite.eventMode = 'none';
         this.bgSprite = sprite;
         this.bgLayer.addChildAt(sprite, this.bgFallback ? 1 : 0);
         this.layout();
+        this.revealStage();
       })
-      .catch(() => { /* keep the gradient fallback */ });
+      .catch(() => {
+        /* Keep the neutral backdrop rather than veiling the scene forever */
+        if (!this.disposed && token === this.bgToken) this.revealStage();
+      });
   }
 
-  private drawFallback(siteId: SiteId | null): void {
-    const site = SITES.find((s) => s.id === siteId);
+  /** Soft neutral base under the backdrop (only visible if the stage art fails to load) */
+  private drawFallback(): void {
     if (!this.bgFallback) {
       this.bgFallback = new Graphics();
       this.bgFallback.eventMode = 'none';
       this.bgLayer.addChildAt(this.bgFallback, 0);
     }
-    const g = this.bgFallback;
-    const { width: W, height: H } = this;
-    g.clear();
-    g.rect(0, 0, W, H * 0.62).fill(0xe3edf7);
-    g.rect(0, H * 0.62, W, H * 0.38).fill(0xc5d6bc);
-    g.roundRect(W * 0.28, H * 0.36, W * 0.44, H * 0.3, 12).fill({
-      color: site?.silhouetteColor ?? 0x9e6b42,
-      alpha: 0.8,
-    });
+    this.bgFallback.clear();
+    this.bgFallback.rect(0, 0, this.width, this.height).fill(NEUTRAL_BACKDROP);
+  }
+
+  /** Lift the veil once the backdrop is ready, and only then let the traveler arrive */
+  private revealStage(): void {
+    this.backdropReady = true;
+    if (this.state.reduceMotion) this.app.stage.alpha = 1;
+    if (!this.entryStarted) {
+      this.entryStarted = true;
+      this.startEntryAnimation();
+    }
   }
 
   /* ── Traveler ── */
@@ -1540,7 +1564,7 @@ export class ShelterScene {
       this.bgSprite.scale.set(SW / (this.bgSprite.texture.width || 1));
       this.bgSprite.position.set(this.stage.x + SW / 2, this.stage.y + SH / 2);
     }
-    this.drawFallback(this.state.siteId);
+    this.drawFallback();
 
     this.mulWash.width = W;
     this.mulWash.height = H;
@@ -1669,8 +1693,8 @@ export class ShelterScene {
     c.markerGlow = lerp(c.markerGlow, t.markerGlow, k);
     this.warmthCurrent = lerp(this.warmthCurrent, this.warmthTarget(), k);
 
-    if (this.bgSprite && this.bgSprite.alpha < 1) {
-      this.bgSprite.alpha = this.state.reduceMotion ? 1 : Math.min(1, this.bgSprite.alpha + dt / 450);
+    if (this.backdropReady && this.app.stage.alpha < 1) {
+      this.app.stage.alpha = this.state.reduceMotion ? 1 : Math.min(1, this.app.stage.alpha + dt / STAGE_REVEAL_MS);
     }
 
     if (this.travelerNode.alpha < 1) {

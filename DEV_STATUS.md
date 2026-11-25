@@ -149,7 +149,7 @@ Consequence: in current play the day never advances and none of the 10 macro upg
 |-------|----------|--------|----------|
 | Shelter backgrounds | `public/source/backgrounds/bg-*.webp` | WebP, 1920×1080 recommended | Cozy CSS gradient per entry in `media.ts` |
 | Traveler sprites | `public/source/sprites/{female,male}-{idle,walk,search,sit,sleep}.webp` | Transparent WebP | Graceful skip if absent |
-| Scene stages & props | `public/source/scenes/*.webp`, `public/source/props/*.webp` | WebP | Gradient/shape fallback |
+| Scene stages & props | `public/source/scenes/*.webp`, `public/source/props/*.webp` | WebP | Stage preloaded into Pixi `Assets` during the arrival cutscene; the scene stays veiled until it's decoded, then fades in (220ms). A failed load shows a neutral `#F5EFE4` base |
 | Cutscene plates | `public/source/cutscenes/terrace-*.webp` (1376×768 lobby & lift frame, 508×680 door panel) | WebP (frame has a transparent doorway) | Dark backdrop behind layers |
 | Menu music | `public/source/audio/music-menu.mp3` (optional, **not shipped**) | MP3 (looping) | Procedural warm-pad chord loop — **currently the active menu music** |
 | UI & shelter foley | Procedural (Web Audio) | — | Always available, 0 KB (includes campfire, rummage, weed snip, sleep, build taps, water-drop chime, lift hum / door slide / floor tick / ding) |

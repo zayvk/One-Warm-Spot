@@ -129,7 +129,7 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
       </div>
 
       {/* Interactive PixiJS canvas (full viewport) */}
-      <main style={{ position: 'relative', flex: 1, minHeight: 0, background: 'var(--sky-100)' }}>
+      <main style={{ position: 'relative', flex: 1, minHeight: 0, background: '#F5EFE4' }}>
         <ShelterCanvas ref={canvasRef} onBuildStateChange={setBuildState} />
       </main>
 

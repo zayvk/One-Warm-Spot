@@ -101,7 +101,7 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
       .init({
         width: Math.max(1, container.clientWidth),
         height: Math.max(1, container.clientHeight),
-        background: 0xfaf8f5,
+        background: 0xf5efe4,
         antialias: true,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,

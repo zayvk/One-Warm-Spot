@@ -96,20 +96,19 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
     e.target.value = '';
     if (!file) return;
 
-    const parsed = await importSave(file);
-    if (!parsed) {
-      showStatus('error', 'Could not load file — expected a valid save (.json).');
+    const result = await importSave(file);
+    if (!result.ok) {
+      showStatus('error', `Could not load save — ${result.error}`);
       return;
     }
 
+    const parsed = result.save;
     applyImportedSave(parsed);
     const siteName = SITES.find((s) => s.id === parsed.chosenSite)?.name;
-    showStatus(
-      'success',
-      siteName
-        ? `Loaded Day ${parsed.day} · ${siteName}`
-        : `Loaded Day ${parsed.day} save data`,
-    );
+    const loaded = siteName
+      ? `Loaded Day ${parsed.day} · ${siteName}`
+      : `Loaded Day ${parsed.day} save data`;
+    showStatus('success', [loaded, ...result.warnings].join(' '));
   };
 
   return (

@@ -3,7 +3,8 @@ import { SITES } from '../game/data/sites.ts';
 import { BG_VALLEY, BG_SHELTERS } from '../game/data/media.ts';
 import type { MediaEntry } from '../game/data/media.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
-import type { SiteId, GameMode, TravelerGender } from '../game/types/game.ts';
+import type { SiteId, GameMode, TravelerGender, PlayerStats } from '../game/types/game.ts';
+import { isSiteUnlocked } from '../game/engine/progression.ts';
 import BackgroundStage from './BackgroundStage.tsx';
 import ConfirmOverwriteModal from './ConfirmOverwriteModal.tsx';
 import {
@@ -55,7 +56,7 @@ const MODE_INFO: Record<GameMode, { label: string; emoji: string; desc: string }
   challenge: {
     label: 'Challenge',
     emoji: '⛰️',
-    desc: 'Challenge Mode — tighter resources and exposed weather, zero permadeath.',
+    desc: 'Challenge Mode — leaner supplies, tougher trips and dust-squall mornings. Still zero permadeath.',
   },
 };
 
@@ -71,6 +72,7 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
   const setGender = useGameStore((s) => s.setGender);
   const resetGame = useGameStore((s) => s.resetGame);
   const getSaveSnapshot = useGameStore((s) => s.getSaveSnapshot);
+  const stats = useGameStore((s) => s.stats);
 
   const [bgMedia, setBgMedia] = useState<MediaEntry>(BG_VALLEY);
   const [bgDimmed, setBgDimmed] = useState(false);
@@ -151,8 +153,8 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
   );
 
   const modeSites = SITES.filter((s) => s.mode === selectedMode);
-  const unlockedSites = modeSites.filter((s) => s.unlocked);
-  const lockedSites = modeSites.filter((s) => !s.unlocked);
+  const unlockedSites = modeSites.filter((s) => isSiteUnlocked(s, stats));
+  const lockedSites = modeSites.filter((s) => !isSiteUnlocked(s, stats));
   const modeInfo = MODE_INFO[selectedMode];
   const existingSiteName = SITES.find((s) => s.id === chosenSite)?.name ?? 'your shelter';
 
@@ -308,6 +310,7 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
                   key={site.id}
                   site={site}
                   locked
+                  stats={stats}
                   onHover={() => handleHover(site.id, false)}
                   onLeave={handleLeave}
                   onLockedClick={handleLockedClick}
@@ -336,16 +339,19 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
 interface SiteCardProps {
   site: (typeof SITES)[number];
   locked?: boolean;
+  stats?: PlayerStats;
   onHover: () => void;
   onLeave: () => void;
   onClaim?: () => void;
   onLockedClick?: () => void;
 }
 
-function SiteCard({ site, locked, onHover, onLeave, onClaim, onLockedClick }: SiteCardProps) {
+function SiteCard({ site, locked, stats, onHover, onLeave, onClaim, onLockedClick }: SiteCardProps) {
   const [imgFailed, setImgFailed] = useState(false);
   const bgImage = BG_SHELTERS[site.id];
   const colorHex = `#${site.silhouetteColor.toString(16).padStart(6, '0')}`;
+  const req = site.unlockRequirement;
+  const progress = req && stats ? `${Math.min(stats[req.stat], req.count)}/${req.count}` : null;
 
   return (
     <article
@@ -475,6 +481,11 @@ function SiteCard({ site, locked, onHover, onLeave, onClaim, onLockedClick }: Si
             }}
           >
             🔒 {site.unlockHint}
+            {progress && (
+              <span style={{ marginLeft: '6px', fontVariantNumeric: 'tabular-nums', opacity: 0.85 }}>
+                ({progress})
+              </span>
+            )}
           </div>
         )}
       </div>

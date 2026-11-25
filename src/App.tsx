@@ -5,21 +5,22 @@ import { unlock, startMenuMusic, fadeOutMenuMusic, fadeInMenuMusic } from './gam
 import TitleScreen from './ui/TitleScreen.tsx';
 import SiteSelector from './ui/SiteSelector.tsx';
 import ArrivalCutscene from './ui/ArrivalCutscene.tsx';
-import TopBar from './ui/TopBar.tsx';
-import ShelterCanvas from './game/renderer/ShelterCanvas.tsx';
+import ShelterScreen from './ui/ShelterScreen.tsx';
 import AudioToggle from './ui/AudioToggle.tsx';
+import NoticeToasts from './ui/NoticeToasts.tsx';
 
 type Screen = 'title' | 'site-select' | 'arrival' | 'shelter';
 
 export default function App() {
   const chosenSite = useGameStore((s) => s.chosenSite);
   const travelerGender = useGameStore((s) => s.travelerGender);
-  const tarpPitched = useGameStore((s) => s.tarpPitched);
-  const pitchTarp = useGameStore((s) => s.pitchTarp);
-  const resources = useGameStore((s) => s.resources);
   const reduceMotion = useGameStore((s) => s.reduceMotion);
+  const resetGame = useGameStore((s) => s.resetGame);
 
   const [screen, setScreen] = useState<Screen>('title');
+  /* Arrival & shelter need a claimed site — fall back to the title otherwise */
+  const activeScreen: Screen =
+    (screen === 'arrival' || screen === 'shelter') && !chosenSite ? 'title' : screen;
 
   /* ── Sync reduceMotion preference to root document attribute ── */
   useEffect(() => {
@@ -72,79 +73,32 @@ export default function App() {
     }
   }, [chosenSite]);
 
-  /* ── Title Screen ── */
-  if (screen === 'title') {
-    return (
-      <>
-        <AudioToggle />
-        <TitleScreen onStart={goToSiteSelect} onContinue={handleContinue} />
-      </>
+  const handleResetConfirmed = useCallback(
+    (clearMilestones: boolean) => {
+      resetGame({ clearMilestones });
+      goToTitle();
+    },
+    [resetGame, goToTitle],
+  );
+
+  let content: React.ReactNode;
+  if (activeScreen === 'title') {
+    content = <TitleScreen onStart={goToSiteSelect} onContinue={handleContinue} />;
+  } else if (activeScreen === 'site-select') {
+    content = <SiteSelector onBack={goToTitle} onChosen={goToArrival} />;
+  } else if (activeScreen === 'arrival' && chosenSite) {
+    content = (
+      <ArrivalCutscene siteId={chosenSite} gender={travelerGender} onComplete={goToShelter} />
     );
+  } else {
+    content = <ShelterScreen onBackToTitle={goToTitle} onResetConfirmed={handleResetConfirmed} />;
   }
 
-  /* ── Shelter Selection ── */
-  if (screen === 'site-select') {
-    return (
-      <>
-        <AudioToggle />
-        <SiteSelector onBack={goToTitle} onChosen={goToArrival} />
-      </>
-    );
-  }
-
-  /* ── Arrival Cutscene ── */
-  if (screen === 'arrival' && chosenSite) {
-    return (
-      <>
-        <AudioToggle />
-        <ArrivalCutscene
-          siteId={chosenSite}
-          gender={travelerGender}
-          onComplete={goToShelter}
-        />
-      </>
-    );
-  }
-
-  /* ── Main Shelter View ── */
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <>
       <AudioToggle />
-      <TopBar />
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 'var(--space-md)',
-          padding: 'var(--space-lg)',
-          background: 'linear-gradient(180deg, var(--sky-100) 0%, var(--warm-white) 100%)',
-          overflow: 'auto',
-        }}
-      >
-        <ShelterCanvas />
-        <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {!tarpPitched && (
-            <button
-              type="button"
-              onClick={pitchTarp}
-              disabled={resources.cloth < 1}
-              className="ows-btn-terra"
-              style={{
-                background: resources.cloth >= 1 ? 'var(--terra-400)' : 'var(--warm-gray)',
-                padding: 'var(--space-sm) var(--space-lg)',
-                fontSize: '1rem',
-              }}
-            >
-              ⛺ Pitch Canvas Tarp (1 🧵)
-            </button>
-          )}
-          {tarpPitched && (
-            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>⛺ Tarp pitched — your first upgrade!</span>
-          )}
-        </div>
-      </main>
-    </div>
+      <NoticeToasts />
+      {content}
+    </>
   );
 }

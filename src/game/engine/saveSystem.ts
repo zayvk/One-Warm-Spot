@@ -1,6 +1,24 @@
-import type { GameMode, ResourceId, SaveState, SiteId, TravelerGender } from '../types/game.ts';
+import type {
+  GameMode,
+  PlayerStats,
+  ResourceId,
+  SaveState,
+  SiteId,
+  TimeOfDay,
+  TravelerGender,
+  Weather,
+} from '../types/game.ts';
+import { RESOURCE_MAP } from '../data/resources.ts';
+import { LEGACY_TARP_UPGRADE_ID, UPGRADES } from '../data/upgrades.ts';
+import { RELIC_MAP } from '../data/relics.ts';
 
 const STORAGE_KEY = 'one-warm-spot-save';
+const PROGRESS_KEY = 'one-warm-spot-progress';
+
+/** v2: mode/gender · v3: day loop, lantern, stats · v4: weather, relics */
+export const SAVE_VERSION = 4;
+const MAX_DAY = 100_000;
+const MAX_IMPORT_BYTES = 512 * 1024;
 
 const VALID_SITE_IDS: ReadonlySet<string> = new Set<SiteId>([
   'terrace',
@@ -25,84 +43,262 @@ const VALID_RESOURCE_IDS: readonly ResourceId[] = [
 
 const VALID_MODES: ReadonlySet<string> = new Set<GameMode>(['cozy', 'challenge']);
 const VALID_GENDERS: ReadonlySet<string> = new Set<TravelerGender>(['female', 'male']);
+const VALID_TIMES: ReadonlySet<string> = new Set<TimeOfDay>(['morning', 'afternoon', 'dusk', 'night']);
+const VALID_WEATHER: ReadonlySet<string> = new Set<Weather>(['clear', 'breezy', 'rain', 'storm']);
+const STAT_KEYS: readonly (keyof PlayerStats)[] = [
+  'maxDaysSurvived',
+  'totalUpgradesBuilt',
+  'totalExpansionsBuilt',
+];
 
-/** Runtime check that an unknown parsed JSON value matches SaveState */
-export function isValidSaveState(data: unknown): data is SaveState {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+function isWholeNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0;
+}
+
+function isValidStats(v: unknown): v is PlayerStats {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  const obj = v as Record<string, unknown>;
+  return STAT_KEYS.every((k) => isWholeNumber(obj[k]));
+}
+
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string');
+}
+
+function isOptionalEnum(v: unknown, allowed: ReadonlySet<string>): boolean {
+  return v === undefined || (typeof v === 'string' && allowed.has(v));
+}
+
+/* ───── Validation ───── */
+
+export type SaveCheck =
+  | { ok: true; save: SaveState; warnings: string[] }
+  | { ok: false; error: string };
+
+/**
+ * Strict structural check of a raw (parsed JSON) save.
+ * Returns a friendly, player-facing reason when the payload can't be trusted.
+ */
+export function findSaveProblem(data: unknown): string | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return "This file doesn't look like a One Warm Spot save.";
+  }
   const obj = data as Record<string, unknown>;
 
-  if (typeof obj.day !== 'number' || !Number.isFinite(obj.day) || obj.day < 1) {
-    return false;
+  if (obj.version === undefined) return 'This save is missing its version number.';
+  if (typeof obj.version !== 'number' || !Number.isInteger(obj.version) || obj.version < 1) {
+    return 'This save has an unreadable version number.';
+  }
+  if (obj.version > SAVE_VERSION) {
+    return `This save was made by a newer version of One Warm Spot (save v${obj.version}). Please update the game first.`;
   }
 
-  if (
-    obj.chosenSite !== null &&
-    (typeof obj.chosenSite !== 'string' || !VALID_SITE_IDS.has(obj.chosenSite))
-  ) {
-    return false;
+  if (!isWholeNumber(obj.day) || obj.day < 1 || obj.day > MAX_DAY) {
+    return "The day count in this save isn't valid.";
   }
 
-  if (
-    obj.selectedMode !== undefined &&
-    (typeof obj.selectedMode !== 'string' || !VALID_MODES.has(obj.selectedMode))
-  ) {
-    return false;
+  if (obj.chosenSite !== null && (typeof obj.chosenSite !== 'string' || !VALID_SITE_IDS.has(obj.chosenSite))) {
+    return "This save points to a shelter that doesn't exist.";
   }
+  if (!isOptionalEnum(obj.selectedMode, VALID_MODES)) return 'This save has an unknown game mode.';
+  if (!isOptionalEnum(obj.travelerGender, VALID_GENDERS)) return 'This save has an unknown traveler.';
+  if (!isOptionalEnum(obj.timeOfDay, VALID_TIMES)) return 'This save has an unknown time of day.';
+  if (!isOptionalEnum(obj.weather, VALID_WEATHER)) return 'This save has unknown weather.';
 
-  if (
-    obj.travelerGender !== undefined &&
-    (typeof obj.travelerGender !== 'string' || !VALID_GENDERS.has(obj.travelerGender))
-  ) {
-    return false;
+  if (obj.energy !== undefined && (typeof obj.energy !== 'number' || !Number.isFinite(obj.energy) || obj.energy < 0)) {
+    return "The energy value in this save isn't valid.";
   }
 
   if (!obj.resources || typeof obj.resources !== 'object' || Array.isArray(obj.resources)) {
-    return false;
+    return 'This save is missing its materials.';
   }
   const res = obj.resources as Record<string, unknown>;
   for (const key of VALID_RESOURCE_IDS) {
-    if (typeof res[key] !== 'number' || !Number.isFinite(res[key]) || res[key] < 0) {
-      return false;
+    if (!isWholeNumber(res[key])) {
+      return `Material amounts must be whole numbers of 0 or more (check “${key}”).`;
     }
   }
 
+  if (!isStringArray(obj.unlockedUpgrades)) return 'The upgrade list in this save is damaged.';
+  if (obj.discoveredRelics !== undefined && !isStringArray(obj.discoveredRelics)) {
+    return 'The relic list in this save is damaged.';
+  }
   if (
-    !Array.isArray(obj.unlockedUpgrades) ||
-    obj.unlockedUpgrades.some((u) => typeof u !== 'string')
+    (obj.kitCollected !== undefined && typeof obj.kitCollected !== 'boolean') ||
+    (obj.lanternLit !== undefined && typeof obj.lanternLit !== 'boolean')
   ) {
-    return false;
+    return 'This save has damaged camp details.';
+  }
+  if (obj.stats !== undefined && !isValidStats(obj.stats)) {
+    return 'The milestone stats in this save are damaged.';
   }
 
-  return true;
+  return null;
 }
 
-/** Save state to localStorage */
+/** Type guard wrapper around {@link findSaveProblem} */
+export function isValidSaveState(data: unknown): data is SaveState {
+  return findSaveProblem(data) === null;
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+/**
+ * Normalize a structurally valid (possibly older) save into the current v4
+ * shape. v2 → v3: legacy `'tarp-pitched'` flag becomes `shell-1`, day-loop
+ * defaults are filled. v3 → v4: `weather: 'clear'`, `discoveredRelics: []`.
+ * Unknown/orphaned upgrades and relics are dropped and materials are capped
+ * at their storage limit; each clean-up is reported in `warnings`.
+ */
+export function migrateSave(save: SaveState, warnings: string[] = []): SaveState {
+  const requested = new Set(
+    save.unlockedUpgrades.map((id) => (id === LEGACY_TARP_UPGRADE_ID ? 'shell-1' : id)),
+  );
+  const built: string[] = [];
+  for (const u of UPGRADES) {
+    if (requested.has(u.id) && (!u.requires || built.includes(u.requires))) built.push(u.id);
+  }
+  const skippedUpgrades = requested.size - built.length;
+  if (skippedUpgrades > 0) warnings.push(`Skipped ${plural(skippedUpgrades, 'invalid upgrade')}.`);
+
+  const relics = [...new Set(save.discoveredRelics ?? [])];
+  const knownRelics = relics.filter((id) => RELIC_MAP[id]);
+  if (knownRelics.length < relics.length) {
+    warnings.push(`Skipped ${plural(relics.length - knownRelics.length, 'unknown relic')}.`);
+  }
+
+  let trimmed = false;
+  const resources = Object.fromEntries(
+    VALID_RESOURCE_IDS.map((id) => {
+      const cap = RESOURCE_MAP[id].maxStack;
+      const amount = save.resources[id];
+      if (amount > cap) trimmed = true;
+      return [id, Math.min(cap, amount)];
+    }),
+  ) as Record<ResourceId, number>;
+  if (trimmed) warnings.push('Trimmed materials above storage limits.');
+
+  return {
+    version: SAVE_VERSION,
+    day: Math.max(1, Math.floor(save.day)),
+    timeOfDay: save.timeOfDay ?? 'morning',
+    energy: Math.round(Math.min(100, Math.max(0, save.energy ?? 100))),
+    weather: save.weather ?? 'clear',
+    chosenSite: save.chosenSite,
+    selectedMode: save.selectedMode ?? 'cozy',
+    travelerGender: save.travelerGender ?? 'female',
+    resources,
+    unlockedUpgrades: built,
+    kitCollected: Boolean(save.kitCollected),
+    lanternLit: Boolean(save.lanternLit),
+    discoveredRelics: knownRelics,
+    stats: save.stats ? { ...save.stats } : undefined,
+    timestamp: typeof save.timestamp === 'number' ? save.timestamp : Date.now(),
+  };
+}
+
+/** Validate + migrate any parsed JSON value */
+export function validateSave(data: unknown): SaveCheck {
+  const problem = findSaveProblem(data);
+  if (problem) return { ok: false, error: problem };
+  const warnings: string[] = [];
+  const save = migrateSave(data as SaveState, warnings);
+  return { ok: true, save, warnings };
+}
+
+/** Parse raw save text (file contents or localStorage) */
+export function parseSaveText(text: string): SaveCheck {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ok: false, error: "That file isn't readable — expected a One Warm Spot save (.json)." };
+  }
+  return validateSave(parsed);
+}
+
+/* ───── Run save (localStorage) ───── */
+
 export function saveToDisk(state: SaveState): void {
   try {
-    const json = JSON.stringify(state);
-    localStorage.setItem(STORAGE_KEY, json);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     console.warn('[SaveSystem] Could not write to localStorage');
   }
 }
 
-/** Load state from localStorage, returns null if nothing saved */
+/** Load + migrate the run save, or null if absent / unreadable */
 export function loadFromDisk(): SaveState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    return isValidSaveState(parsed) ? parsed : null;
+    const result = parseSaveText(raw);
+    if (!result.ok) {
+      console.warn(`[SaveSystem] Ignoring stored save: ${result.error}`);
+      return null;
+    }
+    return result.save;
   } catch {
     console.warn('[SaveSystem] Could not read from localStorage');
     return null;
   }
 }
 
-/** Clear saved state */
 export function clearSave(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    console.warn('[SaveSystem] Could not clear localStorage');
+  }
 }
+
+/* ───── Persistent milestone progress (survives starting a new shelter) ───── */
+
+export interface ProgressState {
+  stats: PlayerStats;
+  /** Milestone shelters the player has already been told about */
+  announcedUnlocks: SiteId[];
+}
+
+export function loadProgress(): ProgressState | null {
+  try {
+    const raw = localStorage.getItem(PROGRESS_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const obj = parsed as Record<string, unknown>;
+    if (!isValidStats(obj.stats)) return null;
+    const announced = Array.isArray(obj.announcedUnlocks)
+      ? obj.announcedUnlocks.filter(
+          (id): id is SiteId => typeof id === 'string' && VALID_SITE_IDS.has(id),
+        )
+      : [];
+    return { stats: { ...obj.stats }, announcedUnlocks: announced };
+  } catch {
+    console.warn('[SaveSystem] Could not read progress');
+    return null;
+  }
+}
+
+export function saveProgress(progress: ProgressState): void {
+  try {
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
+  } catch {
+    console.warn('[SaveSystem] Could not write progress');
+  }
+}
+
+export function clearProgress(): void {
+  try {
+    localStorage.removeItem(PROGRESS_KEY);
+  } catch {
+    console.warn('[SaveSystem] Could not clear progress');
+  }
+}
+
+/* ───── JSON export / import ───── */
 
 /** Export save as a downloadable JSON file */
 export function exportSave(state: SaveState): string {
@@ -117,18 +313,14 @@ export function exportSave(state: SaveState): string {
   return filename;
 }
 
-/** Import save from a JSON file — returns validated state or null */
-export async function importSave(file: File): Promise<SaveState | null> {
+/** Import a save file — returns the migrated save or a friendly error */
+export async function importSave(file: File): Promise<SaveCheck> {
+  if (file.size > MAX_IMPORT_BYTES) {
+    return { ok: false, error: "That file is too large to be a One Warm Spot save." };
+  }
   try {
-    const text = await file.text();
-    const parsed: unknown = JSON.parse(text);
-    if (!isValidSaveState(parsed)) {
-      console.warn('[SaveSystem] Save file failed schema validation');
-      return null;
-    }
-    return parsed;
+    return parseSaveText(await file.text());
   } catch {
-    console.warn('[SaveSystem] Invalid save file');
-    return null;
+    return { ok: false, error: "That file couldn't be read." };
   }
 }

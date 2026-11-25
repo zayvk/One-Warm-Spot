@@ -58,7 +58,7 @@ An asteroid shook the Earth, but the dust has settled. Skies are clearing, sunli
 1. **Title Screen** — Game title, Start / Continue / About buttons, shared menu music.
 2. **Shelter Selector** — Traveler picker (Female / Male silhouette), Cozy / Challenge mode tabs, 9 shelter cards with hover background crossfade and procedural ambience.
 3. **Arrival Cutscene** (~3.5s) — Ken Burns zoom on the chosen shelter background, animated traveler silhouette walking toward the site, Day 1 caption fade-in, skippable.
-4. **Day 1** — Survival kit issued, shelter restoration begins.
+4. **Day 1** — Survival kit issued, shelter restoration begins in the playable shelter view (painted scene, HUD, Survival Kit drawer, Upgrade Panel).
 
 ---
 
@@ -77,21 +77,50 @@ An asteroid shook the Earth, but the dust has settled. Skies are clearing, sunli
 
 ## Day 1 Survival Kit
 
-Canvas Tarp ⛺, Bedroll 🛏️, Pocket Stove 🔥, Backpack 🎒, Field Journal 📓
+Canvas Tarp ⛺, Bedroll & Pack 🎒, Pocket Stove 🔥, Multi-Tool 🛠️, Field Journal 📓 — viewable any time from the shelter's **Survival Kit** drawer, each with a short note on how it helps.
+
+---
+
+## Daily Rhythm & Building
+
+- **Time of day:** Morning → Afternoon → Dusk → Night, each with its own lighting on the painted shelter (golden morning, soft afternoon, amber-peach dusk, cozy twilight night).
+- **Rest & Sleep:** resting moves to the next phase and restores a little energy; sleeping at night starts the next day fully rested (*"Morning of Day N"*). No time pressure — nothing bad happens while you rest.
+- **Energy:** building takes effort (15–40 energy); when tired, simply rest.
+- **10 macro upgrades** across Shell, Dividers, Expansions and Curated Slots. Pitching & patching the canvas tarp is Shell · Tier 1. Each upgrade adds to the **Cozy Index** (0–100) and visibly warms the scene.
+- **Lantern:** at dusk the old lantern can be lit with the pocket stove — it glows every evening after.
+- **Milestones:** surviving days and completing upgrades unlock new shelters permanently (kept even when you start a new camp).
+
+---
+
+## Scavenging, Weather & Valley Relics
+
+- **Surface scavenging (morning & afternoon):** short trips to four nearby spots — the **Overgrown Highway** (scrap, cloth), **Fallen Pine Grove** (timber, seeds), **Crumbling Stone Creek** (stone, water) and **Shattered Greenhouse** (seeds, cloth, scrap). A trip spends energy and one part of the day, always brings something home, and comes back with a small warm story. A cozier shelter (every 25 Cozy Index) means an extra find on each trip. At dusk the valley grows dim — rest by the lantern until morning.
+- **Valley Relics:** now and then a trip turns up a keepsake left by earlier travelers — a *Faded Postcard*, a *Weather Station Log*, a *Cracked Cassette*… Each is tucked into the **Field Journal** to re-read any time.
+- **Gentle daily weather:** each morning is *Clear*, *Breezy*, *Soft Rain* (a few cups of free water, more with a rain collector) or, rarely, a *Dust Squall* that keeps you in for the morning — a cozy excuse to craft or rest. Fortified walls let you brave it.
+
+## ☀️ Cozy vs. ⛰️ Challenge
+
+Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**.
+
+| | Cozy | Challenge |
+|---|---|---|
+| Arrive with | Full Day 1 materials | ~60% (still enough to pitch the tarp) |
+| Scavenging trip | ⚡25, generous finds | ⚡35, slightly tighter finds |
+| Weather | Mostly clear, breezy & soft rain; storms rare | Dust squall mornings are common |
 
 ---
 
 ## Art & Audio Direction
 
 - **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP/SVG layers swapped on a base illustration. Target <5 MB initial browser payload.
-- **Audio:** Shared menu music bed (`public/source/audio/music-menu.mp3`) with procedural warm-pad fallback. Procedurally synthesized UI foley (hover, click, claim, locked, footstep) using Web Audio API — 0 KB. Per-shelter procedural hover ambience (wind, water, rustling, hum).
+- **Audio:** Shared menu music bed (`public/source/audio/music-menu.mp3`) with procedural warm-pad fallback. Procedurally synthesized UI foley (hover, click, claim, locked, footstep) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
 
 ---
 
 ## Future / Backlog Ideas
 
-- Weather storms & seasonal lighting shifts
-- Scavenging expeditions to neighboring zones
+- Weather visuals on the shelter scene & seasonal lighting shifts
+- Multi-day scavenging expeditions to farther zones
 - Radio signals & visitor events
 - Optional `.webm` animated shelter backgrounds
 - V2 outpost network (multiple shelters connected)

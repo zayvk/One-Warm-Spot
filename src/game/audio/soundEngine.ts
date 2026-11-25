@@ -3,7 +3,7 @@
  *
  * Features:
  *   • Procedurally synthesized UI sounds (hover, click, claim, locked, footstep) — 0 KB
- *   • Per-shelter procedural hover ambience with smooth crossfade (9 sites)
+ *   • Per-shelter musical ambience (birdsong, chimes, drips, surf…) with 350ms crossfade (9 sites)
  *   • Shared menu music bed from file, with procedural warm-pad fallback
  *   • Independent Music & SFX+Ambience volume sliders + master mute in localStorage
  *   • Smooth gain ramping (linearRampToValueAtTime) to eliminate slider crackle
@@ -59,10 +59,6 @@ let muted = (() => {
 })();
 let musicVolume = readStoredVolume(MUSIC_VOL_KEY, DEFAULT_MUSIC_VOL);
 let sfxVolume = readStoredVolume(SFX_VOL_KEY, DEFAULT_SFX_VOL);
-
-let currentAmbienceNodes: AudioNode[] = [];
-let currentAmbienceIntervals: ReturnType<typeof setInterval>[] = [];
-let currentAmbienceSiteId: SiteId | null = null;
 
 let musicElement: HTMLAudioElement | null = null;
 let musicSourceNode: MediaElementAudioSourceNode | null = null;
@@ -123,6 +119,7 @@ export function unlock(): void {
   const c = getCtx();
   if (c.state === 'suspended') void c.resume();
   unlocked = true;
+  applyAmbience();
 }
 
 export function isUnlocked(): boolean {
@@ -144,8 +141,8 @@ export function toggleMute(): void {
   } catch {
     /* ignore storage restrictions */
   }
-  if (!masterGain || !ctx) return;
-  rampGain(masterGain.gain, muted ? 0 : 1, 0.2);
+  if (masterGain && ctx) rampGain(masterGain.gain, muted ? 0 : 1, 0.2);
+  applyAmbience();
 }
 
 export function getMusicVolume(): number {
@@ -174,8 +171,8 @@ export function setSfxVolume(v: number): void {
   } catch {
     /* ignore storage restrictions */
   }
-  if (!sfxChannelGain || !ctx) return;
-  rampGain(sfxChannelGain.gain, sfxVolume, 0.05);
+  if (sfxChannelGain && ctx) rampGain(sfxChannelGain.gain, sfxVolume, 0.05);
+  applyAmbience();
 }
 
 /** Convenience helper if a caller adjusts both channels uniformly */
@@ -349,6 +346,35 @@ export function playFootstep(): void {
   osc.stop(t + 0.12);
 }
 
+/** Scavenging trip: a few soft footsteps home, then a warm two-note chime */
+export function playScavengeReturn(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  [0, 240, 480].forEach((ms) => setTimeout(playFootstep, ms));
+
+  setTimeout(() => {
+    if (muted || !unlocked || sfxVolume <= 0) return;
+    const c = getCtx();
+    const target = getSfxTarget();
+    const t = now();
+    const pv = pitchVar();
+    [523.25 * pv, 783.99 * pv].forEach((freq, i) => {
+      const start = t + i * 0.16;
+      for (const [ratio, amp] of [[1, 0.11], [2.76, 0.025]] as const) {
+        const osc = c.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq * ratio;
+        const gain = c.createGain();
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.linearRampToValueAtTime(amp, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 1.2 / ratio);
+        osc.connect(gain).connect(target);
+        osc.start(start);
+        osc.stop(start + 1.25);
+      }
+    });
+  }, 760);
+}
+
 /* ═══════════════════════════════════════════
    Menu Music Bed
    ═══════════════════════════════════════════ */
@@ -460,215 +486,567 @@ export function fadeInMenuMusic(): void {
 }
 
 /* ═══════════════════════════════════════════
-   Per-Shelter Hover Ambience (Procedural)
+   Per-Shelter Ambience (Procedural, musical)
+   ─ Soft pitched voices, pink/brown-noise swells and spaced organic
+     micro-events instead of steady white-noise hiss. Each soundscape
+     lives on its own bus so changes crossfade over 350ms.
    ═══════════════════════════════════════════ */
 
-function stopCurrentAmbience(): void {
-  for (const id of currentAmbienceIntervals) clearInterval(id);
-  currentAmbienceIntervals = [];
+const AMBIENCE_FADE = 0.35;
+const AMBIENCE_MASTER = 1.6;
+const DIMMED_LEVEL = 0.55;
 
-  if (!ctx || !ambienceGain) {
-    currentAmbienceNodes = [];
-    currentAmbienceSiteId = null;
-    return;
+type Timer = ReturnType<typeof setTimeout>;
+
+interface AmbienceInstance {
+  key: string;
+  bus: GainNode;
+  nodes: AudioNode[];
+  timers: Set<Timer>;
+  alive: boolean;
+}
+
+interface AmbienceRequest {
+  siteId: SiteId;
+  dimmed: boolean;
+  level: number;
+}
+
+let currentAmbience: AmbienceInstance | null = null;
+let desiredAmbience: AmbienceRequest | null = null;
+const noiseCache = new Map<'pink' | 'brown', AudioBuffer>();
+
+function rand(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function pick<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+/** Seamlessly looping pink or brown noise (tail crossfaded into head) */
+function getNoise(color: 'pink' | 'brown'): AudioBuffer {
+  const c = getCtx();
+  const cached = noiseCache.get(color);
+  if (cached && cached.sampleRate === c.sampleRate) return cached;
+
+  const len = Math.floor(c.sampleRate * 4);
+  const fade = Math.floor(c.sampleRate * 0.25);
+  const raw = new Float32Array(len + fade);
+  let b0 = 0, b1 = 0, b2 = 0, last = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const white = Math.random() * 2 - 1;
+    if (color === 'pink') {
+      b0 = 0.99765 * b0 + white * 0.099046;
+      b1 = 0.963 * b1 + white * 0.2965164;
+      b2 = 0.57 * b2 + white * 1.0526913;
+      raw[i] = (b0 + b1 + b2 + white * 0.1848) * 0.2;
+    } else {
+      last = (last + 0.02 * white) / 1.02;
+      raw[i] = last * 3.5;
+    }
   }
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    if (i < fade) {
+      const a = i / fade;
+      data[i] = raw[i] * a + raw[len + i] * (1 - a);
+    } else {
+      data[i] = raw[i];
+    }
+  }
+  noiseCache.set(color, buf);
+  return buf;
+}
 
-  rampGain(ambienceGain.gain, 0, 0.18);
-  const nodesToClean = [...currentAmbienceNodes];
-  currentAmbienceNodes = [];
-  currentAmbienceSiteId = null;
+/* ── Building blocks ── */
 
+function addLfo(
+  inst: AmbienceInstance,
+  c: AudioContext,
+  rate: number,
+  depth: number,
+  targets: AudioParam[],
+): void {
+  const osc = c.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.value = rate;
+  const g = c.createGain();
+  g.gain.value = depth;
+  osc.connect(g);
+  for (const t of targets) g.connect(t);
+  osc.start();
+  inst.nodes.push(osc, g);
+}
+
+interface BedOptions {
+  color: 'pink' | 'brown';
+  filter: BiquadFilterType;
+  freq: number;
+  q?: number;
+  vol: number;
+  /** Gain swell (breathing) */
+  swellRate?: number;
+  swellDepth?: number;
+  /** Filter sweep */
+  sweepRate?: number;
+  sweepDepth?: number;
+}
+
+/** Very quiet filtered pink/brown noise bed that breathes slowly */
+function addBed(inst: AmbienceInstance, c: AudioContext, o: BedOptions): { filter: BiquadFilterNode; gain: GainNode } {
+  const src = c.createBufferSource();
+  src.buffer = getNoise(o.color);
+  src.loop = true;
+  src.loopStart = 0;
+  src.playbackRate.value = rand(0.96, 1.04);
+  const filter = c.createBiquadFilter();
+  filter.type = o.filter;
+  filter.frequency.value = o.freq;
+  filter.Q.value = o.q ?? 0.7;
+  const gain = c.createGain();
+  gain.gain.value = o.vol;
+  src.connect(filter).connect(gain).connect(inst.bus);
+  src.start(c.currentTime, rand(0, 3));
+  inst.nodes.push(src, filter, gain);
+  if (o.swellRate && o.swellDepth) addLfo(inst, c, o.swellRate, o.swellDepth, [gain.gain]);
+  if (o.sweepRate && o.sweepDepth) addLfo(inst, c, o.sweepRate, o.sweepDepth, [filter.frequency]);
+  return { filter, gain };
+}
+
+/** Soft sustained sine pad with slow tremolo */
+function addDrone(
+  inst: AmbienceInstance,
+  c: AudioContext,
+  freqs: number[],
+  vol: number,
+  lowpass = 900,
+  tremRate = 0.08,
+): void {
+  const g = c.createGain();
+  g.gain.value = vol;
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = lowpass;
+  g.connect(lp).connect(inst.bus);
+  inst.nodes.push(g, lp);
+  for (const f of freqs) {
+    const osc = c.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = f;
+    osc.detune.value = rand(-4, 4);
+    const v = c.createGain();
+    v.gain.value = 1 / freqs.length;
+    osc.connect(v).connect(g);
+    osc.start();
+    inst.nodes.push(osc, v);
+  }
+  addLfo(inst, c, tremRate, vol * 0.35, [g.gain]);
+}
+
+/** Feedback echo; returns the input node (dry + wet both reach the bus) */
+function addEcho(
+  inst: AmbienceInstance,
+  c: AudioContext,
+  time: number,
+  feedback: number,
+  tone: number,
+  wet = 0.5,
+): GainNode {
+  const input = c.createGain();
+  const delay = c.createDelay(2);
+  delay.delayTime.value = time;
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = tone;
+  const fb = c.createGain();
+  fb.gain.value = feedback;
+  const wetGain = c.createGain();
+  wetGain.gain.value = wet;
+  input.connect(inst.bus);
+  input.connect(delay);
+  delay.connect(lp).connect(fb).connect(delay);
+  lp.connect(wetGain).connect(inst.bus);
+  inst.nodes.push(input, delay, lp, fb, wetGain);
+  return input;
+}
+
+/** Repeatedly fire `fn` at organic, randomly spaced intervals */
+function every(
+  inst: AmbienceInstance,
+  minMs: number,
+  maxMs: number,
+  fn: (t: number) => void,
+  first: [number, number] = [minMs * 0.25, minMs * 0.6],
+): void {
+  const schedule = (delay: number) => {
+    const id = setTimeout(() => {
+      inst.timers.delete(id);
+      if (!inst.alive || !ctx) return;
+      fn(ctx.currentTime + 0.02);
+      schedule(rand(minMs, maxMs));
+    }, delay);
+    inst.timers.add(id);
+  };
+  schedule(rand(first[0], first[1]));
+}
+
+/* ── Event voices (self-stopping, connect to a bus or echo input) ── */
+
+interface ToneOptions {
+  freq: number;
+  vol: number;
+  decay: number;
+  type?: OscillatorType;
+  attack?: number;
+  glideTo?: number;
+  glideTime?: number;
+}
+
+function tone(c: AudioContext, dest: AudioNode, t: number, o: ToneOptions): void {
+  const osc = c.createOscillator();
+  osc.type = o.type ?? 'sine';
+  osc.frequency.setValueAtTime(o.freq, t);
+  if (o.glideTo) osc.frequency.exponentialRampToValueAtTime(o.glideTo, t + (o.glideTime ?? o.decay * 0.6));
+  const g = c.createGain();
+  const attack = o.attack ?? 0.008;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(o.vol, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + attack + o.decay);
+  osc.connect(g).connect(dest);
+  osc.start(t);
+  osc.stop(t + attack + o.decay + 0.05);
+}
+
+/** Struck bell / bamboo voice built from inharmonic partials */
+function bell(
+  c: AudioContext,
+  dest: AudioNode,
+  t: number,
+  freq: number,
+  vol: number,
+  decay: number,
+  partials: [number, number][] = [[1, 1], [2.76, 0.28], [5.4, 0.09]],
+): void {
+  for (const [ratio, amp] of partials) {
+    tone(c, dest, t, { freq: freq * ratio, vol: vol * amp, decay: decay / Math.sqrt(ratio), attack: 0.004 });
+  }
+}
+
+/** Woody marimba-like mallet tone */
+function mallet(c: AudioContext, dest: AudioNode, t: number, freq: number, vol: number): void {
+  tone(c, dest, t, { freq, vol, decay: 0.75, attack: 0.004 });
+  tone(c, dest, t, { freq: freq * 4, vol: vol * 0.22, decay: 0.12, attack: 0.002 });
+  tone(c, dest, t, { freq: freq * 2.01, vol: vol * 0.1, decay: 0.3, type: 'triangle', attack: 0.003 });
+}
+
+/** Two-note morning birdsong with gentle pitch glides */
+function birdsong(c: AudioContext, dest: AudioNode, t: number, vol: number): void {
+  const base = pick([2300, 2550, 2800, 3050]);
+  tone(c, dest, t, { freq: base, glideTo: base * 1.14, glideTime: 0.09, vol, decay: 0.12, attack: 0.012 });
+  tone(c, dest, t + 0.16, {
+    freq: base * 1.22,
+    glideTo: base * 0.94,
+    glideTime: 0.13,
+    vol: vol * 0.85,
+    decay: 0.16,
+    attack: 0.012,
+  });
+}
+
+/** Water-drop plink: quick downward then upward sine blip */
+function drip(c: AudioContext, dest: AudioNode, t: number, freq: number, vol: number): void {
+  const osc = c.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, t);
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.55, t + 0.025);
+  osc.frequency.exponentialRampToValueAtTime(freq * 1.18, t + 0.075);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  osc.connect(g).connect(dest);
+  osc.start(t);
+  osc.stop(t + 0.2);
+}
+
+/** Wooden creak: slow stick-slip pulse train through a resonant band */
+function creak(
+  c: AudioContext,
+  dest: AudioNode,
+  t: number,
+  pulseHz: number,
+  resonance: number,
+  vol: number,
+  dur: number,
+): void {
+  const osc = c.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(pulseHz, t);
+  osc.frequency.linearRampToValueAtTime(pulseHz * 1.3, t + dur * 0.45);
+  osc.frequency.linearRampToValueAtTime(pulseHz * 1.1, t + dur);
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = resonance;
+  bp.Q.value = 7;
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 1400;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(vol, t + dur * 0.3);
+  g.gain.linearRampToValueAtTime(vol * 0.7, t + dur * 0.7);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc.connect(bp).connect(lp).connect(g).connect(dest);
+  osc.start(t);
+  osc.stop(t + dur + 0.05);
+}
+
+/** Short filtered noise puff (leaf rustle, ripple, splash) */
+function puff(
+  c: AudioContext,
+  dest: AudioNode,
+  t: number,
+  vol: number,
+  dur: number,
+  hp: number,
+  lpFrom: number,
+  lpTo = lpFrom,
+): void {
+  const src = c.createBufferSource();
+  src.buffer = getNoise('pink');
+  const high = c.createBiquadFilter();
+  high.type = 'highpass';
+  high.frequency.value = hp;
+  const low = c.createBiquadFilter();
+  low.type = 'lowpass';
+  low.frequency.setValueAtTime(lpFrom, t);
+  low.frequency.exponentialRampToValueAtTime(lpTo, t + dur);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(vol, t + dur * 0.3);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(high).connect(low).connect(g).connect(dest);
+  src.start(t, rand(0, 3));
+  src.stop(t + dur + 0.05);
+}
+
+/** Faint metallic relay tick */
+function relayTick(c: AudioContext, dest: AudioNode, t: number, vol: number): void {
+  for (const [f, v] of [[3200, 1], [4750, 0.5]] as const) {
+    const osc = c.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = f * rand(0.97, 1.03);
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = f;
+    bp.Q.value = 9;
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol * v, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.025);
+    osc.connect(bp).connect(g).connect(dest);
+    osc.start(t);
+    osc.stop(t + 0.04);
+  }
+}
+
+/* ── Per-site soundscapes ── */
+
+const G_PENTA = [392, 440, 494, 587.3, 659.3, 784];
+const C_PENTA_HIGH = [1046.5, 1174.7, 1318.5, 1568, 1760, 2093];
+
+function buildSoundscape(inst: AmbienceInstance, c: AudioContext, siteId: SiteId): void {
+  const bus = inst.bus;
+
+  switch (siteId) {
+    case 'terrace': {
+      addBed(inst, c, { color: 'pink', filter: 'bandpass', freq: 1400, q: 0.6, vol: 0.012, swellRate: 0.09, swellDepth: 0.008 });
+      every(inst, 2200, 5200, (t) => {
+        birdsong(c, bus, t, 0.034);
+        if (Math.random() < 0.45) birdsong(c, bus, t + rand(0.45, 0.8), 0.02);
+      }, [150, 550]);
+      every(inst, 3200, 6800, (t) => {
+        const notes = [587.3, 659.3, 784, 880, 987.8];
+        const count = 1 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < count; i++) {
+          bell(c, bus, t + i * rand(0.12, 0.26), pick(notes), 0.026, 1.1, [[1, 1], [2.7, 0.3], [5.1, 0.06]]);
+        }
+      }, [700, 1400]);
+      break;
+    }
+
+    case 'pipe': {
+      addDrone(inst, c, [73.4, 110, 146.8], 0.011, 380, 0.07);
+      addBed(inst, c, { color: 'brown', filter: 'lowpass', freq: 170, vol: 0.014, swellRate: 0.05, swellDepth: 0.005 });
+      const echo = addEcho(inst, c, 0.13, 0.42, 1800, 0.55);
+      every(inst, 1400, 3600, (t) => {
+        drip(c, echo, t, pick([880, 987.8, 1174.7, 1318.5]), 0.05);
+      }, [120, 450]);
+      break;
+    }
+
+    case 'tree': {
+      addDrone(inst, c, [196, 293.7], 0.006, 700, 0.06);
+      every(inst, 2000, 4500, (t) => {
+        const i = Math.floor(Math.random() * (G_PENTA.length - 2));
+        mallet(c, bus, t, G_PENTA[i], 0.04);
+        if (Math.random() < 0.4) mallet(c, bus, t + 0.18, G_PENTA[i + 2], 0.03);
+      }, [150, 500]);
+      every(inst, 5500, 10000, (t) => {
+        creak(c, bus, t, rand(26, 32), 520, 0.03, 0.9);
+      }, [1200, 2400]);
+      every(inst, 2600, 5000, (t) => {
+        const n = 3 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < n; i++) puff(c, bus, t + i * 0.11, 0.018, 0.09, 2500, 8000);
+      }, [500, 1100]);
+      break;
+    }
+
+    case 'countryhouse': {
+      addDrone(inst, c, [261.6, 392], 0.005, 800, 0.05);
+      addBed(inst, c, {
+        color: 'pink', filter: 'bandpass', freq: 520, q: 0.7, vol: 0.022,
+        swellRate: 0.08, swellDepth: 0.016, sweepRate: 0.05, sweepDepth: 120,
+      });
+      every(inst, 3200, 6500, (t) => {
+        const n = 2 + Math.floor(Math.random() * 3);
+        let at = t;
+        for (let i = 0; i < n; i++) {
+          bell(c, bus, at, pick(C_PENTA_HIGH), 0.02, 2.2);
+          at += rand(0.14, 0.32);
+        }
+      }, [150, 500]);
+      break;
+    }
+
+    case 'farmhouse': {
+      addDrone(inst, c, [98, 147], 0.008, 500, 0.06);
+      addBed(inst, c, { color: 'brown', filter: 'lowpass', freq: 650, vol: 0.03, swellRate: 0.12, swellDepth: 0.02 });
+      every(inst, 5000, 9000, (t) => {
+        creak(c, bus, t, rand(17, 22), 360, 0.035, 1.3);
+      }, [350, 900]);
+      every(inst, 4000, 8000, (t) => {
+        const f = rand(1750, 2050);
+        tone(c, bus, t, { freq: f, glideTo: f * 0.84, glideTime: 0.2, vol: 0.015, decay: 0.24, attack: 0.02 });
+      }, [1000, 2000]);
+      break;
+    }
+
+    case 'cave': {
+      addBed(inst, c, { color: 'brown', filter: 'lowpass', freq: 200, vol: 0.035, swellRate: 0.04, swellDepth: 0.01 });
+      addDrone(inst, c, [55, 82.4], 0.012, 220, 0.03);
+      const echo = addEcho(inst, c, 0.31, 0.5, 2600, 0.6);
+      every(inst, 2200, 4800, (t) => {
+        const f = pick([1760, 2093, 2349.3, 2637]);
+        drip(c, echo, t, f, 0.03);
+        bell(c, echo, t + 0.01, f, 0.014, 0.9, [[1, 1], [2.4, 0.2]]);
+      }, [150, 550]);
+      break;
+    }
+
+    case 'bunker': {
+      addDrone(inst, c, [60, 120.4, 180.2], 0.016, 500, 0.03);
+      addBed(inst, c, { color: 'brown', filter: 'lowpass', freq: 140, vol: 0.02 });
+      every(inst, 3000, 7000, (t) => {
+        relayTick(c, bus, t, 0.02);
+        if (Math.random() < 0.4) relayTick(c, bus, t + 0.07, 0.014);
+      }, [250, 700]);
+      break;
+    }
+
+    case 'beachhouse': {
+      // Rolling surf: one slow 0.14 Hz LFO drives both loudness and brightness
+      const surf = addBed(inst, c, { color: 'pink', filter: 'lowpass', freq: 650, q: 0.5, vol: 0.03 });
+      const foam = addBed(inst, c, { color: 'pink', filter: 'highpass', freq: 2500, vol: 0.006 });
+      addLfo(inst, c, 0.14, 0.026, [surf.gain.gain]);
+      addLfo(inst, c, 0.14, 420, [surf.filter.frequency]);
+      addLfo(inst, c, 0.14, 0.005, [foam.gain.gain]);
+      every(inst, 5000, 9000, (t) => {
+        bell(c, bus, t, pick([659.3, 880, 987.8]), 0.014, 2.5);
+      }, [800, 1600]);
+      break;
+    }
+
+    case 'island': {
+      addBed(inst, c, { color: 'pink', filter: 'lowpass', freq: 450, vol: 0.012, swellRate: 0.22, swellDepth: 0.008 });
+      addDrone(inst, c, [293.7, 440, 587.3], 0.008, 900, 0.09);
+      addBed(inst, c, {
+        color: 'pink', filter: 'bandpass', freq: 950, q: 1.2, vol: 0.012,
+        swellRate: 0.07, swellDepth: 0.009, sweepRate: 0.05, sweepDepth: 200,
+      });
+      every(inst, 1400, 3000, (t) => {
+        puff(c, bus, t, 0.035, 0.38, 120, 900, 380);
+        puff(c, bus, t + 0.28, 0.022, 0.32, 120, 800, 350);
+      }, [150, 450]);
+      break;
+    }
+  }
+}
+
+/* ── Lifecycle ── */
+
+function stopAmbienceInstance(inst: AmbienceInstance): void {
+  inst.alive = false;
+  for (const id of inst.timers) clearTimeout(id);
+  inst.timers.clear();
+  if (ctx) rampGain(inst.bus.gain, 0, AMBIENCE_FADE);
   setTimeout(() => {
-    for (const n of nodesToClean) {
+    for (const n of inst.nodes) {
       try {
-        if (n instanceof AudioBufferSourceNode || n instanceof OscillatorNode) n.stop();
+        if (n instanceof AudioScheduledSourceNode) n.stop();
         n.disconnect();
       } catch {
         /* already stopped */
       }
     }
-  }, 260);
+    try {
+      inst.bus.disconnect();
+    } catch {
+      /* already disconnected */
+    }
+  }, AMBIENCE_FADE * 1000 + 150);
 }
 
-function createNoiseBuffer(seconds: number): AudioBuffer {
+function createAmbience(req: AmbienceRequest, key: string): AmbienceInstance | null {
   const c = getCtx();
-  const len = Math.floor(c.sampleRate * seconds);
-  const buf = c.createBuffer(1, len, c.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
-  return buf;
+  if (!ambienceGain) return null;
+  rampGain(ambienceGain.gain, 1, 0.05);
+
+  const bus = c.createGain();
+  bus.gain.value = 0;
+  bus.connect(ambienceGain);
+  const inst: AmbienceInstance = { key, bus, nodes: [], timers: new Set(), alive: true };
+  buildSoundscape(inst, c, req.siteId);
+
+  const target = AMBIENCE_MASTER * req.level * (req.dimmed ? DIMMED_LEVEL : 1);
+  rampGain(bus.gain, target, AMBIENCE_FADE);
+  return inst;
 }
 
-/** Helper: simple looping filtered noise layer */
-function makeWindLayer(
-  c: AudioContext,
-  target: GainNode,
-  filterType: BiquadFilterType,
-  freq: number,
-  q: number,
-  vol: number,
-): AudioNode[] {
-  const noiseBuf = createNoiseBuffer(3);
-  const src = c.createBufferSource();
-  src.buffer = noiseBuf;
-  src.loop = true;
-  const bp = c.createBiquadFilter();
-  bp.type = filterType;
-  bp.frequency.value = freq;
-  bp.Q.value = q;
-  const g = c.createGain();
-  g.gain.value = vol;
-  src.connect(bp).connect(g).connect(target);
-  src.start(c.currentTime);
-  return [src, bp, g];
-}
-
-export function startSiteAmbience(siteId: SiteId | null, dimmed = false): void {
-  if (!siteId) {
-    stopCurrentAmbience();
+/** (Re)apply the requested ambience given mute / unlock / volume state */
+function applyAmbience(): void {
+  const want = desiredAmbience;
+  if (!want || muted || !unlocked || sfxVolume <= 0) {
+    if (currentAmbience) {
+      stopAmbienceInstance(currentAmbience);
+      currentAmbience = null;
+    }
     return;
   }
-  if (muted || !unlocked || sfxVolume <= 0) return;
-  if (siteId === currentAmbienceSiteId) return;
 
-  stopCurrentAmbience();
+  const key = `${want.siteId}|${want.dimmed}|${want.level}`;
+  if (currentAmbience?.key === key) return;
+  if (currentAmbience) stopAmbienceInstance(currentAmbience);
+  currentAmbience = createAmbience(want, key);
+}
 
-  const c = getCtx();
-  if (!ambienceGain) return;
-  const t = c.currentTime;
-  const nodes: AudioNode[] = [];
-  const bg = dimmed ? 0.06 : 0.12;
-  currentAmbienceSiteId = siteId;
-
-  switch (siteId) {
-    case 'terrace': {
-      const wind = makeWindLayer(c, ambienceGain, 'bandpass', 800, 0.5, bg);
-      const lfo = c.createOscillator();
-      lfo.type = 'sine';
-      lfo.frequency.value = 0.3;
-      const lg = c.createGain();
-      lg.gain.value = 200;
-      lfo.connect(lg).connect((wind[1] as BiquadFilterNode).frequency);
-      lfo.start(t);
-      nodes.push(...wind, lfo, lg);
-      break;
-    }
-    case 'pipe':
-      nodes.push(...makeWindLayer(c, ambienceGain, 'bandpass', 320, 3, bg * 0.9));
-      break;
-    case 'tree': {
-      const noiseBuf = createNoiseBuffer(3);
-      const src = c.createBufferSource();
-      src.buffer = noiseBuf;
-      src.loop = true;
-      const hs = c.createBiquadFilter();
-      hs.type = 'highshelf';
-      hs.frequency.value = 3000;
-      hs.gain.value = 6;
-      const lp = c.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 5000;
-      const lfo = c.createOscillator();
-      lfo.type = 'sine';
-      lfo.frequency.value = 1.2;
-      const lg = c.createGain();
-      lg.gain.value = 1500;
-      lfo.connect(lg).connect(lp.frequency);
-      lfo.start(t);
-      const g = c.createGain();
-      g.gain.value = bg * 0.8;
-      src.connect(hs).connect(lp).connect(g).connect(ambienceGain);
-      src.start(t);
-      nodes.push(src, hs, lp, lfo, lg, g);
-      break;
-    }
-    case 'cave': {
-      nodes.push(...makeWindLayer(c, ambienceGain, 'lowpass', 400, 1, bg * 0.7));
-      const dropInterval = setInterval(() => {
-        if (!ctx || !ambienceGain || currentAmbienceSiteId !== 'cave') {
-          clearInterval(dropInterval);
-          return;
-        }
-        const dt = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(2200 + Math.random() * 600, dt);
-        osc.frequency.exponentialRampToValueAtTime(800, dt + 0.08);
-        const dg = ctx.createGain();
-        dg.gain.setValueAtTime(dimmed ? 0.03 : 0.06, dt);
-        dg.gain.exponentialRampToValueAtTime(0.001, dt + 0.15);
-        osc.connect(dg).connect(ambienceGain);
-        osc.start(dt);
-        osc.stop(dt + 0.16);
-      }, 1800 + Math.random() * 1200);
-      currentAmbienceIntervals.push(dropInterval);
-      break;
-    }
-    case 'bunker': {
-      nodes.push(...makeWindLayer(c, ambienceGain, 'bandpass', 200, 1.5, bg * 0.6));
-      const hum = c.createOscillator();
-      hum.type = 'sine';
-      hum.frequency.value = 55;
-      const hg = c.createGain();
-      hg.gain.value = dimmed ? 0.015 : 0.03;
-      hum.connect(hg).connect(ambienceGain);
-      hum.start(t);
-      nodes.push(hum, hg);
-      break;
-    }
-    case 'beachhouse': {
-      const surf = makeWindLayer(c, ambienceGain, 'lowpass', 600, 0.8, bg);
-      const lfo = c.createOscillator();
-      lfo.type = 'sine';
-      lfo.frequency.value = 0.15;
-      const lg = c.createGain();
-      lg.gain.value = 250;
-      lfo.connect(lg).connect((surf[1] as BiquadFilterNode).frequency);
-      lfo.start(t);
-      nodes.push(...surf, lfo, lg);
-      break;
-    }
-    case 'countryhouse':
-      nodes.push(...makeWindLayer(c, ambienceGain, 'bandpass', 650, 0.6, bg * 0.9));
-      break;
-    case 'farmhouse': {
-      nodes.push(...makeWindLayer(c, ambienceGain, 'bandpass', 500, 0.5, bg * 0.8));
-      const creakInterval = setInterval(() => {
-        if (!ctx || !ambienceGain || currentAmbienceSiteId !== 'farmhouse') {
-          clearInterval(creakInterval);
-          return;
-        }
-        const dt = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(220 + Math.random() * 80, dt);
-        osc.frequency.linearRampToValueAtTime(180, dt + 0.2);
-        const cg = ctx.createGain();
-        cg.gain.setValueAtTime(0, dt);
-        cg.gain.linearRampToValueAtTime(dimmed ? 0.02 : 0.04, dt + 0.05);
-        cg.gain.exponentialRampToValueAtTime(0.001, dt + 0.25);
-        osc.connect(cg).connect(ambienceGain);
-        osc.start(dt);
-        osc.stop(dt + 0.3);
-      }, 2500 + Math.random() * 2000);
-      currentAmbienceIntervals.push(creakInterval);
-      break;
-    }
-    case 'island': {
-      const water = makeWindLayer(c, ambienceGain, 'lowpass', 500, 0.7, bg * 0.8);
-      const lfo = c.createOscillator();
-      lfo.type = 'sine';
-      lfo.frequency.value = 0.25;
-      const lg = c.createGain();
-      lg.gain.value = 180;
-      lfo.connect(lg).connect((water[1] as BiquadFilterNode).frequency);
-      lfo.start(t);
-      const pine = makeWindLayer(c, ambienceGain, 'highshelf', 2500, 1, bg * 0.4);
-      nodes.push(...water, lfo, lg, ...pine);
-      break;
-    }
-  }
-
-  currentAmbienceNodes = nodes;
-  rampGain(ambienceGain.gain, 1, 0.24);
+/**
+ * Crossfade to a shelter's soundscape (or silence with `null`).
+ * @param dimmed quieter preview used for locked shelters
+ * @param level  overall loudness scale (shelter screen uses a softer bed)
+ */
+export function startSiteAmbience(siteId: SiteId | null, dimmed = false, level = 1): void {
+  desiredAmbience = siteId ? { siteId, dimmed, level } : null;
+  applyAmbience();
 }

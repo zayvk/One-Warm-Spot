@@ -11,13 +11,33 @@ export type SiteId =
   | 'terrace' | 'pipe' | 'tree' | 'countryhouse' | 'farmhouse'
   | 'cave' | 'bunker' | 'beachhouse' | 'island';
 
+/** Time-of-day phases within a single day */
+export type TimeOfDay = 'morning' | 'afternoon' | 'dusk' | 'night';
+
+/** Gentle daily weather, rolled each new morning */
+export type Weather = 'clear' | 'breezy' | 'rain' | 'storm';
+
+/** Persistent milestone stats that drive shelter unlocks (kept across new shelters) */
+export interface PlayerStats {
+  maxDaysSurvived: number;
+  totalUpgradesBuilt: number;
+  totalExpansionsBuilt: number;
+}
+
+/** Milestone a locked shelter needs before it can be claimed */
+export interface UnlockRequirement {
+  stat: keyof PlayerStats;
+  count: number;
+}
+
 /** A shelter site the player can choose */
 export interface Site {
   id: SiteId;
   name: string;
   tagline: string;
   description: string;
-  unlocked: boolean;
+  /** Omitted for the three Day 1 starter shelters */
+  unlockRequirement?: UnlockRequirement;
   unlockHint?: string;
   /** Traces left behind by a previous traveler */
   leftBehind?: string;
@@ -45,6 +65,8 @@ export interface KitItem {
   name: string;
   emoji: string;
   description: string;
+  /** How the item helps day-to-day */
+  helps: string;
 }
 
 /** Macro upgrade category */
@@ -56,19 +78,66 @@ export interface Upgrade {
   category: UpgradeCategory;
   name: string;
   tier: number;
+  emoji: string;
   description: string;
   cost: Partial<Record<ResourceId, number>>;
+  /** Energy spent doing the work */
+  energy: number;
+  /** Cozy Index points granted once built */
+  cozy: number;
+  /** Upgrade that must be built first (previous tier) */
+  requires?: string;
 }
 
-/** Full save state shape */
+/** Full save state shape (version 4) — optional fields may be absent in older saves */
 export interface SaveState {
   version: number;
   day: number;
+  timeOfDay?: TimeOfDay;
+  energy?: number;
+  weather?: Weather;
   chosenSite: SiteId | null;
   selectedMode: GameMode;
   travelerGender: TravelerGender;
   resources: Record<ResourceId, number>;
+  /** IDs of built upgrades (legacy name kept for save compatibility) */
   unlockedUpgrades: string[];
   kitCollected: boolean;
+  lanternLit?: boolean;
+  /** IDs of Valley Relics found while scavenging */
+  discoveredRelics?: string[];
+  /** Milestone stats snapshot, included so exported saves carry unlocks */
+  stats?: PlayerStats;
   timestamp: number;
+}
+
+/* ───── Scavenging ───── */
+
+export type ScavengeZoneId = 'highway' | 'pine-grove' | 'stone-creek' | 'greenhouse';
+
+/** One material a scavenging spot can yield (base amounts, before mode rules) */
+export interface ZoneYield {
+  resource: ResourceId;
+  min: number;
+  max: number;
+  /** Primary materials are guaranteed at least 1 and receive cozy bonuses */
+  primary: boolean;
+}
+
+export interface ScavengeZone {
+  id: ScavengeZoneId;
+  name: string;
+  emoji: string;
+  blurb: string;
+  yields: ZoneYield[];
+  /** Short atmospheric discovery lines (one is picked per trip) */
+  stories: string[];
+}
+
+/** A small keepsake found while scavenging, readable in the Field Journal */
+export interface Relic {
+  id: string;
+  name: string;
+  emoji: string;
+  note: string;
 }

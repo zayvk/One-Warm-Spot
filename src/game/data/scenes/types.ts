@@ -23,6 +23,8 @@ export interface HotspotConfig {
   collider?: { rx: number; ry: number };
   /** Normalized offset from prop position where the traveler stands to interact */
   standOffset?: { dx: number; dy: number };
+  /** Alternate stand offset when resting (sitting) beside a shelter during day/dusk */
+  restOffset?: { dx: number; dy: number };
   /** Normalized clickable region relative to `position` (for backdrop features without a sprite) */
   hitRect?: { dx: number; dy: number; w: number; h: number };
   /** Gentle toast shown after interacting (door hotspots) */
@@ -56,7 +58,7 @@ export interface BuildableConfig {
    * Its sprite becomes `propSprite`, and any `hotspotOverrides` are merged in.
    */
   upgradesHotspot?: string;
-  hotspotOverrides?: Partial<Pick<HotspotConfig, 'label' | 'propScale' | 'collider' | 'standOffset'>>;
+  hotspotOverrides?: Partial<Pick<HotspotConfig, 'label' | 'propScale' | 'collider' | 'standOffset' | 'restOffset'>>;
   /** Finishing flourish once built */
   effect: 'lantern' | 'leaves' | 'water';
   /** Lantern glow anchor as a fraction of the sprite (0–1 from left, 0–1 from top) */

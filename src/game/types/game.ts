@@ -11,8 +11,11 @@ export type SiteId =
   | 'terrace' | 'pipe' | 'tree' | 'countryhouse' | 'farmhouse'
   | 'cave' | 'bunker' | 'beachhouse' | 'island';
 
-/** Time-of-day phases within a single day */
+/** Time-of-day phases within a single day (legacy M1 drawers) */
 export type TimeOfDay = 'morning' | 'afternoon' | 'dusk' | 'night';
+
+/** 3-phase real-time day cycle used in the interactive shelter */
+export type DayPhase = 'day' | 'dusk' | 'night';
 
 /** Gentle daily weather, rolled each new morning */
 export type Weather = 'clear' | 'breezy' | 'rain' | 'storm';
@@ -94,7 +97,11 @@ export interface SaveState {
   version: number;
   day: number;
   timeOfDay?: TimeOfDay;
+  dayPhase?: DayPhase;
+  phaseElapsedSec?: number;
   energy?: number;
+  stamina?: number;
+  strength?: number;
   weather?: Weather;
   chosenSite: SiteId | null;
   selectedMode: GameMode;

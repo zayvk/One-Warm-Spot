@@ -1,4 +1,5 @@
 import type {
+  DayPhase,
   GameMode,
   PlayerStats,
   ResourceId,
@@ -11,6 +12,12 @@ import type {
 import { RESOURCE_MAP } from '../data/resources.ts';
 import { LEGACY_TARP_UPGRADE_ID, UPGRADES } from '../data/upgrades.ts';
 import { RELIC_MAP } from '../data/relics.ts';
+import {
+  clampPhaseElapsed,
+  clampVitality,
+  PHASE_DURATION_SEC,
+  timeOfDayToDayPhase,
+} from './dayCycle.ts';
 
 const STORAGE_KEY = 'one-warm-spot-save';
 const PROGRESS_KEY = 'one-warm-spot-progress';
@@ -44,6 +51,7 @@ const VALID_RESOURCE_IDS: readonly ResourceId[] = [
 const VALID_MODES: ReadonlySet<string> = new Set<GameMode>(['cozy', 'challenge']);
 const VALID_GENDERS: ReadonlySet<string> = new Set<TravelerGender>(['female', 'male']);
 const VALID_TIMES: ReadonlySet<string> = new Set<TimeOfDay>(['morning', 'afternoon', 'dusk', 'night']);
+const VALID_DAY_PHASES: ReadonlySet<string> = new Set<DayPhase>(['day', 'dusk', 'night']);
 const VALID_WEATHER: ReadonlySet<string> = new Set<Weather>(['clear', 'breezy', 'rain', 'storm']);
 const STAT_KEYS: readonly (keyof PlayerStats)[] = [
   'maxDaysSurvived',
@@ -103,10 +111,26 @@ export function findSaveProblem(data: unknown): string | null {
   if (!isOptionalEnum(obj.selectedMode, VALID_MODES)) return 'This save has an unknown game mode.';
   if (!isOptionalEnum(obj.travelerGender, VALID_GENDERS)) return 'This save has an unknown traveler.';
   if (!isOptionalEnum(obj.timeOfDay, VALID_TIMES)) return 'This save has an unknown time of day.';
+  if (!isOptionalEnum(obj.dayPhase, VALID_DAY_PHASES)) return 'This save has an unknown day phase.';
   if (!isOptionalEnum(obj.weather, VALID_WEATHER)) return 'This save has unknown weather.';
 
   if (obj.energy !== undefined && (typeof obj.energy !== 'number' || !Number.isFinite(obj.energy) || obj.energy < 0)) {
     return "The energy value in this save isn't valid.";
+  }
+  if (
+    obj.phaseElapsedSec !== undefined &&
+    (typeof obj.phaseElapsedSec !== 'number' ||
+      !Number.isFinite(obj.phaseElapsedSec) ||
+      obj.phaseElapsedSec < 0 ||
+      obj.phaseElapsedSec > PHASE_DURATION_SEC)
+  ) {
+    return "The day timer in this save isn't valid.";
+  }
+  if (obj.stamina !== undefined && (typeof obj.stamina !== 'number' || !Number.isFinite(obj.stamina) || obj.stamina < 0)) {
+    return "The stamina value in this save isn't valid.";
+  }
+  if (obj.strength !== undefined && (typeof obj.strength !== 'number' || !Number.isFinite(obj.strength) || obj.strength < 0)) {
+    return "The strength value in this save isn't valid.";
   }
 
   if (!obj.resources || typeof obj.resources !== 'object' || Array.isArray(obj.resources)) {
@@ -180,11 +204,18 @@ export function migrateSave(save: SaveState, warnings: string[] = []): SaveState
   ) as Record<ResourceId, number>;
   if (trimmed) warnings.push('Trimmed materials above storage limits.');
 
+  const timeOfDay = save.timeOfDay ?? 'morning';
+  const dayPhase = save.dayPhase ?? timeOfDayToDayPhase(save.timeOfDay);
+
   return {
     version: SAVE_VERSION,
     day: Math.max(1, Math.floor(save.day)),
-    timeOfDay: save.timeOfDay ?? 'morning',
+    timeOfDay,
+    dayPhase,
+    phaseElapsedSec: clampPhaseElapsed(save.phaseElapsedSec ?? 0),
     energy: Math.round(Math.min(100, Math.max(0, save.energy ?? 100))),
+    stamina: clampVitality(save.stamina ?? 100),
+    strength: clampVitality(save.strength ?? 100),
     weather: save.weather ?? 'clear',
     chosenSite: save.chosenSite,
     selectedMode: save.selectedMode ?? 'cozy',

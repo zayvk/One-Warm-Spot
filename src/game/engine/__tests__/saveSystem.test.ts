@@ -45,7 +45,11 @@ describe('save migration', () => {
       version: SAVE_VERSION,
       day: 3,
       timeOfDay: 'morning',
+      dayPhase: 'day',
+      phaseElapsedSec: 0,
       energy: 100,
+      stamina: 100,
+      strength: 100,
       weather: 'clear',
       travelerGender: 'male',
       unlockedUpgrades: ['shell-1'],
@@ -62,13 +66,31 @@ describe('save migration', () => {
       version: SAVE_VERSION,
       day: 5,
       timeOfDay: 'dusk',
+      dayPhase: 'dusk',
+      phaseElapsedSec: 0,
       energy: 40,
+      stamina: 100,
+      strength: 100,
       lanternLit: true,
       weather: 'clear',
       discoveredRelics: [],
       unlockedUpgrades: ['shell-1', 'slot-workbench'],
       stats: v3Save.stats,
     });
+  });
+
+  it('maps legacy afternoon saves to dayPhase "day" and preserves stamina/strength', () => {
+    const { save } = expectOk({
+      ...v3Save,
+      timeOfDay: 'afternoon',
+      stamina: 74,
+      strength: 82,
+      phaseElapsedSec: 95,
+    });
+    expect(save.dayPhase).toBe('day');
+    expect(save.phaseElapsedSec).toBe(95);
+    expect(save.stamina).toBe(74);
+    expect(save.strength).toBe(82);
   });
 
   it('is stable when re-migrating a current save', () => {
@@ -116,6 +138,10 @@ describe('strict save validation', () => {
     ['an unknown time of day', json({ timeOfDay: 'midnight' }), /time of day/],
     ['unknown weather', json({ weather: 'meteor' }), /weather/],
     ['negative energy', json({ energy: -5 }), /energy/],
+    ['negative stamina', json({ stamina: -2 }), /stamina/],
+    ['negative strength', json({ strength: -1 }), /strength/],
+    ['out-of-range day timer', json({ phaseElapsedSec: 999 }), /day timer/],
+    ['unknown day phase', json({ dayPhase: 'midnight' }), /day phase/],
     ['a negative material', json({ resources: { ...resources, scrap: -1 } }), /“scrap”/],
     ['a fractional material', json({ resources: { ...resources, water: 1.5 } }), /“water”/],
     ['a missing material', json({ resources: { timber: 1 } }), /whole numbers/],

@@ -3,8 +3,14 @@ import { Application } from 'pixi.js';
 import { useGameStore } from '../store/useGameStore.ts';
 import { computeCozyIndex, spendResources } from '../engine/progression.ts';
 import {
+  BOX_STAMINA_COST,
+  BUILD_STAMINA_COST,
+  WEED_STAMINA_COST,
+} from '../engine/dayCycle.ts';
+import {
   ShelterScene,
   type BuildCallback,
+  type RewardCallback,
   type SceneBuildState,
   type ShelterSceneState,
 } from './shelterScene.ts';
@@ -40,6 +46,7 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
 
   const siteId = useGameStore((s) => s.chosenSite);
   const timeOfDay = useGameStore((s) => s.timeOfDay);
+  const dayPhase = useGameStore((s) => s.dayPhase);
   const built = useGameStore((s) => s.unlockedUpgrades);
   const lanternLit = useGameStore((s) => s.lanternLit);
   const reduceMotion = useGameStore((s) => s.reduceMotion);
@@ -47,19 +54,23 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
 
   const stateRef = useRef<ShelterSceneState | null>(null);
 
-  /* Reward handler: add found materials to the Zustand store */
-  const handleReward = useCallback((reward: Record<string, number>) => {
+  /* Reward handler: add found materials and deduct gentle activity stamina */
+  const handleReward = useCallback<RewardCallback>((reward, source) => {
     const s = useGameStore.getState();
     const updated = addResources(s.resources, reward);
     useGameStore.setState({ resources: updated });
+    if (source === 'weeds') s.spendStamina(WEED_STAMINA_COST);
+    else if (source === 'searchable') s.spendStamina(BOX_STAMINA_COST);
     useGameStore.getState()._save();
   }, []);
 
-  /* Build payment: deduct materials from the pouch, or refuse if short */
+  /* Build payment: deduct materials & stamina from the store, or refuse if short */
   const handleBuild = useCallback<BuildCallback>((cost) => {
-    const next = spendResources(useGameStore.getState().resources, cost);
+    const s = useGameStore.getState();
+    const next = spendResources(s.resources, cost);
     if (!next) return false;
     useGameStore.setState({ resources: next });
+    s.spendStamina(BUILD_STAMINA_COST);
     useGameStore.getState()._save();
     return true;
   }, []);
@@ -68,11 +79,20 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
     useGameStore.getState().pushNotice({ icon: '🚪', title: message, tone: 'build' });
   }, []);
 
+  const handleRest = useCallback(() => {
+    useGameStore.getState().restAtShelter();
+  }, []);
+
+  const handleSleep = useCallback(() => {
+    useGameStore.getState().sleepAtShelter();
+  }, []);
+
   /* Forward state changes to the scene */
   useEffect(() => {
     const next: ShelterSceneState = {
       siteId,
       timeOfDay,
+      dayPhase,
       built,
       lanternLit,
       cozyIndex: computeCozyIndex(built),
@@ -81,7 +101,7 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
     };
     stateRef.current = next;
     sceneRef.current?.setState(next);
-  }, [siteId, timeOfDay, built, lanternLit, reduceMotion, gender]);
+  }, [siteId, timeOfDay, dayPhase, built, lanternLit, reduceMotion, gender]);
 
   /* Mount / unmount the PixiJS app */
   useEffect(() => {
@@ -118,6 +138,8 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
         scene.setRewardCallback(handleReward);
         scene.setBuildCallback(handleBuild);
         scene.setNoticeCallback(handleNotice);
+        scene.setRestCallback(handleRest);
+        scene.setSleepCallback(handleSleep);
         scene.setBuildStateCallback((s) => buildStateCbRef.current?.(s));
         sceneRef.current = scene;
         observer.observe(container);
@@ -130,7 +152,7 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
       scene = null;
       sceneRef.current = null;
     };
-  }, [handleReward, handleBuild, handleNotice]);
+  }, [handleReward, handleBuild, handleNotice, handleRest, handleSleep]);
 
   return (
     <div

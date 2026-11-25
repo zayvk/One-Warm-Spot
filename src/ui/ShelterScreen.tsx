@@ -8,6 +8,7 @@ import { getSceneConfig } from '../game/data/scenes/index.ts';
 import { playClick, playHover, startSiteAmbience } from '../game/audio/soundEngine.ts';
 import type { ResourceId } from '../game/types/game.ts';
 import BuildBar from './BuildBar.tsx';
+import VitalityDialHud from './VitalityDialHud.tsx';
 
 export interface ShelterScreenProps {
   onBackToTitle: () => void;
@@ -34,6 +35,18 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
     startSiteAmbience(chosenSite, false, SHELTER_AMBIENCE_LEVEL);
     return () => startSiteAmbience(null);
   }, [chosenSite]);
+
+  /* Real-time 3-phase clock (1s steps; pauses when tab is hidden or settings open) */
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.hidden) return;
+      useGameStore.getState().tickDayCycle(1);
+    }, 1000);
+    return () => {
+      window.clearInterval(id);
+      useGameStore.getState()._save();
+    };
+  }, []);
 
   /* Pulse newly found pouch materials */
   useEffect(() => {
@@ -132,6 +145,8 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
       <main style={{ position: 'relative', flex: 1, minHeight: 0, background: '#F5EFE4' }}>
         <ShelterCanvas ref={canvasRef} onBuildStateChange={setBuildState} />
       </main>
+
+      <VitalityDialHud />
 
       {buildState && buildables.length > 0 && (
         <BuildBar

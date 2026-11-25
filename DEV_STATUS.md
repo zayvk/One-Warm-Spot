@@ -60,6 +60,7 @@ One-Warm-Spot/
     │   │       ├── terrace.ts   # Old Apartment Terrace v2 config (hotspots, obstacles, 3 buildables)
     │   │       └── index.ts     # getSceneConfig() registry (terrace only for now)
     │   ├── engine/
+    │   │   ├── dayCycle.ts    # Pure 3-phase 12-min day clock (240s/phase), Stamina/Strength rest & sleep math
     │   │   ├── progression.ts   # Pure rules: time-of-day, Cozy Index, upgrade status/build, canAfford/spendResources, site unlocks
     │   │   ├── scavenge.ts      # Pure runScavenge(), trip availability, capped resource adds
     │   │   ├── weather.ts       # Daily weather roll + soft-rain water bonus
@@ -78,7 +79,8 @@ One-Warm-Spot/
         ├── SiteSelector.tsx          # Header bar, traveler sprite portraits, 3/2/1 responsive shelter cards
         ├── ArrivalCutscene.tsx       # Cutscene shell (fade-out, Skip button, Space/Enter/Escape); Ken Burns fade for most shelters
         ├── TerraceLiftCutscene.tsx   # 3-beat Terrace lift arrival (lobby push-in → lift ride 1→R → doors open), reduce-motion aware
-        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + floating pouch HUD + Build Bar
+        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + Pouch HUD + VitalityDialHud + Build Bar
+        ├── VitalityDialHud.tsx       # Bottom-left circular 3-phase Time Dial + Day crest + Stamina/Strength glass test-tube capsule
         ├── BuildBar.tsx              # Bottom-center frosted chips for unbuilt in-scene upgrades (dimmed when unaffordable)
         ├── TopBar.tsx                # 💤 Dormant M1 HUD bar (unmounted — see "Archived / Unmounted M1 Files")
         ├── UpgradePanel.tsx          # 💤 Dormant M1 Upgrade drawer (unmounted)
@@ -109,9 +111,9 @@ The game has pivoted from menu drawers to a **point-and-click illustrated scene*
 
 | Piece | Wiring |
 |-------|--------|
-| `ShelterScreen.tsx` | Mounts `ShelterCanvas`, a **← Title** button + shelter name, the centered Found Materials Pouch (🪵 🔩 🧵 🌱 — Stone & Water are intentionally hidden until in-scene sources exist), and the bottom-center `BuildBar` for the site's unbuilt `buildables`. Chips call `ShelterCanvas`'s imperative `requestBuild(id)`. Starts the site ambience bed. |
-| `ShelterCanvas.tsx` | Reads `chosenSite`, `timeOfDay`, `unlockedUpgrades`, `lanternLit`, `reduceMotion`, `travelerGender` from the store and forwards them to the scene. Write-backs: **rewards** (`addResources()`), **build payments** (`spendResources()` — refuses if the pouch is short), and **notices** (`pushNotice()` for the stairwell door). Each write calls `_save()`. Mirrors the scene's `{ built, pending }` build state to `ShelterScreen`. |
-| `shelterScene.ts` | Looks up configs via `getSceneConfig()` in `data/scenes/index.ts` (`terrace` only; other sites get the generic fallback walk area with no hotspots). **All normalized scene coords (props, hotspots, colliders, obstacles, walk bounds, entry/idle points) are relative to `stageRect`** — the on-screen cover rect of the backdrop, recomputed at the start of every `layout()` — via `toPx()` / `toNorm()`; prop, traveler and glow sizes scale with `stageRect.height`. Lighting washes, sun glow and labels stay in screen space. Clamps walk targets against prop colliders, built-upgrade colliders and static `obstacles` (ellipse/rect). Persists prop + build state through `engine/terraceState.ts`. Sleep is a pose/twilight effect only — it does **not** call the store. |
+| `ShelterScreen.tsx` | Mounts `ShelterCanvas`, a **← Title** button + shelter name, the centered Found Materials Pouch (🪵 🔩 🧵 🌱 — Stone & Water are intentionally hidden until in-scene sources exist), the bottom-left `VitalityDialHud`, and the bottom-center `BuildBar` for the site's unbuilt `buildables`. Drives the 1s real-time phase clock while mounted and unpaused. Chips call `ShelterCanvas`'s imperative `requestBuild(id)`. Starts the site ambience bed. |
+| `ShelterCanvas.tsx` | Reads `chosenSite`, `timeOfDay`, `dayPhase`, `unlockedUpgrades`, `lanternLit`, `reduceMotion`, `travelerGender` from the store and forwards them to the scene. Write-backs: **rewards** (`addResources()` + gentle weed/box stamina cost), **build payments** (`spendResources()` + build stamina cost), **rest** (`restAtShelter()`), **sleep** (`sleepAtShelter()`), and **notices** (`pushNotice()` for the stairwell door). Each write calls `_save()`. Mirrors the scene's `{ built, pending }` build state to `ShelterScreen`. |
+| `shelterScene.ts` | Looks up configs via `getSceneConfig()` in `data/scenes/index.ts` (`terrace` only; other sites get the generic fallback walk area with no hotspots). **All normalized scene coords (props, hotspots, colliders, obstacles, walk bounds, entry/idle points) are relative to `stageRect`** — the on-screen cover rect of the backdrop, recomputed at the start of every `layout()` — via `toPx()` / `toNorm()`; prop, traveler and glow sizes scale with `stageRect.height`. Tweens lighting over 1.4s across `day` / `dusk` / `night`, fading in twinkling stars, drifting fireflies, and brighter fire/lantern light pools at dusk/night. Context-aware `sleep-shed` rests in `sit` pose during `day`/`dusk` and sleeps until Day `N+1` morning during `night`. Persists prop + build state through `engine/terraceState.ts`. |
 
 ### Terrace v2 In-Scene Builds
 
@@ -139,7 +141,7 @@ The M1 drawer-based loop is **paused on purpose** while gathering, day rhythm an
 | Store `lightLantern` | No UI caller. |
 | Store `buildUpgrade` / `goScavenging` | Called only from the dormant drawers above. |
 
-Consequence: in current play the day never advances and none of the 10 macro upgrades can be built (Terrace v2 buildables are separate), so milestone-based site unlocks cannot be earned yet. This is expected until the new day rhythm lands.
+Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to advance `Day N+1` (plus day-survival milestone unlocks) are now active in the shelter scene via `restAtShelter()` / `sleepAtShelter()`, while the 10 macro upgrades and scavenging drawer remain dormant until their in-scene designs land.
 
 ---
 
@@ -263,6 +265,7 @@ Consequence: in current play the day never advances and none of the 10 macro upg
 - [x] **M2 · Terrace v2:** 3 in-scene buildables (Upgrade Shelter → timber shelter with lantern glow, Herb Planter, Rain Barrel) with bottom-center `BuildBar`, floor blueprint markers, pop-in tween, colliders + Y-sort, and `builtProps` persistence
 - [x] **M2 · Terrace lift arrival:** 3-beat elevator cutscene (`TerraceLiftCutscene.tsx`, ~5.2s) — lobby Ken Burns push-in + footsteps (0–1.7s) → cover-fitted 1376×768 lift stage with sliding door panels in the doorway cutout, amber 1→2→3→4→R indicator, hum + micro-tremor (1.7–3.7s) → ding, doors slide apart onto the sunlit Terrace, ambience swell, caption and step-through into the shelter (3.7–5.2s). Skip/keys stop all beats and the hum; Reduce Motion swaps motion for fades. New foley: `startLiftHum` / `stopLiftHum`, `playLiftDoorSlide`, `playLiftFloorTick`, `playLiftDing`
 - [x] **M2 · Stage-space anchoring:** Scene coords are mapped through the backdrop's cover rect (`stageRect`, `toPx` / `toNorm`), so props, colliders, walk bounds, hotspots and floor clicks stay locked to the painted floor on 16:9, ultrawide and portrait windows
+- [x] **M2 · 3-Phase Day Cycle & Vitality HUD:** 12-minute real-time day (`day` Full Sun → `dusk` Sunset → `night` Half Moon, 240s/phase, paused outside shelter or in settings), `stamina` & `strength` vitality stats persisted in `SaveState` with legacy `timeOfDay` migration, 1.4s smooth cubic sky lighting tweens, night twinkling stars + drifting warm fireflies + dusk/night fire/lantern glow pools, context-aware `sleep-shed` (**"Rest by shelter"** in day/dusk vs **"Sleep until morning"** at night → `Day N+1 · Morning`), and bottom-left circular Time-Dial + glass Test-Tube HUD (`VitalityDialHud.tsx`)
 - [ ] **M2:** Custom interactive scene configs & prop sprites for remaining shelters (`pipe`, `tree`, etc.)
 - [ ] **M2:** Tier 1–3 painted visual layer swaps & macro-build restoration integrated into interactive scenes
 - [ ] **M2:** Weather visuals & audio on the shelter scene (rain streaks, squall haze, rain-on-roof ambience)
@@ -272,7 +275,7 @@ Consequence: in current play the day never advances and none of the 10 macro upg
 ### 🔧 Known Technical Backlog
 
 - [ ] **Save schema v5:** Fold `ows_terrace_state` (`fireLit`, `searchedBoxes`, `clearedWeeds`, `builtProps`) into the versioned `SaveState` with a v4 → v5 migration, so JSON Export/Import validates and preserves in-scene prop and build states (and per-site prop state scales to other shelters).
-- [ ] **Sleep → day progression:** Connect the lean-to / timber-shelter sleep hotspot to `sleepToNextDay` / day progression and milestone unlocks once the new day rhythm is finalized.
+- [x] ~~**Sleep → day progression:** Connect the lean-to / timber-shelter sleep hotspot to `sleepToNextDay` / day progression and milestone unlocks once the new day rhythm is finalized.~~ → Implemented via `sleepAtShelter()` (`day + 1`, `"Day N · Morning"` toast, day-survival milestone checks) and `restAtShelter()`.
 - [ ] **Buildables → Cozy Index:** Decide how in-scene buildables relate to the 10 macro upgrades (Cozy Index, `totalUpgradesBuilt` milestones) — today they are purely visual + material sinks.
 - [ ] **Scene registry:** Replicate the data-driven `ShelterSceneConfig` pattern from `src/game/data/scenes/terrace.ts` to the remaining 8 shelters and register them in `getSceneConfig()` (`src/game/data/scenes/index.ts`).
 - [ ] **Split `shelterScene.ts`** (~1,600 lines after Terrace v2) into focused modules (actor/traveler, hotspots, builds, particles/effects, lighting) **before** adding Shelter #2.

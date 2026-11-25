@@ -11,7 +11,7 @@ import {
   Texture,
   type Ticker,
 } from 'pixi.js';
-import type { ResourceId, SiteId, TimeOfDay, TravelerGender } from '../types/game.ts';
+import type { DayPhase, ResourceId, SiteId, TimeOfDay, TravelerGender } from '../types/game.ts';
 import type {
   BuildableConfig,
   HotspotConfig,
@@ -30,6 +30,7 @@ import {
   playRummage,
   playWeedCut,
   playSleep as playSleepSfx,
+  playRest as playRestSfx,
   playFootstep,
   playBuild,
   playClaim,
@@ -43,6 +44,7 @@ import {
 export interface ShelterSceneState {
   siteId: SiteId | null;
   timeOfDay: TimeOfDay;
+  dayPhase: DayPhase;
   built: readonly string[];
   lanternLit: boolean;
   cozyIndex: number;
@@ -51,7 +53,13 @@ export interface ShelterSceneState {
 }
 
 /** Callback when a hotspot interaction awards resources */
-export type RewardCallback = (reward: Record<string, number>) => void;
+export type RewardCallback = (reward: Record<string, number>, source?: 'weeds' | 'searchable') => void;
+
+/** Callback when the traveler rests by the shelter during day/dusk */
+export type RestCallback = () => void;
+
+/** Callback when the traveler sleeps until morning during night */
+export type SleepCallback = () => void;
 
 /** Pays for an in-scene build; returns false if the materials ran short */
 export type BuildCallback = (cost: Partial<Record<ResourceId, number>>) => boolean;
@@ -77,36 +85,40 @@ interface Lighting {
   scr: RGB; scrAlpha: number;
   sun: RGB; sunAlpha: number; sunX: number; sunY: number;
   lantern: number; markerGlow: number;
+  nightFactor: number;
+  fireIntensity: number;
 }
 
 function hex(c: number): RGB {
   return [(c >> 16) & 255, (c >> 8) & 255, c & 255];
 }
 
-const LIGHTING: Record<TimeOfDay, Lighting> = {
-  morning: {
-    mul: hex(0xffe2b8), mulAlpha: 0.32,
-    scr: hex(0xffc870), scrAlpha: 0.12,
-    sun: hex(0xffd68a), sunAlpha: 0.55, sunX: 0.16, sunY: 0.1,
-    lantern: 0, markerGlow: 0.8,
-  },
-  afternoon: {
-    mul: hex(0xfff7ea), mulAlpha: 0.08,
-    scr: hex(0xfffaf0), scrAlpha: 0.07,
-    sun: hex(0xfff4d6), sunAlpha: 0.28, sunX: 0.78, sunY: 0.06,
-    lantern: 0, markerGlow: 0.7,
+const LIGHTING_TWEEN_MS = 1400;
+
+const PHASE_LIGHTING: Record<DayPhase, Lighting> = {
+  day: {
+    mul: hex(0xfff0d6), mulAlpha: 0.16,
+    scr: hex(0xffd690), scrAlpha: 0.10,
+    sun: hex(0xffe2a6), sunAlpha: 0.44, sunX: 0.22, sunY: 0.08,
+    lantern: 0, markerGlow: 0.75,
+    nightFactor: 0,
+    fireIntensity: 0.36,
   },
   dusk: {
     mul: hex(0xf0a078), mulAlpha: 0.52,
-    scr: hex(0xff9a5c), scrAlpha: 0.1,
-    sun: hex(0xffa860), sunAlpha: 0.5, sunX: 0.86, sunY: 0.46,
-    lantern: 0.6, markerGlow: 1,
+    scr: hex(0xff9a5c), scrAlpha: 0.12,
+    sun: hex(0xffa860), sunAlpha: 0.52, sunX: 0.84, sunY: 0.42,
+    lantern: 0.72, markerGlow: 1.0,
+    nightFactor: 0,
+    fireIntensity: 0.58,
   },
   night: {
     mul: hex(0x3a4878), mulAlpha: 0.68,
-    scr: hex(0x1a2240), scrAlpha: 0.04,
-    sun: hex(0xdfe6ff), sunAlpha: 0.12, sunX: 0.8, sunY: 0.1,
-    lantern: 1, markerGlow: 1.15,
+    scr: hex(0x1a2240), scrAlpha: 0.05,
+    sun: hex(0xdbe6ff), sunAlpha: 0.16, sunX: 0.78, sunY: 0.10,
+    lantern: 1.0, markerGlow: 1.15,
+    nightFactor: 1,
+    fireIntensity: 0.76,
   },
 };
 
@@ -169,6 +181,29 @@ const POSE_SHADOW: Record<TravelerPose, { rx: number; ry: number; alpha: number 
 /* ═══════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════ */
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+interface StarNode {
+  sprite: Graphics;
+  nx: number;
+  ny: number;
+  phase: number;
+  speed: number;
+  baseAlpha: number;
+}
+
+interface FireflyNode {
+  sprite: Graphics;
+  nx: number;
+  ny: number;
+  vx: number;
+  vy: number;
+  phase: number;
+  speed: number;
+}
 
 function lerp(a: number, b: number, k: number): number {
   return a + (b - a) * k;
@@ -300,8 +335,12 @@ export class ShelterScene {
   private onBuildState: BuildStateCallback | null = null;
   private onNotice: NoticeCallback | null = null;
 
-  /* Fire & Burst Particles */
+  /* Fire, Stars, Fireflies & Burst Particles */
+  private readonly starLayer = new Container();
+  private readonly fireflyLayer = new Container();
   private readonly fxLayer = new Container();
+  private stars: StarNode[] = [];
+  private fireflies: FireflyNode[] = [];
   private fireLit = false;
   private fireFlames: Graphics | null = null;
   private fireGlow: Sprite | null = null;
@@ -313,11 +352,15 @@ export class ShelterScene {
   private sleepMode = false;
   /** While asleep, sort just above the shelter so the traveler lies on its bedding */
   private sleepZ: number | null = null;
+  private onRest: RestCallback | null = null;
+  private onSleep: SleepCallback | null = null;
 
   /* State */
   private state: ShelterSceneState;
   private current: Lighting;
+  private lightFrom: Lighting;
   private target: Lighting;
+  private lightTweenMS = LIGHTING_TWEEN_MS;
   private warmthCurrent = 0;
   private elapsed = 0;
   private width: number;
@@ -338,8 +381,10 @@ export class ShelterScene {
     this.app = app;
     this.radial = createRadialTexture();
     this.state = initial;
-    this.current = cloneLighting(LIGHTING[initial.timeOfDay]);
-    this.target = LIGHTING[initial.timeOfDay];
+    const initLighting = PHASE_LIGHTING[initial.dayPhase];
+    this.current = cloneLighting(initLighting);
+    this.lightFrom = cloneLighting(initLighting);
+    this.target = initLighting;
     this.warmthCurrent = this.warmthTarget();
     this.width = app.screen.width;
     this.height = app.screen.height;
@@ -378,7 +423,9 @@ export class ShelterScene {
     this.travelerNode.addChild(this.travelerShadow);
     this.worldLayer.addChild(this.travelerNode);
 
-    /* Non-interactive FX & label overlays */
+    /* Non-interactive FX, night sky & label overlays */
+    this.starLayer.eventMode = 'none';
+    this.fireflyLayer.eventMode = 'none';
     this.fxLayer.eventMode = 'none';
     this.labelLayer.eventMode = 'none';
 
@@ -388,18 +435,22 @@ export class ShelterScene {
       this.mulWash,
       this.scrWash,
       this.sunGlow,
+      this.starLayer,
       this.worldLayer,
       this.warmth,
       this.fxLayer,
+      this.fireflyLayer,
       this.labelLayer,
     );
 
     this.sceneConfig = getSceneConfig(initial.siteId);
     this.preloadTravelerPoses(initial.gender);
+    this.buildNightEffects();
     this.buildHotspots();
     this.buildBuildables();
     this.loadTraveler(initial.gender, 'idle');
     this.restoreTerraceState();
+    this.syncSleepHotspotLabel();
     this.layout();
     this.applyLighting();
     /* Stage stays veiled until the backdrop is ready; the reveal then starts the entry walk */
@@ -426,17 +477,39 @@ export class ShelterScene {
       this.preloadTravelerPoses(next.gender);
       this.loadTraveler(next.gender, this.currentPose);
     }
-    this.target = this.sleepMode ? LIGHTING.night : LIGHTING[next.timeOfDay];
+    if (next.dayPhase !== prev.dayPhase || next.siteId !== prev.siteId) {
+      this.syncSleepHotspotLabel();
+    }
+    const desired = this.sleepMode ? PHASE_LIGHTING.night : PHASE_LIGHTING[next.dayPhase];
+    if (desired !== this.target || next.reduceMotion !== prev.reduceMotion) {
+      this.startLightingTween(desired);
+    }
     if (next.reduceMotion) {
       this.current = cloneLighting(this.target);
+      this.lightFrom = cloneLighting(this.target);
+      this.lightTweenMS = LIGHTING_TWEEN_MS;
       this.warmthCurrent = this.warmthTarget();
     }
     this.layout();
     this.applyLighting();
   }
 
+  private startLightingTween(nextTarget: Lighting): void {
+    this.lightFrom = cloneLighting(this.current);
+    this.target = nextTarget;
+    this.lightTweenMS = this.state.reduceMotion ? LIGHTING_TWEEN_MS : 0;
+  }
+
   setRewardCallback(cb: RewardCallback): void {
     this.onReward = cb;
+  }
+
+  setRestCallback(cb: RestCallback): void {
+    this.onRest = cb;
+  }
+
+  setSleepCallback(cb: SleepCallback): void {
+    this.onSleep = cb;
   }
 
   setBuildCallback(cb: BuildCallback): void {
@@ -784,6 +857,53 @@ export class ShelterScene {
       .catch(() => { /* keep current art */ });
   }
 
+  private syncSleepHotspotLabel(): void {
+    const hs = this.hotspots.find((h) => h.config.type === 'sleep');
+    if (!hs) return;
+    const text = this.state.dayPhase === 'night' ? 'Sleep until morning' : 'Rest by shelter';
+    this.setHotspotLabel(hs, text);
+  }
+
+  private buildNightEffects(): void {
+    this.starLayer.removeChildren();
+    this.fireflyLayer.removeChildren();
+    this.stars = [];
+    this.fireflies = [];
+
+    /* Softly twinkling upper-sky stars */
+    for (let i = 0; i < 34; i++) {
+      const star = new Graphics();
+      const r = 0.8 + (i % 4) * 0.45;
+      star.circle(0, 0, r).fill({ color: i % 5 === 0 ? 0xfff3c8 : 0xf4f7ff });
+      this.starLayer.addChild(star);
+      this.stars.push({
+        sprite: star,
+        nx: 0.04 + ((i * 0.6180339) % 1) * 0.92,
+        ny: 0.03 + ((i * 0.381966 + 0.17) % 1) * 0.34,
+        phase: i * 1.37,
+        speed: 1.4 + (i % 5) * 0.45,
+        baseAlpha: 0.45 + (i % 3) * 0.22,
+      });
+    }
+
+    /* Warm drifting rooftop fireflies */
+    for (let i = 0; i < 14; i++) {
+      const fly = new Graphics();
+      fly.circle(0, 0, 5.2).fill({ color: 0xffd870, alpha: 0.22 });
+      fly.circle(0, 0, 1.9).fill({ color: 0xfff5b8, alpha: 0.95 });
+      this.fireflyLayer.addChild(fly);
+      this.fireflies.push({
+        sprite: fly,
+        nx: 0.16 + ((i * 0.754877) % 1) * 0.66,
+        ny: 0.46 + ((i * 0.56984 + 0.2) % 1) * 0.34,
+        vx: (i % 2 === 0 ? 1 : -1) * (0.004 + (i % 3) * 0.002),
+        vy: (i % 3 === 0 ? 1 : -1) * 0.003,
+        phase: i * 1.9,
+        speed: 1.8 + (i % 4) * 0.5,
+      });
+    }
+  }
+
   private isHotspotInteractive(node: HotspotNode): boolean {
     const t = node.config.type;
     return !node.interacted || t === 'sleep' || t === 'firepit' || t === 'door';
@@ -870,33 +990,40 @@ export class ShelterScene {
     }
 
     const cfg = node.config;
-    const rawX = cfg.position.x + (cfg.standOffset?.dx ?? 0);
-    const rawY = cfg.position.y + (cfg.standOffset?.dy ?? 0.04);
-    /* The sleep spot lies inside its own shelter's footprint */
-    const standPos = this.clampFloorTarget(rawX, rawY, cfg.type === 'sleep' ? node : undefined);
+    const isSleepTurn = cfg.type === 'sleep' && this.state.dayPhase === 'night';
+    const isRestTurn = cfg.type === 'sleep' && this.state.dayPhase !== 'night';
+    const offset = isRestTurn ? (cfg.restOffset ?? { dx: 0.085, dy: 0.035 }) : cfg.standOffset;
+    const rawX = cfg.position.x + (offset?.dx ?? 0);
+    const rawY = cfg.position.y + (offset?.dy ?? 0.04);
+    /* Only actual sleeping enters the shelter's collider; resting sits beside it */
+    const standPos = this.clampFloorTarget(rawX, rawY, isSleepTurn ? node : undefined);
 
     this.onHotspotHover(node, false);
     this.interactionLock = true;
 
+    const finishArrival = () => {
+      if (isRestTurn) {
+        this.travelerFlipped = false;
+        this.layoutTraveler();
+      } else if (Math.abs(cfg.position.x - this.targetX) > 0.005) {
+        this.travelerFlipped = cfg.position.x < this.targetX;
+        this.layoutTraveler();
+      }
+      if (isRestTurn) {
+        this.interactRest();
+      } else {
+        this.executeInteraction(node);
+      }
+    };
+
     const dx = standPos.x - this.targetX;
     const dy = standPos.y - this.targetY;
     if (Math.hypot(dx, dy) < 0.015) {
-      if (Math.abs(cfg.position.x - this.targetX) > 0.005) {
-        this.travelerFlipped = cfg.position.x < this.targetX;
-        this.layoutTraveler();
-      }
-      this.executeInteraction(node);
+      finishArrival();
       return;
     }
 
-    this.walkTo(standPos.x, standPos.y, () => {
-      /* Face toward the prop before interacting */
-      if (Math.abs(cfg.position.x - this.targetX) > 0.005) {
-        this.travelerFlipped = cfg.position.x < this.targetX;
-        this.layoutTraveler();
-      }
-      this.executeInteraction(node);
-    });
+    this.walkTo(standPos.x, standPos.y, finishArrival);
   }
 
   private executeInteraction(node: HotspotNode): void {
@@ -1027,7 +1154,7 @@ export class ShelterScene {
       this.showSearchedBox(node);
 
       if (node.config.reward && this.onReward) {
-        this.onReward(node.config.reward);
+        this.onReward(node.config.reward, 'searchable');
       }
       if (node.config.reward) {
         this.showFloatingText(node.config.position, formatMaterials(node.config.reward, '+'));
@@ -1077,7 +1204,7 @@ export class ShelterScene {
       }
 
       if (node.config.reward && this.onReward) {
-        this.onReward(node.config.reward);
+        this.onReward(node.config.reward, 'weeds');
       }
       if (node.config.reward) {
         this.showFloatingText(node.config.position, formatMaterials(node.config.reward, '+'));
@@ -1087,17 +1214,41 @@ export class ShelterScene {
     });
   }
 
+  private interactRest(): void {
+    this.travelerFlipped = false;
+    this.layoutTraveler();
+    this.setPose('sit');
+    playRestSfx();
+    this.onRest?.();
+
+    this.after(450, () => {
+      this.interactionLock = false;
+    });
+  }
+
   private interactSleep(node: HotspotNode): void {
     this.sleepMode = true;
     this.sleepZ = node.root.zIndex + 1;
-    this.target = LIGHTING.night;
+    this.startLightingTween(PHASE_LIGHTING.night);
     /* Tuck head/pack inside the shed frame, facing out toward the rooftop */
     this.travelerFlipped = true;
     this.layoutTraveler();
     this.setPose('sleep');
     playSleepSfx();
 
-    this.after(900, () => {
+    /* Hold briefly in starry twilight, then roll into Day N+1 morning */
+    this.after(1600, () => {
+      this.onSleep?.();
+      this.sleepMode = false;
+      this.sleepZ = null;
+      this.startLightingTween(PHASE_LIGHTING.day);
+      const rest = node.config.restOffset ?? { dx: 0.085, dy: 0.035 };
+      const wakePos = this.clampFloorTarget(node.config.position.x + rest.dx, node.config.position.y + rest.dy);
+      this.targetX = wakePos.x;
+      this.targetY = wakePos.y;
+      this.travelerFlipped = false;
+      this.setPose('idle');
+      this.layoutTraveler();
       this.interactionLock = false;
     });
   }
@@ -1106,7 +1257,7 @@ export class ShelterScene {
     if (!this.sleepMode) return;
     this.sleepMode = false;
     this.sleepZ = null;
-    this.target = LIGHTING.morning;
+    this.startLightingTween(PHASE_LIGHTING[this.state.dayPhase]);
     this.layoutTraveler();
   }
 
@@ -1228,7 +1379,7 @@ export class ShelterScene {
       const hs = this.hotspots.find((h) => h.config.id === cfg.upgradesHotspot);
       if (!hs) return;
       hs.config = { ...hs.config, ...cfg.hotspotOverrides, propSprite: cfg.propSprite };
-      this.setHotspotLabel(hs, hs.config.label);
+      this.syncSleepHotspotLabel();
       this.setHotspotSprite(hs, cfg.propSprite, () => {
         if (animate) this.popIn(hs.root);
       });
@@ -1633,10 +1784,14 @@ export class ShelterScene {
       if (fp) {
         const p = this.toPx(fp.position.x, fp.position.y);
         this.fireGlow.position.set(p.x, p.y - SH * 0.03);
-        const fgSize = SH * 0.36;
+        const fgSize = SH * (0.34 + this.current.nightFactor * 0.1);
         this.fireGlow.width = fgSize;
         this.fireGlow.height = fgSize;
       }
+    }
+
+    for (const s of this.stars) {
+      s.sprite.position.set(W * s.nx, H * s.ny);
     }
 
     this.layoutTraveler();
@@ -1675,22 +1830,31 @@ export class ShelterScene {
   private update(ticker: Ticker): void {
     const dt = ticker.deltaMS;
     this.elapsed += dt / 1000;
-    const k = this.state.reduceMotion ? 1 : 1 - Math.exp(-dt / 380);
 
+    if (this.lightTweenMS < LIGHTING_TWEEN_MS) {
+      this.lightTweenMS = Math.min(LIGHTING_TWEEN_MS, this.lightTweenMS + dt);
+    }
+    const rawT = this.state.reduceMotion ? 1 : this.lightTweenMS / LIGHTING_TWEEN_MS;
+    const ease = easeInOutCubic(rawT);
+
+    const from = this.lightFrom;
     const c = this.current;
     const t = this.target;
     for (let i = 0; i < 3; i++) {
-      c.mul[i] = lerp(c.mul[i], t.mul[i], k);
-      c.scr[i] = lerp(c.scr[i], t.scr[i], k);
-      c.sun[i] = lerp(c.sun[i], t.sun[i], k);
+      c.mul[i] = lerp(from.mul[i], t.mul[i], ease);
+      c.scr[i] = lerp(from.scr[i], t.scr[i], ease);
+      c.sun[i] = lerp(from.sun[i], t.sun[i], ease);
     }
-    c.mulAlpha = lerp(c.mulAlpha, t.mulAlpha, k);
-    c.scrAlpha = lerp(c.scrAlpha, t.scrAlpha, k);
-    c.sunAlpha = lerp(c.sunAlpha, t.sunAlpha, k);
-    c.sunX = lerp(c.sunX, t.sunX, k);
-    c.sunY = lerp(c.sunY, t.sunY, k);
-    c.lantern = lerp(c.lantern, t.lantern, k);
-    c.markerGlow = lerp(c.markerGlow, t.markerGlow, k);
+    c.mulAlpha = lerp(from.mulAlpha, t.mulAlpha, ease);
+    c.scrAlpha = lerp(from.scrAlpha, t.scrAlpha, ease);
+    c.sunAlpha = lerp(from.sunAlpha, t.sunAlpha, ease);
+    c.sunX = lerp(from.sunX, t.sunX, ease);
+    c.sunY = lerp(from.sunY, t.sunY, ease);
+    c.lantern = lerp(from.lantern, t.lantern, ease);
+    c.markerGlow = lerp(from.markerGlow, t.markerGlow, ease);
+    c.nightFactor = lerp(from.nightFactor, t.nightFactor, ease);
+    c.fireIntensity = lerp(from.fireIntensity, t.fireIntensity, ease);
+    const k = this.state.reduceMotion ? 1 : 1 - Math.exp(-dt / 380);
     this.warmthCurrent = lerp(this.warmthCurrent, this.warmthTarget(), k);
 
     if (this.backdropReady && this.app.stage.alpha < 1) {
@@ -1714,7 +1878,35 @@ export class ShelterScene {
       const flicker = this.state.reduceMotion
         ? 1
         : 0.88 + 0.08 * Math.sin(this.elapsed * 5.3) + 0.04 * Math.sin(this.elapsed * 11.1);
-      this.shedLantern.alpha = 0.6 * this.current.lantern * flicker;
+      this.shedLantern.alpha = 0.78 * this.current.lantern * flicker;
+    }
+
+    /* Night stars & rooftop fireflies */
+    const nf = this.current.nightFactor;
+    this.starLayer.visible = nf > 0.01;
+    this.fireflyLayer.visible = nf > 0.01;
+    if (nf > 0.01) {
+      for (const s of this.stars) {
+        const twinkle = this.state.reduceMotion
+          ? 1
+          : 0.55 + 0.45 * Math.sin(this.elapsed * s.speed + s.phase);
+        s.sprite.alpha = nf * s.baseAlpha * twinkle;
+      }
+      const stepSec = dt / 1000;
+      for (const f of this.fireflies) {
+        if (!this.state.reduceMotion) {
+          f.nx += (f.vx + Math.sin(this.elapsed * 0.9 + f.phase) * 0.004) * stepSec;
+          f.ny += (f.vy + Math.cos(this.elapsed * 1.1 + f.phase) * 0.003) * stepSec;
+          if (f.nx < 0.14 || f.nx > 0.84) f.vx *= -1;
+          if (f.ny < 0.44 || f.ny > 0.82) f.vy *= -1;
+        }
+        const fp = this.toPx(f.nx, f.ny);
+        f.sprite.position.set(fp.x, fp.y);
+        const pulse = this.state.reduceMotion
+          ? 0.8
+          : 0.35 + 0.65 * Math.max(0, Math.sin(this.elapsed * f.speed + f.phase));
+        f.sprite.alpha = nf * pulse;
+      }
     }
 
     /* Walking */
@@ -1770,9 +1962,13 @@ export class ShelterScene {
 
     if (this.fireGlow && this.fireLit) {
       const flicker = this.state.reduceMotion
-        ? 0.7
-        : 0.65 + 0.18 * Math.sin(this.elapsed * 7.2) + 0.1 * Math.sin(this.elapsed * 13.7);
-      this.fireGlow.alpha = 0.42 * flicker;
+        ? 0.78
+        : 0.72 + 0.18 * Math.sin(this.elapsed * 7.2) + 0.1 * Math.sin(this.elapsed * 13.7);
+      this.fireGlow.alpha = this.current.fireIntensity * flicker;
+      const SH = this.stage.height;
+      const fgSize = SH * (0.34 + this.current.nightFactor * 0.1);
+      this.fireGlow.width = fgSize;
+      this.fireGlow.height = fgSize;
     }
 
     this.applyLighting();

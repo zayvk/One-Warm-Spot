@@ -38,9 +38,10 @@ export const terraceScene: ShelterSceneConfig = {
       position: { x: 0.36, y: 0.61 },
       propSprite: SCENE_PROPS.clothShed,
       propScale: 0.19,
-      label: 'Cloth Lean-to — Rest here',
+      label: 'Rest by shelter',
       collider: { rx: 0.062, ry: 0.03 },
       standOffset: { dx: -0.03, dy: -0.012 },
+      restOffset: { dx: 0.085, dy: 0.035 },
     },
 
     /* ── 3 Searchable box spots, each with distinct artwork ── */
@@ -176,10 +177,10 @@ export const terraceScene: ShelterSceneConfig = {
       propScale: 0.225,
       upgradesHotspot: 'sleep-shed',
       hotspotOverrides: {
-        label: 'Cozy Timber Shelter — Rest here',
         propScale: 0.225,
         collider: { rx: 0.064, ry: 0.032 },
         standOffset: { dx: 0.004, dy: -0.024 },
+        restOffset: { dx: 0.085, dy: 0.035 },
       },
       standOffset: { dx: 0.085, dy: 0.035 },
       effect: 'lantern',

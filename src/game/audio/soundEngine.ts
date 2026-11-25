@@ -1282,6 +1282,20 @@ export function playSleep(): void {
   tone(c, target, t + 0.34, { freq: 220.0, vol: 0.045, decay: 1.3, attack: 0.1 });
 }
 
+/** Calm rest sigh & warm two-note chime when sitting to rest by the shelter */
+export function playRest(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+
+  // Soft cloth/exhale settle
+  puff(c, target, t, 0.09, 0.28, 240, 1300, 540);
+  // Warm gentle fifth chime
+  tone(c, target, t + 0.08, { freq: 329.63, vol: 0.048, decay: 0.85, attack: 0.04 });
+  tone(c, target, t + 0.24, { freq: 493.88, vol: 0.04, decay: 1.0, attack: 0.05 });
+}
+
 /** Soft mallet taps on timber + a little sawdust brush while building in-scene */
 export function playBuild(): void {
   if (muted || !unlocked || sfxVolume <= 0) return;

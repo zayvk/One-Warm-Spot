@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { isMuted, toggleMute, playClick, playHover } from '../game/audio/soundEngine.ts';
+import { useGameStore } from '../game/store/useGameStore.ts';
 import SettingsPopover from './SettingsPopover.tsx';
 
 function SettingsIcon() {
@@ -72,6 +73,12 @@ export default function AudioToggle() {
     playClick();
     setSettingsOpen((open) => !open);
   }, []);
+
+  /* Pause the day timer while settings popover is open */
+  useEffect(() => {
+    useGameStore.getState().setTimePaused(settingsOpen);
+    return () => useGameStore.getState().setTimePaused(false);
+  }, [settingsOpen]);
 
   /* Close popover on click outside container */
   useEffect(() => {

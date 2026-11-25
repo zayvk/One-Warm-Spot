@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type {
+  DayPhase,
   GameMode,
   PlayerStats,
   ResourceId,
@@ -45,6 +46,15 @@ import {
 } from '../engine/scavenge.ts';
 import { morningWaterBonus, rollWeather } from '../engine/weather.ts';
 import { clearTerraceState } from '../engine/terraceState.ts';
+import {
+  advancePhaseClock,
+  applyRest,
+  applySleep,
+  clampVitality,
+  dayPhaseToTimeOfDay,
+  MAX_VITALITY,
+  timeOfDayToDayPhase,
+} from '../engine/dayCycle.ts';
 
 /* ── Helpers ── */
 
@@ -67,7 +77,8 @@ function getInitialReduceMotion(): boolean {
 
 type RunState = Pick<
   GameState,
-  | 'day' | 'timeOfDay' | 'energy' | 'chosenSite' | 'selectedMode' | 'travelerGender'
+  | 'day' | 'timeOfDay' | 'dayPhase' | 'phaseElapsedSec' | 'energy' | 'stamina' | 'strength'
+  | 'chosenSite' | 'selectedMode' | 'travelerGender'
   | 'resources' | 'unlockedUpgrades' | 'kitCollected' | 'lanternLit'
   | 'weather' | 'discoveredRelics'
 >;
@@ -76,7 +87,11 @@ function freshRunState(): RunState {
   return {
     day: 1,
     timeOfDay: 'morning',
+    dayPhase: 'day',
+    phaseElapsedSec: 0,
     energy: MAX_ENERGY,
+    stamina: MAX_VITALITY,
+    strength: MAX_VITALITY,
     chosenSite: null,
     selectedMode: 'cozy',
     travelerGender: 'female',
@@ -90,10 +105,15 @@ function freshRunState(): RunState {
 }
 
 function runStateFromSave(save: SaveState): RunState {
+  const dayPhase = save.dayPhase ?? timeOfDayToDayPhase(save.timeOfDay);
   return {
     day: save.day,
-    timeOfDay: save.timeOfDay ?? 'morning',
+    timeOfDay: save.timeOfDay ?? dayPhaseToTimeOfDay(dayPhase),
+    dayPhase,
+    phaseElapsedSec: save.phaseElapsedSec ?? 0,
     energy: save.energy ?? MAX_ENERGY,
+    stamina: clampVitality(save.stamina ?? MAX_VITALITY),
+    strength: clampVitality(save.strength ?? MAX_VITALITY),
     chosenSite: save.chosenSite,
     selectedMode: save.selectedMode,
     travelerGender: save.travelerGender,
@@ -149,7 +169,12 @@ export type ScavengeAttempt =
 export interface GameState {
   day: number;
   timeOfDay: TimeOfDay;
+  dayPhase: DayPhase;
+  phaseElapsedSec: number;
   energy: number;
+  stamina: number;
+  strength: number;
+  timePaused: boolean;
   chosenSite: SiteId | null;
   selectedMode: GameMode;
   travelerGender: TravelerGender;
@@ -179,6 +204,12 @@ export interface GameState {
   /** Rest until the next phase; at night this sleeps to the next day */
   advanceTime: () => void;
   sleepToNextDay: () => void;
+  /** Real-time 3-phase clock tick (paused outside shelter or in menus) */
+  tickDayCycle: (deltaSec: number) => void;
+  spendStamina: (amount: number) => void;
+  restAtShelter: () => boolean;
+  sleepAtShelter: () => void;
+  setTimePaused: (paused: boolean) => void;
   lightLantern: () => void;
   resetGame: (opts?: { clearMilestones?: boolean }) => void;
   getSaveSnapshot: () => SaveState;
@@ -194,7 +225,11 @@ function stateToSave(s: GameState): SaveState {
     version: SAVE_VERSION,
     day: s.day,
     timeOfDay: s.timeOfDay,
+    dayPhase: s.dayPhase,
+    phaseElapsedSec: Math.round(s.phaseElapsedSec),
     energy: s.energy,
+    stamina: s.stamina,
+    strength: s.strength,
     chosenSite: s.chosenSite,
     selectedMode: s.selectedMode,
     travelerGender: s.travelerGender,
@@ -252,6 +287,7 @@ export const useGameStore = create<GameState>()((set, get) => {
     stats: initialStats,
     announcedUnlocks: initialAnnounced,
     notices: [],
+    timePaused: false,
     reduceMotion: getInitialReduceMotion(),
 
     chooseSite(id: SiteId) {
@@ -385,6 +421,91 @@ export const useGameStore = create<GameState>()((set, get) => {
         ],
       );
       get()._save();
+    },
+
+    tickDayCycle(deltaSec: number) {
+      const s = get();
+      if (s.timePaused || !s.chosenSite) return;
+      const res = advancePhaseClock(s.dayPhase, s.phaseElapsedSec, deltaSec, s.strength);
+      if (
+        res.dayPhase === s.dayPhase &&
+        res.phaseElapsedSec === s.phaseElapsedSec &&
+        res.strength === s.strength
+      ) {
+        return;
+      }
+      set({
+        dayPhase: res.dayPhase,
+        timeOfDay: dayPhaseToTimeOfDay(res.dayPhase),
+        phaseElapsedSec: res.phaseElapsedSec,
+        strength: res.strength,
+      });
+      if (res.phaseChanged || Math.floor(res.phaseElapsedSec) % 10 === 0) {
+        get()._save();
+      }
+    },
+
+    spendStamina(amount: number) {
+      const s = get();
+      const next = clampVitality(s.stamina - Math.max(0, amount));
+      if (next === s.stamina) return;
+      set({ stamina: next });
+      get()._save();
+    },
+
+    restAtShelter() {
+      const s = get();
+      const outcome = applyRest(s.dayPhase, s.stamina, s.strength);
+      if (!outcome) return false;
+      set({
+        dayPhase: outcome.dayPhase,
+        timeOfDay: dayPhaseToTimeOfDay(outcome.dayPhase),
+        phaseElapsedSec: outcome.phaseElapsedSec,
+        stamina: outcome.stamina,
+        strength: outcome.strength,
+      });
+      get()._save();
+      return true;
+    },
+
+    sleepAtShelter() {
+      const s = get();
+      const outcome = applySleep(s.day, s.strength);
+      const weather = rollWeather(s.selectedMode);
+      const water = morningWaterBonus(weather, s.unlockedUpgrades);
+      set({
+        day: outcome.day,
+        dayPhase: outcome.dayPhase,
+        timeOfDay: 'morning',
+        phaseElapsedSec: outcome.phaseElapsedSec,
+        stamina: outcome.stamina,
+        strength: outcome.strength,
+        energy: MAX_ENERGY,
+        weather,
+        resources: water > 0 ? addResources(s.resources, { water }) : s.resources,
+      });
+      const info = WEATHER_INFO[weather];
+      const weatherLine =
+        water > 0
+          ? `Soft rain overnight — +${water} ${RESOURCE_MAP.water.emoji} collected.`
+          : `${info.label} skies greet the rooftop. Stamina restored.`;
+      commitStats(
+        { ...s.stats, maxDaysSurvived: Math.max(s.stats.maxDaysSurvived, daysSurvivedOn(outcome.day)) },
+        [
+          {
+            id: ++noticeSeq,
+            icon: '☀️',
+            title: `Day ${outcome.day} · Morning`,
+            body: weatherLine,
+            tone: 'morning',
+          },
+        ],
+      );
+      get()._save();
+    },
+
+    setTimePaused(paused: boolean) {
+      set({ timePaused: paused });
     },
 
     lightLantern() {

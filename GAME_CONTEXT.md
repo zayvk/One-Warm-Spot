@@ -74,7 +74,7 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
    2. **Riding Up** — inside the old lift (green-painted walls, wood wainscot, brass rails) with the doors closed; a warm amber brass indicator ticks **1 → 2 → 3 → 4 → R** with tiny relay clicks over a low mechanical hum and a gentle 1–2px tremor.
    3. **Doors Open to Sunlight** — a vintage brass *"ding!"*, the doors slide apart onto the sunlit rooftop, the Terrace ambience swells, an *"Old Apartment Terrace"* caption appears, and the view steps through the doorway into the live shelter, where the traveler walks out of the rooftop stairwell door.
    Every cutscene is skippable at any moment (Skip button, click, `Space` / `Enter` / `Escape`) and respects Reduce Motion (no push-ins, tremor or sliding — calm fades instead).
-4. **Interactive Shelter** — The point-and-click painted scene (see below), with a minimal floating HUD: a **← Title** button with the shelter name (top-left), the centered **Found Materials Pouch**, and a tiny bottom-center **Build Bar** while in-scene upgrades remain. Progress auto-saves.
+4. **Interactive Shelter** — The point-and-click painted scene (see below), with a minimal floating HUD: a **← Title** button with the shelter name (top-left), the centered **Found Materials Pouch**, a bottom-left **Time-Dial & Test-Tube Vitality HUD** (`Day N`, 3-phase sky dial, Stamina & Strength meters), and a tiny bottom-center **Build Bar** while in-scene upgrades remain. Progress auto-saves.
 
 ---
 
@@ -84,8 +84,15 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
 - **Traveler:** Real painted **Female / Male** traveler sprites in an understated, faceless **3/4 view** style, with **5 poses** — `idle`, `walk`, `sit`, `sleep`, `search`. Each pose is scaled by anatomical height ratios (so sitting and sleeping read at believable proportions) with pose-adapted soft shadows and smooth crossfades between poses.
 - **Click-to-walk:** Click anywhere on the rooftop floor to walk there. Movement stays inside the walkable area, props block the way with **elliptical obstacle colliders**, and everything is **Y-depth sorted** so the traveler passes naturally in front of or behind props.
 - **Interactive props:**
-  - **Central Fire Pit** — walk over and light it (flickering flames, embers, warm glow and a looping campfire crackle), and the traveler **sits by the fire**. Click it again to **extinguish** it with a soft hiss.
-  - **Shabby Cloth Lean-to** — a patched cloth tent tucked behind-left of the fire pit. Click it and the traveler crawls in and **sleeps** tucked under the cloth roof while the scene dims to a cozy twilight. *(Currently a resting moment only — it does not yet advance the day.)*
+  - **Central Fire Pit** — walk over and light it (flickering flames, embers, warm glow and a looping campfire crackle), and the traveler **sits by the fire**. Click it again to **extinguish** it with a soft hiss. At Dusk and Night its radial glow warms up the rooftop.
+  - **Shabby Cloth Lean-to / Timber Shelter (Context-Aware Rest & Sleep)** — tucked behind-left of the fire pit:
+    - During **Day** or **Dusk**, hovering reads **"Rest by shelter"** — clicking sits beside the shelter with a tin mug, restores **+25 Stamina**, and smoothly shifts the sky to the next phase over 1.4s.
+    - During **Night**, hovering reads **"Sleep until morning"** — clicking tucks into the bedroll under the shelter in starry twilight, then transitions into **Day N+1 · Morning** (restoring `Stamina = 100`, gently easing `Strength -10`, and showing a morning toast).
+- **3-Phase Real-Time Day Cycle & Vitality (`Stamina` & `Strength`):**
+  - A full day lasts **12 real-time minutes** (`240s` per phase: **Day** Full Sun → **Dusk** Sunset → **Night** Half Moon), paused when outside the shelter or inside Settings. Night holds calmly without harsh pass-outs until the player chooses to sleep.
+  - **Stamina (`0–100`, restedness)** is gently spent by clearing weeds (`-6`), searching boxes (`-10`), and building upgrades (`-12`), and restored by resting or sleeping.
+  - **Strength (`0–100`, nourishment/resilience)** eases gently across phase shifts (`-8`) and overnight (`-10`), non-lethal and zero-stress.
+  - Displayed in the bottom-left **Time-Dial + Test-Tube Vitality HUD**, paired with **twinkling night stars**, **drifting warm fireflies**, and brighter fire pit / lantern glow pools at night.
   - **3 searchable box spots, each with distinct art** — broken boxes by the back-left parapet, a double crate stack in the front-left corner, and a single parcel with a leaning plank by the back-right parapet. Rummage once each (search pose + rummage foley) for Timber, Scrap and Cloth; the broken boxes show a cleared sprite and the others take on a dusty, rummaged look.
   - **6 cleanable weed patches** — 3 weed species (grassy tufts, leafy brush, dandelion clusters) at varied sizes and flips along the parapet and concrete cracks; clearing each (leaf particles + snip foley) yields Seeds and Cloth.
   - **Stairwell door** — hovering highlights the ajar door (*"Stairwell downstairs (coming soon)"*); clicking walks the traveler over and a gentle toast says the stairs lead down into the quiet building—more to explore soon.
@@ -161,7 +168,7 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 ## 🗺️ Design Roadmap (Next Up)
 
 - **🔥 Wood-Burning Fire Mechanic:** A lit campfire slowly consumes **Timber** over time, turning the extinguish toggle into a meaningful, cozy resource choice (keep warm and bright, or save wood for building).
-- **🚪 Beyond-the-Roof Gathering:** Once the rooftop boxes and weeds are cleared, the **lift/stairwell door** (already on the Terrace v2 stage as a "coming soon" hotspot) becomes the natural in-scene way to explore downstairs or outside for more materials (the in-scene successor to the paused Scavenge drawer, and a home for Stone & Water sources).
+- **🚪 Beyond-the-Roof Gathering & Mixed Rooftop Regeneration:** Mix slow, gentle rooftop regeneration (new sprouts/debris over days) with stepping out through the **stairwell door** into simple, cozy mini-puzzles inside the quiet apartment building to gather extra Timber, Scrap, Stone, and Water.
 - **📦 More Prop Variety:** A dedicated **lit fire-pit sprite**, plus "cleared" variants for the double crate and single parcel.
 - **🛠️ More In-Scene Visual Upgrades:** Build on the Terrace v2 trio (timber shelter, herb planter, rain barrel) with more **anchor spots** — repairing the parapet walls, string lights, and second-tier versions of existing props.
 - **👕 Traveler Clothing Progression:** Start in ragged earthy traveler gear and unlock cleaner, warmer, cozier outfits as the shelter improves.

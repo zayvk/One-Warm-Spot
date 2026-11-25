@@ -120,6 +120,7 @@ export function unlock(): void {
   if (c.state === 'suspended') void c.resume();
   unlocked = true;
   applyAmbience();
+  applyCampfire();
 }
 
 export function isUnlocked(): boolean {
@@ -143,6 +144,7 @@ export function toggleMute(): void {
   }
   if (masterGain && ctx) rampGain(masterGain.gain, muted ? 0 : 1, 0.2);
   applyAmbience();
+  applyCampfire();
 }
 
 export function getMusicVolume(): number {
@@ -173,6 +175,7 @@ export function setSfxVolume(v: number): void {
   }
   if (sfxChannelGain && ctx) rampGain(sfxChannelGain.gain, sfxVolume, 0.05);
   applyAmbience();
+  applyCampfire();
 }
 
 /** Convenience helper if a caller adjusts both channels uniformly */
@@ -1050,3 +1053,208 @@ export function startSiteAmbience(siteId: SiteId | null, dimmed = false, level =
   desiredAmbience = siteId ? { siteId, dimmed, level } : null;
   applyAmbience();
 }
+
+/* ═══════════════════════════════════════════
+   In-Shelter Interactive Foley (0 KB)
+   ═══════════════════════════════════════════ */
+
+/** Crisp match strike + soft ignition whoosh when lighting the fire pit */
+export function playFireLight(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+
+  // 1. Match strike: quick high-pass filtered noise snap
+  puff(c, target, t, 0.22, 0.08, 1800, 6200, 3200);
+  // 2. Soft ignition whoosh: warm rising then settling lowpass swell
+  const whooshSrc = c.createBufferSource();
+  whooshSrc.buffer = getNoise('pink');
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(180, t + 0.06);
+  lp.frequency.exponentialRampToValueAtTime(950, t + 0.22);
+  lp.frequency.exponentialRampToValueAtTime(260, t + 0.65);
+  const wg = c.createGain();
+  wg.gain.setValueAtTime(0.0001, t + 0.06);
+  wg.gain.linearRampToValueAtTime(0.24, t + 0.2);
+  wg.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+  whooshSrc.connect(lp).connect(wg).connect(target);
+  whooshSrc.start(t + 0.06, rand(0, 2));
+  whooshSrc.stop(t + 0.75);
+}
+
+interface CampfireInstance {
+  bus: GainNode;
+  nodes: AudioNode[];
+  timers: Set<Timer>;
+  alive: boolean;
+}
+
+let campfireDesired = false;
+let currentCampfire: CampfireInstance | null = null;
+
+function stopCampfireInstance(inst: CampfireInstance): void {
+  inst.alive = false;
+  for (const id of inst.timers) clearTimeout(id);
+  inst.timers.clear();
+  if (ctx) rampGain(inst.bus.gain, 0, 0.35);
+  setTimeout(() => {
+    for (const n of inst.nodes) {
+      try {
+        if (n instanceof AudioScheduledSourceNode) n.stop();
+        n.disconnect();
+      } catch {
+        /* already stopped */
+      }
+    }
+    try {
+      inst.bus.disconnect();
+    } catch {
+      /* already disconnected */
+    }
+  }, 450);
+}
+
+function applyCampfire(): void {
+  const shouldPlay = campfireDesired && !muted && unlocked && sfxVolume > 0;
+  if (!shouldPlay) {
+    if (currentCampfire) {
+      stopCampfireInstance(currentCampfire);
+      currentCampfire = null;
+    }
+    return;
+  }
+  if (currentCampfire) return;
+
+  const c = getCtx();
+  const target = getSfxTarget();
+  const bus = c.createGain();
+  bus.gain.value = 0;
+  bus.connect(target);
+
+  const inst: CampfireInstance = { bus, nodes: [], timers: new Set(), alive: true };
+
+  // Soft warm hearth rumble
+  const bed = c.createBufferSource();
+  bed.buffer = getNoise('brown');
+  bed.loop = true;
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 260;
+  const bedGain = c.createGain();
+  bedGain.gain.value = 0.055;
+  bed.connect(lp).connect(bedGain).connect(bus);
+  bed.start(c.currentTime, rand(0, 2));
+  inst.nodes.push(bed, lp, bedGain);
+
+  // Subtle irregular wood crackles and tiny pops
+  const scheduleCrackle = (delay: number) => {
+    const id = setTimeout(() => {
+      inst.timers.delete(id);
+      if (!inst.alive || !ctx) return;
+      const t = ctx.currentTime + 0.01;
+      const bpFreq = rand(1400, 4400);
+      const dur = rand(0.014, 0.042);
+      const src = ctx.createBufferSource();
+      src.buffer = getNoise('pink');
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = bpFreq;
+      bp.Q.value = rand(2.5, 6);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(rand(0.04, 0.13), t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(bp).connect(g).connect(bus);
+      src.start(t, rand(0, 3));
+      src.stop(t + dur + 0.02);
+
+      // Occasional warm double-pop
+      if (Math.random() < 0.28) {
+        scheduleCrackle(rand(45, 130));
+      } else {
+        scheduleCrackle(rand(180, 720));
+      }
+    }, delay);
+    inst.timers.add(id);
+  };
+  scheduleCrackle(rand(120, 350));
+
+  rampGain(bus.gain, 1, 0.45);
+  currentCampfire = inst;
+}
+
+/** Start or stop the looping procedural campfire crackle */
+export function setCampfireAudio(active: boolean): void {
+  campfireDesired = active;
+  applyCampfire();
+}
+
+/** Soft cardboard & timber rummaging taps when searching crates */
+export function playRummage(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const base = now();
+  const target = getSfxTarget();
+
+  const offsets = [0, 0.16, 0.34, 0.56];
+  offsets.forEach((off, i) => {
+    const t = base + off;
+    // Soft cardboard brush
+    puff(c, target, t, 0.12 - i * 0.012, 0.09, 420, 2200 - i * 220, 900);
+    // Woody crate tap
+    const osc = c.createOscillator();
+    osc.type = 'triangle';
+    const startFreq = (170 + (i % 2) * 35) * pitchVar();
+    osc.frequency.setValueAtTime(startFreq, t);
+    osc.frequency.exponentialRampToValueAtTime(75, t + 0.06);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.09, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    osc.connect(g).connect(target);
+    osc.start(t);
+    osc.stop(t + 0.08);
+  });
+}
+
+/** Crisp foliage snip + soft leaf rustle when clearing overgrown weeds */
+export function playWeedCut(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+
+  // Snappy shears/clip snip
+  puff(c, target, t, 0.18, 0.055, 2200, 7200, 2800);
+  // Crisp metallic blade click
+  const osc = c.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(1600 * pitchVar(), t);
+  osc.frequency.exponentialRampToValueAtTime(520, t + 0.04);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.08, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+  osc.connect(g).connect(target);
+  osc.start(t);
+  osc.stop(t + 0.05);
+
+  // Soft falling leaf rustle
+  puff(c, target, t + 0.08, 0.11, 0.24, 900, 4200, 1400);
+  puff(c, target, t + 0.20, 0.07, 0.22, 800, 3200, 1100);
+}
+
+/** Soft fabric rustle + gentle evening hush when resting under the shed */
+export function playSleep(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+
+  // Fabric bedroll rustle
+  puff(c, target, t, 0.13, 0.36, 260, 1600, 620);
+  // Gentle evening sigh/chime
+  tone(c, target, t + 0.18, { freq: 293.66, vol: 0.05, decay: 1.1, attack: 0.08 });
+  tone(c, target, t + 0.34, { freq: 220.0, vol: 0.045, decay: 1.3, attack: 0.1 });
+}
+

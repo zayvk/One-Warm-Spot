@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import BackgroundStage from './BackgroundStage.tsx';
-import { BG_SHELTERS } from '../game/data/media.ts';
+import { BG_SHELTERS, travelerSpriteSrc } from '../game/data/media.ts';
 import { SITES } from '../game/data/sites.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { playFootstep, startSiteAmbience, fadeOutMenuMusic } from '../game/audio/soundEngine.ts';
@@ -16,47 +16,22 @@ const DURATION = 3500; // ms
 const REDUCED_DURATION = 2200; // calm hold for reduce-motion
 const FOOTSTEP_TIMES = [400, 900, 1400, 1950, 2500]; // ms offsets
 
-/** Inline SVG traveler silhouette */
-function TravelerSVG({ gender }: { gender: TravelerGender }) {
-  const color = '#3d3832';
-  if (gender === 'male') {
-    return (
-      <svg
-        viewBox="0 0 60 120"
-        width="60"
-        height="120"
-        fill={color}
-        style={{ filter: 'drop-shadow(0 2px 6px rgba(61,56,50,0.4))' }}
-        aria-hidden="true"
-      >
-        <circle cx="30" cy="16" r="10" />
-        <rect x="22" y="26" width="16" height="30" rx="4" />
-        <rect x="38" y="30" width="10" height="20" rx="3" opacity="0.7" />
-        <rect x="23" y="56" width="6" height="30" rx="3" />
-        <rect x="31" y="56" width="6" height="30" rx="3" />
-        <rect x="16" y="28" width="6" height="22" rx="3" />
-        <rect x="38" y="28" width="6" height="18" rx="3" />
-      </svg>
-    );
-  }
+/** Traveler walking sprite */
+function TravelerSprite({ gender }: { gender: TravelerGender }) {
   return (
-    <svg
-      viewBox="0 0 60 120"
-      width="60"
-      height="120"
-      fill={color}
-      style={{ filter: 'drop-shadow(0 2px 6px rgba(61,56,50,0.4))' }}
+    <img
+      src={travelerSpriteSrc(gender, 'walk')}
+      alt=""
       aria-hidden="true"
-    >
-      <circle cx="30" cy="14" r="10" />
-      <ellipse cx="30" cy="10" rx="11" ry="6" opacity="0.5" />
-      <path d="M24 24 L22 56 L38 56 L36 24 Z" />
-      <rect x="38" y="28" width="9" height="18" rx="3" opacity="0.7" />
-      <rect x="23" y="56" width="6" height="28" rx="3" />
-      <rect x="31" y="56" width="6" height="28" rx="3" />
-      <rect x="16" y="26" width="5" height="20" rx="2.5" />
-      <rect x="38" y="26" width="5" height="16" rx="2.5" />
-    </svg>
+      draggable={false}
+      style={{
+        height: '124px',
+        width: 'auto',
+        objectFit: 'contain',
+        display: 'block',
+        filter: 'drop-shadow(0 4px 10px rgba(61, 56, 50, 0.45))',
+      }}
+    />
   );
 }
 
@@ -173,7 +148,7 @@ export default function ArrivalCutscene({ siteId, gender, onComplete }: ArrivalC
             animation: reduceMotion ? 'none' : 'walkBob 0.5s ease-in-out infinite',
           }}
         >
-          <TravelerSVG gender={gender} />
+          <TravelerSprite gender={gender} />
         </div>
       </div>
 

@@ -49,6 +49,16 @@ import { morningWaterBonus, rollWeather } from '../engine/weather.ts';
 
 const REDUCE_MOTION_KEY = 'ows_reduce_motion';
 
+function clearTerracePropState(): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('ows_terrace_state');
+    }
+  } catch {
+    /* ignore storage restrictions */
+  }
+}
+
 function getInitialReduceMotion(): boolean {
   try {
     const stored = localStorage.getItem(REDUCE_MOTION_KEY);
@@ -253,6 +263,7 @@ export const useGameStore = create<GameState>()((set, get) => {
 
     chooseSite(id: SiteId) {
       // Claiming always begins a fresh run with the site's mode rules
+      clearTerracePropState();
       const s = get();
       const mode = SITES.find((site) => site.id === id)?.mode ?? s.selectedMode;
       set({
@@ -391,6 +402,7 @@ export const useGameStore = create<GameState>()((set, get) => {
 
     resetGame(opts) {
       clearSave();
+      clearTerracePropState();
       if (opts?.clearMilestones) {
         clearProgress();
         const stats = emptyStats();

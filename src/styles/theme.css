@@ -773,3 +773,14 @@ button:disabled {
   background: var(--sage-400);
   box-shadow: 0 0 0 3px rgba(138, 173, 122, 0.25);
 }
+
+@keyframes owsPouchPulse {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.16); color: var(--sage-600); }
+  100% { transform: scale(1); }
+}
+
+.ows-pouch-item--pulse {
+  display: inline-flex;
+  animation: owsPouchPulse 650ms ease;
+}

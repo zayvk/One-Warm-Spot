@@ -1,21 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ShelterCanvas from '../game/renderer/ShelterCanvas.tsx';
-import TopBar from './TopBar.tsx';
-import UpgradePanel from './UpgradePanel.tsx';
-import ScavengePanel from './ScavengePanel.tsx';
-import SurvivalKitPanel from './SurvivalKitPanel.tsx';
-import ConfirmResetModal from './ConfirmResetModal.tsx';
 import { useGameStore } from '../game/store/useGameStore.ts';
-import { UPGRADES } from '../game/data/upgrades.ts';
 import { SITES } from '../game/data/sites.ts';
-import {
-  getUpgradeStatus,
-  nextTimeOfDay,
-  REST_ENERGY_GAIN,
-  TIME_OF_DAY_INFO,
-} from '../game/engine/progression.ts';
+import { RESOURCES } from '../game/data/resources.ts';
 import { playClick, playHover, startSiteAmbience } from '../game/audio/soundEngine.ts';
-import { getScavengeBlock } from '../game/engine/scavenge.ts';
+import type { ResourceId } from '../game/types/game.ts';
 
 export interface ShelterScreenProps {
   onBackToTitle: () => void;
@@ -25,24 +14,14 @@ export interface ShelterScreenProps {
 /** Soft loudness for the in-shelter ambience bed */
 const SHELTER_AMBIENCE_LEVEL = 0.55;
 
-export default function ShelterScreen({ onBackToTitle, onResetConfirmed }: ShelterScreenProps) {
-  const chosenSite = useGameStore((s) => s.chosenSite);
-  const day = useGameStore((s) => s.day);
-  const timeOfDay = useGameStore((s) => s.timeOfDay);
-  const energy = useGameStore((s) => s.energy);
-  const resources = useGameStore((s) => s.resources);
-  const built = useGameStore((s) => s.unlockedUpgrades);
-  const lanternLit = useGameStore((s) => s.lanternLit);
-  const weather = useGameStore((s) => s.weather);
-  const selectedMode = useGameStore((s) => s.selectedMode);
-  const advanceTime = useGameStore((s) => s.advanceTime);
-  const lightLantern = useGameStore((s) => s.lightLantern);
-  const getSaveSnapshot = useGameStore((s) => s.getSaveSnapshot);
+const POUCH_IDS: ResourceId[] = ['timber', 'scrap', 'cloth', 'seeds'];
 
-  const [kitOpen, setKitOpen] = useState(false);
-  /* Upgrades and Scavenge share the right-hand drawer slot */
-  const [rightPanel, setRightPanel] = useState<'upgrades' | 'scavenge' | null>(null);
-  const [confirmReset, setConfirmReset] = useState(false);
+export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
+  const chosenSite = useGameStore((s) => s.chosenSite);
+  const resources = useGameStore((s) => s.resources);
+
+  const prevResourcesRef = useRef(resources);
+  const [pulsing, setPulsing] = useState<Partial<Record<ResourceId, boolean>>>({});
 
   /* Soft shelter soundscape while on this screen */
   useEffect(() => {
@@ -50,150 +29,122 @@ export default function ShelterScreen({ onBackToTitle, onResetConfirmed }: Shelt
     return () => startSiteAmbience(null);
   }, [chosenSite]);
 
-  const closeKit = useCallback(() => setKitOpen(false), []);
-  const closeRightPanel = useCallback(() => setRightPanel(null), []);
-  const toggleRightPanel = (panel: 'upgrades' | 'scavenge') => {
-    playClick();
-    setRightPanel((open) => (open === panel ? null : panel));
-  };
+  /* Pulse newly found pouch materials */
+  useEffect(() => {
+    const prev = prevResourcesRef.current;
+    const newlyIncreased: ResourceId[] = [];
+    for (const id of POUCH_IDS) {
+      if (resources[id] > prev[id]) {
+        newlyIncreased.push(id);
+      }
+    }
+    prevResourcesRef.current = resources;
+    if (newlyIncreased.length === 0) return;
 
-  const scavengeBlock = getScavengeBlock(timeOfDay, weather, built, energy, selectedMode);
+    setPulsing((curr) => {
+      const next = { ...curr };
+      for (const id of newlyIncreased) next[id] = true;
+      return next;
+    });
 
-  const availableCount = UPGRADES.filter(
-    (u) => getUpgradeStatus(u, built, resources, energy) === 'available',
-  ).length;
-  const next = nextTimeOfDay(timeOfDay);
-  const showLantern = !lanternLit && (timeOfDay === 'dusk' || timeOfDay === 'night');
+    const timer = setTimeout(() => {
+      setPulsing((curr) => {
+        const next = { ...curr };
+        for (const id of newlyIncreased) next[id] = false;
+        return next;
+      });
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [resources]);
+
   const siteName = SITES.find((s) => s.id === chosenSite)?.name ?? 'your shelter';
+  const pouchResources = RESOURCES.filter((r) => POUCH_IDS.includes(r.id));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <TopBar
-        onBackToTitle={() => {
-          playClick();
-          onBackToTitle();
+      {/* Minimal floating top bar */}
+      <header
+        style={{
+          position: 'absolute',
+          top: 'var(--space-sm)',
+          left: 'var(--space-sm)',
+          right: '108px',
+          zIndex: 30,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-sm)',
+          flexWrap: 'wrap',
+          pointerEvents: 'none',
         }}
-        onRequestReset={() => {
-          playClick();
-          setConfirmReset(true);
-        }}
-      />
-
-      <main style={{ position: 'relative', flex: 1, minHeight: 0, background: 'var(--sky-100)' }}>
-        <ShelterCanvas />
-
-        {kitOpen && <SurvivalKitPanel onClose={closeKit} />}
-        {rightPanel === 'upgrades' && <UpgradePanel onClose={closeRightPanel} />}
-        {rightPanel === 'scavenge' && <ScavengePanel onClose={closeRightPanel} />}
-
-        {/* Action bar */}
+      >
+        {/* Back + Title */}
         <div
           style={{
-            position: 'absolute',
-            left: '50%',
-            bottom: 'var(--space-md)',
-            transform: 'translateX(-50%)',
-            zIndex: 25,
-            width: 'max-content',
-            maxWidth: 'calc(100% - 32px)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-sm)',
+            pointerEvents: 'auto',
           }}
         >
-          <div className="ows-hud-bar">
-            <button
-              type="button"
-              className="ows-btn-surface ows-hud-btn"
-              aria-pressed={kitOpen}
-              onClick={() => {
-                playClick();
-                setKitOpen((o) => !o);
-              }}
-              onMouseEnter={playHover}
-            >
-              🎒 Survival Kit
-            </button>
-
-            <button
-              type="button"
-              className="ows-btn-surface ows-hud-btn"
-              aria-pressed={rightPanel === 'scavenge'}
-              onClick={() => toggleRightPanel('scavenge')}
-              onMouseEnter={playHover}
-              title={
-                scavengeBlock === 'dark'
-                  ? 'The valley is dim — scavenge again in the morning'
-                  : scavengeBlock === 'storm'
-                    ? 'A dust squall closes the valley this morning'
-                    : 'Gather materials from nearby valley spots'
-              }
-            >
-              🧭 Scavenge
-              {!scavengeBlock && <span className="ows-ready-dot" aria-label="Ready to go" />}
-            </button>
-
-            <button
-              type="button"
-              className="ows-btn-surface ows-hud-btn"
-              aria-pressed={rightPanel === 'upgrades'}
-              onClick={() => toggleRightPanel('upgrades')}
-              onMouseEnter={playHover}
-            >
-              🔨 Upgrades
-              {availableCount > 0 && (
-                <span className="ows-count-badge" aria-label={`${availableCount} available`}>
-                  {availableCount}
-                </span>
-              )}
-            </button>
-
-            {showLantern && (
-              <button
-                type="button"
-                className="ows-btn-terra ows-hud-btn"
-                onClick={() => {
-                  playClick();
-                  lightLantern();
-                }}
-                onMouseEnter={playHover}
-                title="Use the pocket stove to light the old lantern"
-              >
-                🏮 Light the lantern
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="ows-btn-primary ows-hud-btn"
-              onClick={() => {
-                playClick();
-                advanceTime();
-              }}
-              onMouseEnter={playHover}
-              title={
-                next
-                  ? `Rest until ${TIME_OF_DAY_INFO[next].label.toLowerCase()} (+${REST_ENERGY_GAIN} energy)`
-                  : 'Sleep through the night — energy refills'
-              }
-            >
-              {next
-                ? `⏳ Rest until ${TIME_OF_DAY_INFO[next].label}`
-                : `🌙 Sleep to Day ${day + 1}`}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              playClick();
+              onBackToTitle();
+            }}
+            onMouseEnter={playHover}
+            className="ows-pill"
+            title="Return to the title screen (progress is saved)"
+          >
+            ← Title
+          </button>
+          <span
+            style={{
+              fontFamily: 'var(--font-game-title)',
+              fontSize: 'clamp(0.95rem, 2vw, 1.25rem)',
+              color: '#fff',
+              textShadow: '0 2px 10px rgba(48, 38, 30, 0.65)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {siteName}
+          </span>
         </div>
-      </main>
 
-      {confirmReset && (
-        <ConfirmResetModal
-          siteName={siteName}
-          day={day}
-          saveState={getSaveSnapshot()}
-          onCancel={() => setConfirmReset(false)}
-          onConfirm={(clearMilestones) => {
-            setConfirmReset(false);
-            onResetConfirmed(clearMilestones);
-          }}
-        />
-      )}
+        {/* Compact Found Materials Pouch */}
+        <div
+          className="ows-hud-bar"
+          style={{ pointerEvents: 'auto', padding: '6px 14px', gap: '12px' }}
+          title="Found Materials Pouch"
+          aria-label="Found Materials Pouch"
+        >
+          {pouchResources.map((r) => (
+            <span
+              key={r.id}
+              title={r.name}
+              className={pulsing[r.id] ? 'ows-pouch-item--pulse' : undefined}
+              style={{
+                fontSize: '0.88rem',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                fontVariantNumeric: 'tabular-nums',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <span>{r.emoji}</span>
+              <span>{resources[r.id]}</span>
+            </span>
+          ))}
+        </div>
+      </header>
+
+      {/* Interactive PixiJS canvas (full viewport) */}
+      <main style={{ position: 'relative', flex: 1, minHeight: 0, background: 'var(--sky-100)' }}>
+        <ShelterCanvas />
+      </main>
     </div>
   );
 }

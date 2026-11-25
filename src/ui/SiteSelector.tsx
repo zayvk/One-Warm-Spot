@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { SITES } from '../game/data/sites.ts';
-import { BG_VALLEY, BG_SHELTERS } from '../game/data/media.ts';
+import { BG_VALLEY, BG_SHELTERS, travelerSpriteSrc } from '../game/data/media.ts';
 import type { MediaEntry } from '../game/data/media.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import type { SiteId, GameMode, TravelerGender, PlayerStats } from '../game/types/game.ts';
@@ -20,28 +20,23 @@ export interface SiteSelectorProps {
   onChosen: () => void;
 }
 
-/* ── Traveler SVG silhouettes ── */
+/* ── Traveler sprite portrait ── */
 
-function TravelerIcon({ gender, active }: { gender: TravelerGender; active: boolean }) {
-  const fill = active ? 'var(--charcoal)' : 'rgba(255, 252, 246, 0.8)';
-  if (gender === 'male') {
-    return (
-      <svg viewBox="0 0 32 48" width="15" height="22" fill={fill} aria-hidden="true">
-        <circle cx="16" cy="8" r="6" />
-        <rect x="11" y="14" width="10" height="16" rx="3" />
-        <rect x="11" y="30" width="4" height="14" rx="2" />
-        <rect x="17" y="30" width="4" height="14" rx="2" />
-      </svg>
-    );
-  }
+function TravelerPortrait({ gender }: { gender: TravelerGender }) {
   return (
-    <svg viewBox="0 0 32 48" width="15" height="22" fill={fill} aria-hidden="true">
-      <circle cx="16" cy="7" r="6" />
-      <ellipse cx="16" cy="5" rx="7" ry="3.5" opacity="0.4" />
-      <path d="M12 14 L10 30 L22 30 L20 14 Z" />
-      <rect x="11" y="30" width="4" height="13" rx="2" />
-      <rect x="17" y="30" width="4" height="13" rx="2" />
-    </svg>
+    <img
+      src={travelerSpriteSrc(gender, 'idle')}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      style={{
+        width: '20px',
+        height: '26px',
+        objectFit: 'contain',
+        objectPosition: 'center bottom',
+        display: 'block',
+      }}
+    />
   );
 }
 
@@ -250,7 +245,7 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
                     onMouseEnter={playHover}
                     className={`ows-pill ${active ? 'ows-pill--active' : ''}`}
                   >
-                    <TravelerIcon gender={g} active={active} />
+                    <TravelerPortrait gender={g} />
                     <span>{g === 'female' ? 'Female' : 'Male'}</span>
                   </button>
                 );

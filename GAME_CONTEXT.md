@@ -56,9 +56,9 @@ An asteroid shook the Earth, but the dust has settled. Skies are clearing, sunli
 ## Player Identity & Onboarding Flow
 
 1. **Title Screen** — Game title, Start / Continue / About buttons, shared menu music.
-2. **Shelter Selector** — Traveler picker (Female / Male silhouette), Cozy / Challenge mode tabs, 9 shelter cards with hover background crossfade and procedural ambience.
-3. **Arrival Cutscene** (~3.5s) — Ken Burns zoom on the chosen shelter background, animated traveler silhouette walking toward the site, Day 1 caption fade-in, skippable.
-4. **Day 1** — Survival kit issued, shelter restoration begins in the playable shelter view (painted scene, HUD, Survival Kit drawer, Upgrade Panel).
+2. **Shelter Selector** — Traveler picker (Female / Male sprite portraits), Cozy / Challenge mode tabs, 9 shelter cards with hover background crossfade and procedural ambience.
+3. **Arrival Cutscene** (~3.5s) — Ken Burns zoom on the chosen shelter background, animated traveler sprite walking toward the site, Day 1 caption fade-in, skippable.
+4. **Day 1 Interactive Shelter** — Point-and-click illustrated scene (starting with **Old Apartment Terrace** as the reusable vertical slice): click anywhere on the floor to walk around, interact directly with props (light the fire pit for campfire glow and crackle, rummage broken boxes for Scrap & Timber, clear overgrown weeds for Seeds & Cloth, or rest under the shed), with a minimal floating HUD displaying the shelter name and Found Materials Pouch.
 
 ---
 
@@ -112,8 +112,8 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 
 ## Art & Audio Direction
 
-- **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP/SVG layers swapped on a base illustration. Target <5 MB initial browser payload.
-- **Audio:** Shared menu music bed (`public/source/audio/music-menu.mp3`) with procedural warm-pad fallback. Procedurally synthesized UI foley (hover, click, claim, locked, footstep) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
+- **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP backgrounds, stage backdrops, character pose sprites, and interactive prop sprites organized under `public/source/`. Target <5 MB initial browser payload.
+- **Audio:** Shared menu music bed (`public/source/audio/music-menu.mp3`) with procedural warm-pad fallback. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle, box rummage, weed snip, bedroll sleep) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
 
 ---
 

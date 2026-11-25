@@ -31,19 +31,20 @@ One-Warm-Spot/
 ├── tsconfig.json / .app / .node # TypeScript project references, strict: true
 ├── vite.config.ts
 ├── public/
-│   ├── source/                  # Background images (WebP)
-│   │   ├── bg-title.webp
-│   │   ├── bg-valley.webp
-│   │   ├── bg-terrace.webp ... bg-island.webp
+│   ├── source/
+│   │   ├── backgrounds/         # Background images (bg-title, bg-valley, bg-terrace...bg-island.webp)
+│   │   ├── sprites/             # Character pose sprites ({female,male}-{idle,walk,search,sit,sleep}.webp)
+│   │   ├── scenes/              # Interactive stage backdrops (terrace-stage.webp)
+│   │   ├── props/               # Interactive prop sprites (firepit, boxes-intact/cleared, weeds-1/2)
 │   │   └── audio/
 │   │       └── music-menu.mp3   # (optional — procedural fallback if absent)
 │   └── assets/sites/            # Per-site placeholder art folders
 │       ├── terrace/ pipe/ tree/
 └── src/
     ├── main.tsx                 # React root mount
-    ├──     App.tsx                  # Screen router: title → site-select → arrival → shelter (+ global toasts)
+    ├── App.tsx                  # Screen router: title → site-select → arrival → shelter (+ global toasts)
     ├── styles/
-    │   └── theme.css            # CSS custom properties, cozy palette, frosted-card util
+    │   └── theme.css            # CSS custom properties, cozy palette, frosted-card util, pouch pulse
     ├── game/                    # ── Pure game logic (no React imports) ──
     │   ├── types/game.ts        # SiteId, TimeOfDay, Weather, PlayerStats, Upgrade, ScavengeZone, Relic, SaveState…
     │   ├── data/
@@ -54,7 +55,10 @@ One-Warm-Spot/
     │   │   ├── relics.ts        # 8 Valley Relics (Field Journal keepsakes)
     │   │   ├── survivalKit.ts   # 5-item Day 1 kit (with "how it helps" copy)
     │   │   ├── upgrades.ts      # The 10 macro upgrades (cost, energy, cozy, tier prerequisite) + categories
-    │   │   └── media.ts         # Background image paths + fallback gradients
+    │   │   ├── media.ts         # Background, sprite, stage & prop paths + fallback gradients
+    │   │   └── scenes/
+    │   │       ├── types.ts     # ShelterSceneConfig & HotspotConfig schema (normalized 0–1 coords)
+    │   │       └── terrace.ts   # Old Apartment Terrace interactive scene config
     │   ├── engine/
     │   │   ├── progression.ts   # Pure rules: time-of-day, Cozy Index, upgrade status/build, site unlocks
     │   │   ├── scavenge.ts      # Pure runScavenge(), trip availability, capped resource adds
@@ -62,21 +66,21 @@ One-Warm-Spot/
     │   │   ├── saveSystem.ts    # v4 save: strict validation, migration, persistent progress, JSON import/export
     │   │   └── __tests__/       # Vitest suites (save, scavenging & modes, progression & unlocks)
     │   ├── audio/
-    │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9 musical site soundscapes
+    │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9 site soundscapes, shelter foley
     │   ├── store/
     │   │   └── useGameStore.ts  # Zustand store (day/time/energy/weather, upgrades, scavenging, relics, stats, notices)
     │   └── renderer/
-    │       ├── ShelterCanvas.tsx # React bridge: Pixi Application + ResizeObserver + teardown
-    │       └── shelterScene.ts   # Pixi scene: painted bg (cover), time-of-day lighting, lantern, upgrade markers
+    │       ├── ShelterCanvas.tsx # React bridge: Pixi Application + ResizeObserver + reward bridge + teardown
+    │       └── shelterScene.ts   # Data-driven point-and-click Pixi scene: backdrop, pose crossfades, hotspots, particles
     └── ui/
         ├── TitleScreen.tsx           # Upper-sky title block + radial scrim + Continue/New Game/About
-        ├── SiteSelector.tsx          # Header bar, 3/2/1 responsive shelter cards, live unlock progress
-        ├── ArrivalCutscene.tsx       # Lightweight in-engine cutscene (Ken Burns + walking, reduce-motion aware)
-        ├── ShelterScreen.tsx         # Playable shelter view: canvas stage, HUD action bar, drawers, ambience
-        ├── TopBar.tsx                # HUD: Day · time of day, weather chip, Energy, Cozy Index, resources, Title, Reset
-        ├── UpgradePanel.tsx          # Right slide-out: all 10 upgrades grouped by category, Build / Repair
-        ├── ScavengePanel.tsx         # Right slide-out: 4 valley spots, Go Scavenging, Expedition Result card
-        ├── SurvivalKitPanel.tsx      # Left drawer: the 5 kit items + Valley Relics under the Field Journal
+        ├── SiteSelector.tsx          # Header bar, traveler sprite portraits, 3/2/1 responsive shelter cards
+        ├── ArrivalCutscene.tsx       # Lightweight in-engine cutscene (Ken Burns + walking sprite, reduce-motion aware)
+        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + minimal floating pouch HUD
+        ├── TopBar.tsx                # Legacy full HUD bar (retained for reference)
+        ├── UpgradePanel.tsx          # Legacy drawer (retained for upcoming macro-build integration)
+        ├── ScavengePanel.tsx         # Legacy drawer (retained for reference)
+        ├── SurvivalKitPanel.tsx      # Legacy drawer (retained for reference)
         ├── NoticeToasts.tsx          # Gentle toasts (Morning of Day N, new shelter unlocked)
         ├── ConfirmResetModal.tsx     # Reset Save confirmation (optional milestone wipe) → Title
         ├── SettingsPopover.tsx       # Top-right popover: Music/SFX sliders, Reduce Motion, Save export/import
@@ -100,9 +104,11 @@ One-Warm-Spot/
 
 | Asset | Location | Format | Fallback |
 |-------|----------|--------|----------|
-| Shelter backgrounds | `public/source/bg-*.webp` | WebP, 1920×1080 recommended | Cozy CSS gradient per entry in `media.ts` |
+| Shelter backgrounds | `public/source/backgrounds/bg-*.webp` | WebP, 1920×1080 recommended | Cozy CSS gradient per entry in `media.ts` |
+| Traveler sprites | `public/source/sprites/{female,male}-{idle,walk,search,sit,sleep}.webp` | Transparent WebP | Graceful skip if absent |
+| Scene stages & props | `public/source/scenes/*.webp`, `public/source/props/*.webp` | WebP | Gradient/shape fallback |
 | Menu music | `public/source/audio/music-menu.mp3` | MP3 (looping) | Procedural warm-pad chord loop |
-| UI sounds | Procedural (Web Audio) | — | Always available, 0 KB |
+| UI & shelter foley | Procedural (Web Audio) | — | Always available, 0 KB (includes campfire, rummage, weed snip, sleep) |
 | Site ambience | Procedural (Web Audio) | — | 9 musical soundscapes (birdsong, chimes, drips, creaks, surf…), 350ms crossfade |
 
 ---
@@ -197,11 +203,16 @@ One-Warm-Spot/
 - [x] Strict save validation with friendly import errors + v2/v3 → v4 migration (weather, relics) and clean-up warnings
 - [x] Vitest suite: 68 tests across save migration/rejection, scavenging & mode rules, upgrade eligibility/deduction and milestone unlocks
 
-### 🚀 Next Active Milestone: M2 · Living Shelter
+### 🚀 Active Milestone: M2 · Living Interactive Shelter
 
-- [ ] **M2:** Tier 1–3 painted visual layer swaps in PixiJS (patch → reinforce → fortify)
+- [x] **M2 Vertical Slice:** Data-driven `ShelterSceneConfig` engine (`scenes/types.ts`, `scenes/terrace.ts`) for **Old Apartment Terrace**
+- [x] **M2:** Real character pose sprites (`idle`, `walk`, `search`, `sit`, `sleep`) with smooth crossfades + ground shadow replacing stick-figure SVGs across Selector, Arrival Cutscene, and Shelter Scene
+- [x] **M2:** Terrace interactive hotspots (Fire Pit with flickering PixiJS flames/embers/glow + campfire crackle, Broken Boxes search, 3 Weed Patches with leaf particles, Under-Shed sleep twilight/wake) + click-anywhere floor walking & localStorage prop state persistence
+- [x] **M2:** Simplified floating shelter HUD (`ShelterScreen.tsx`) with shelter title, Found Materials Pouch (with pulse animation), and Back to Title button
+- [x] **M2:** Synthesized shelter foley (`playFireLight`, `setCampfireAudio`, `playRummage`, `playWeedCut`, `playSleep`)
+- [ ] **M2:** Custom interactive scene configs & prop sprites for remaining shelters (`pipe`, `tree`, etc.)
+- [ ] **M2:** Tier 1–3 painted visual layer swaps & macro-build restoration integrated into interactive scenes
 - [ ] **M2:** Weather visuals & audio on the shelter scene (rain streaks, squall haze, rain-on-roof ambience)
-- [ ] **M2:** Daily yields from slot upgrades (garden seeds/food, workbench crafting)
 
 ### 🗺️ Backlog
 

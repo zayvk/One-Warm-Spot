@@ -784,3 +784,38 @@ button:disabled {
   display: inline-flex;
   animation: owsPouchPulse 650ms ease;
 }
+
+.ows-pouch-bar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 35;
+  padding: 10px 22px;
+  gap: 18px;
+  pointer-events: auto;
+}
+
+.ows-pouch-item {
+  font-size: 1.1rem;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--charcoal);
+}
+
+@media (max-width: 760px) {
+  .ows-pouch-bar {
+    top: 64px;
+    padding: 8px 16px;
+    gap: 14px;
+    max-width: calc(100vw - 24px);
+  }
+
+  .ows-pouch-item {
+    font-size: 1rem;
+  }
+}

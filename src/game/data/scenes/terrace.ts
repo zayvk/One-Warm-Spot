@@ -6,7 +6,7 @@ import { SCENE_PROPS } from '../media.ts';
 export const terraceScene: ShelterSceneConfig = {
   backdrop: '/source/scenes/terrace-stage.webp',
 
-  walkableArea: { xMin: 0.12, xMax: 0.86, yMin: 0.52, yMax: 0.88 },
+  walkableArea: { xMin: 0.12, xMax: 0.88, yMin: 0.52, yMax: 0.88 },
   entryPoint: { x: -0.05, y: 0.75 },
   idlePoint: { x: 0.40, y: 0.73 },
 
@@ -18,7 +18,7 @@ export const terraceScene: ShelterSceneConfig = {
       position: { x: 0.50, y: 0.69 },
       propSprite: SCENE_PROPS['prop-firepit'],
       propScale: 0.085,
-      label: 'Fire Pit — Light a campfire',
+      label: 'Light fire pit',
       collider: { rx: 0.042, ry: 0.026 },
       standOffset: { dx: -0.058, dy: 0.015 },
     },
@@ -134,15 +134,15 @@ export const terraceScene: ShelterSceneConfig = {
       standOffset: { dx: -0.044, dy: 0.012 },
     },
 
-    /* ── Under Shed Sleep Spot ── */
+    /* ── Under Shed Sleep Spot (tucked cleanly beneath shed overhang) ── */
     {
       id: 'sleep-shed',
       type: 'sleep',
-      position: { x: 0.83, y: 0.69 },
+      position: { x: 0.85, y: 0.72 },
       propSprite: '',
       propScale: 0,
       label: 'Under Shed — Rest here',
-      standOffset: { dx: 0.0, dy: 0.01 },
+      standOffset: { dx: 0.015, dy: 0.005 },
     },
   ],
 };

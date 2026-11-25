@@ -19,6 +19,7 @@ import { SITES } from '../data/sites.ts';
 import { terraceScene } from '../data/scenes/terrace.ts';
 import {
   playFireLight,
+  playFireDouse,
   setCampfireAudio,
   playRummage,
   playWeedCut,
@@ -94,6 +95,28 @@ const LIGHTING: Record<TimeOfDay, Lighting> = {
 const FALLBACK_WALK_AREA = { xMin: 0.12, xMax: 0.88, yMin: 0.60, yMax: 0.88 };
 const FALLBACK_ENTRY = { x: -0.05, y: 0.78 };
 const FALLBACK_IDLE = { x: 0.42, y: 0.76 };
+
+/* ═══════════════════════════════════════════
+   Anatomical Per-Pose Proportions & Shadows
+   ═══════════════════════════════════════════ */
+
+const BASE_STANDING_HEIGHT_RATIO = 0.22;
+
+const POSE_HEIGHT_SCALE: Record<TravelerPose, number> = {
+  idle: 1.00,
+  walk: 1.00,
+  search: 0.72,
+  sit: 0.68,
+  sleep: 0.36,
+};
+
+const POSE_SHADOW: Record<TravelerPose, { rx: number; ry: number; alpha: number }> = {
+  idle: { rx: 0.23, ry: 0.052, alpha: 0.24 },
+  walk: { rx: 0.23, ry: 0.052, alpha: 0.24 },
+  search: { rx: 0.28, ry: 0.058, alpha: 0.22 },
+  sit: { rx: 0.31, ry: 0.062, alpha: 0.20 },
+  sleep: { rx: 0.44, ry: 0.068, alpha: 0.18 },
+};
 
 /* ═══════════════════════════════════════════
    Helpers
@@ -459,6 +482,7 @@ export class ShelterScene {
 
   private loadTraveler(gender: TravelerGender, pose: TravelerPose): void {
     const token = ++this.poseToken;
+    const prevPose = this.currentPose;
     const src = travelerSpriteSrc(gender, pose);
     this.currentPose = pose;
 
@@ -474,7 +498,7 @@ export class ShelterScene {
 
         if (old && !this.state.reduceMotion) {
           this.poseScaleMultiplier = 0.96;
-          this.layoutTraveler();
+          this.layoutTraveler(0, prevPose);
           const fadeDuration = 210;
           const start = performance.now();
           const crossfade = () => {
@@ -486,12 +510,13 @@ export class ShelterScene {
             sprite.alpha = progress;
             old.alpha = 1 - progress;
             this.poseScaleMultiplier = 0.96 + 0.04 * progress;
-            this.layoutTraveler();
+            this.layoutTraveler(progress, prevPose);
             if (progress < 1) {
               requestAnimationFrame(crossfade);
             } else {
               this.poseScaleMultiplier = 1;
               if (!old.destroyed) old.destroy();
+              this.layoutTraveler(1, pose);
             }
           };
           requestAnimationFrame(crossfade);
@@ -499,23 +524,24 @@ export class ShelterScene {
           this.poseScaleMultiplier = 1;
           sprite.alpha = 1;
           if (old && !old.destroyed) old.destroy();
-          this.layoutTraveler();
+          this.layoutTraveler(1, pose);
         }
       })
       .catch(() => { /* keep current sprite */ });
   }
 
-  private layoutTraveler(): void {
+  private layoutTraveler(shadowBlend = 1, fromPose: TravelerPose = this.currentPose): void {
     const { width: W, height: H } = this;
     const px = W * this.targetX;
     const py = H * this.targetY;
     this.travelerNode.position.set(px, py);
     this.travelerNode.zIndex = Math.round(py);
 
-    const tH = H * 0.22;
+    const baseStandingHeight = H * BASE_STANDING_HEIGHT_RATIO;
+    const targetHeight = baseStandingHeight * POSE_HEIGHT_SCALE[this.currentPose];
     if (this.travelerSprite) {
       const tex = this.travelerSprite.texture;
-      const scale = (tH / (tex.height || 1)) * this.poseScaleMultiplier;
+      const scale = (targetHeight / (tex.height || 1)) * this.poseScaleMultiplier;
       this.travelerSprite.scale.set(
         scale * (this.travelerFlipped ? -1 : 1),
         scale,
@@ -523,10 +549,14 @@ export class ShelterScene {
       this.travelerSprite.position.set(0, 0);
     }
 
-    /* Ground contact shadow (local to travelerNode at feet) */
-    const shadowW = this.currentPose === 'sleep' ? tH * 0.36 : tH * 0.24;
+    /* Ground contact shadow smoothly sized & aligned per pose */
+    const fromSh = POSE_SHADOW[fromPose];
+    const toSh = POSE_SHADOW[this.currentPose];
+    const rx = baseStandingHeight * lerp(fromSh.rx, toSh.rx, shadowBlend);
+    const ry = baseStandingHeight * lerp(fromSh.ry, toSh.ry, shadowBlend);
+    const alpha = lerp(fromSh.alpha, toSh.alpha, shadowBlend);
     this.travelerShadow.clear();
-    this.travelerShadow.ellipse(0, 0, shadowW, tH * 0.055).fill({ color: 0x1e1812, alpha: 0.22 });
+    this.travelerShadow.ellipse(0, 0, rx, ry).fill({ color: 0x1e1812, alpha });
     this.travelerShadow.position.set(0, 0);
   }
 
@@ -615,9 +645,17 @@ export class ShelterScene {
     }
   }
 
+  private isHotspotInteractive(node: HotspotNode): boolean {
+    return !node.interacted || node.config.type === 'sleep' || node.config.type === 'firepit';
+  }
+
+  private setHotspotLabel(node: HotspotNode, text: string): void {
+    node.label.text = text;
+    if (node.hovered) this.layoutHotspotLabel(node);
+  }
+
   private onHotspotHover(node: HotspotNode, enter: boolean): void {
-    const canInteract = !node.interacted || node.config.type === 'sleep';
-    if (!canInteract) {
+    if (!this.isHotspotInteractive(node)) {
       node.hovered = false;
       node.label.visible = false;
       node.labelPill.visible = false;
@@ -665,7 +703,7 @@ export class ShelterScene {
 
   private onHotspotClick(node: HotspotNode): void {
     if (this.interactionLock || !this.entryDone) return;
-    if (node.interacted && node.config.type !== 'sleep') return;
+    if (!this.isHotspotInteractive(node)) return;
 
     if (this.sleepMode && node.config.type !== 'sleep') {
       this.wakeUp();
@@ -678,6 +716,18 @@ export class ShelterScene {
 
     this.onHotspotHover(node, false);
     this.interactionLock = true;
+
+    const dx = standPos.x - this.targetX;
+    const dy = standPos.y - this.targetY;
+    if (Math.hypot(dx, dy) < 0.015) {
+      if (Math.abs(cfg.position.x - this.targetX) > 0.005) {
+        this.travelerFlipped = cfg.position.x < this.targetX;
+        this.layoutTraveler();
+      }
+      this.executeInteraction(node);
+      return;
+    }
+
     this.walkTo(standPos.x, standPos.y, () => {
       /* Face toward the prop before interacting */
       if (Math.abs(cfg.position.x - this.targetX) > 0.005) {
@@ -718,18 +768,65 @@ export class ShelterScene {
   }
 
   private interactFirepit(node: HotspotNode): void {
-    playFireLight();
-    this.disableHotspotInteraction(node);
-    this.fireLit = true;
-    this.terrace.fireLit = true;
+    if (!this.fireLit) {
+      playFireLight();
+      this.fireLit = true;
+      this.terrace.fireLit = true;
+      saveTerraceState(this.terrace);
+      setCampfireAudio(true);
+
+      this.ensureFireEffects(node);
+      if (this.fireFlames) this.fireFlames.alpha = 1;
+      if (this.fireGlow) this.fireGlow.visible = true;
+      this.setHotspotLabel(node, 'Extinguish fire');
+      this.layout();
+
+      this.after(600, () => {
+        this.setPose('sit');
+        this.interactionLock = false;
+      });
+      return;
+    }
+
+    /* Extinguish lit fire pit */
+    playFireDouse();
+    setCampfireAudio(false);
+    this.fireLit = false;
+    this.terrace.fireLit = false;
     saveTerraceState(this.terrace);
-    setCampfireAudio(true);
+    this.setHotspotLabel(node, 'Light fire pit');
+    this.setPose('idle');
 
-    this.ensureFireEffects(node);
-    this.layout();
+    const flames = this.fireFlames;
+    const glow = this.fireGlow;
+    if (this.state.reduceMotion) {
+      if (flames) {
+        flames.alpha = 0;
+        flames.clear();
+      }
+      if (glow) {
+        glow.alpha = 0;
+        glow.visible = false;
+      }
+    } else {
+      const startGlowAlpha = glow ? glow.alpha : 0;
+      const start = performance.now();
+      const fadeOut = () => {
+        if (this.disposed || this.fireLit) return;
+        const p = Math.min(1, (performance.now() - start) / 360);
+        if (flames && !flames.destroyed) flames.alpha = 1 - p;
+        if (glow && !glow.destroyed) glow.alpha = startGlowAlpha * (1 - p);
+        if (p < 1) {
+          requestAnimationFrame(fadeOut);
+        } else {
+          if (flames && !flames.destroyed) flames.clear();
+          if (glow && !glow.destroyed) glow.visible = false;
+        }
+      };
+      requestAnimationFrame(fadeOut);
+    }
 
-    this.after(600, () => {
-      this.setPose('sit');
+    this.after(360, () => {
       this.interactionLock = false;
     });
   }
@@ -743,12 +840,14 @@ export class ShelterScene {
       this.fireGlow.eventMode = 'none';
       this.fxLayer.addChild(this.fireGlow);
     }
+    this.fireGlow.visible = true;
     const targetNode = fireNode ?? this.hotspots.find((h) => h.config.id === 'firepit');
     if (!this.fireFlames && targetNode) {
       this.fireFlames = new Graphics();
       this.fireFlames.eventMode = 'none';
       targetNode.root.addChild(this.fireFlames);
     }
+    if (this.fireFlames) this.fireFlames.alpha = 1;
   }
 
   private interactSearch(node: HotspotNode): void {
@@ -825,6 +924,9 @@ export class ShelterScene {
   private interactSleep(): void {
     this.sleepMode = true;
     this.target = LIGHTING.night;
+    /* Tuck head/pack inside the shed frame, facing out toward the rooftop */
+    this.travelerFlipped = true;
+    this.layoutTraveler();
     this.setPose('sleep');
     playSleepSfx();
 
@@ -1027,8 +1129,8 @@ export class ShelterScene {
       setCampfireAudio(true);
       const fp = this.hotspots.find((h) => h.config.id === 'firepit');
       if (fp) {
-        this.disableHotspotInteraction(fp);
         this.ensureFireEffects(fp);
+        this.setHotspotLabel(fp, 'Extinguish fire');
       }
     }
 
@@ -1183,9 +1285,9 @@ export class ShelterScene {
     if (this.currentPose === 'idle' && this.travelerSprite && !this.state.reduceMotion) {
       this.breathPhase += dt / 1000;
       const breathScale = 1 + 0.015 * Math.sin(this.breathPhase * 1.7);
-      const tH = this.height * 0.22;
+      const targetH = this.height * BASE_STANDING_HEIGHT_RATIO * POSE_HEIGHT_SCALE.idle;
       const tex = this.travelerSprite.texture;
-      const baseScale = (tH / (tex.height || 1)) * this.poseScaleMultiplier;
+      const baseScale = (targetH / (tex.height || 1)) * this.poseScaleMultiplier;
       this.travelerSprite.scale.y = baseScale * breathScale;
     }
 

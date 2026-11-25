@@ -1067,7 +1067,7 @@ export function playFireLight(): void {
 
   // 1. Match strike: quick high-pass filtered noise snap
   puff(c, target, t, 0.22, 0.08, 1800, 6200, 3200);
-  // 2. Soft ignition whoosh: warm rising then settling lowpass swell
+  // Soft ignition whoosh: warm rising then settling lowpass swell
   const whooshSrc = c.createBufferSource();
   whooshSrc.buffer = getNoise('pink');
   const lp = c.createBiquadFilter();
@@ -1082,6 +1082,30 @@ export function playFireLight(): void {
   whooshSrc.connect(lp).connect(wg).connect(target);
   whooshSrc.start(t + 0.06, rand(0, 2));
   whooshSrc.stop(t + 0.75);
+}
+
+/** Soft gentle hiss & ember dampen when extinguishing the fire pit */
+export function playFireDouse(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+
+  // Gentle steam/ash hiss sweeping down
+  puff(c, target, t, 0.16, 0.42, 650, 4200, 750);
+  puff(c, target, t + 0.12, 0.09, 0.36, 400, 2400, 520);
+
+  // Soft low thud/dampen
+  const osc = c.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(135 * pitchVar(), t);
+  osc.frequency.exponentialRampToValueAtTime(55, t + 0.18);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.07, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+  osc.connect(g).connect(target);
+  osc.start(t);
+  osc.stop(t + 0.22);
 }
 
 interface CampfireInstance {

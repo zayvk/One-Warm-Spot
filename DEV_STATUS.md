@@ -53,21 +53,23 @@ One-Warm-Spot/
     │   │   ├── upgrades.ts      # Tier 1–2 macro upgrades (repair-first framing)
     │   │   └── media.ts         # Background image paths + fallback gradients
     │   ├── engine/
-    │   │   └── saveSystem.ts    # localStorage autosave/load + JSON export/import
+    │   │   └── saveSystem.ts    # localStorage autosave/load + validated JSON export/import
     │   ├── audio/
-    │   │   └── soundEngine.ts   # Web Audio singleton: music, SFX, 9-site ambience
+    │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9-site ambience
     │   ├── store/
-    │   │   └── useGameStore.ts  # Zustand store (day, site, mode, gender, resources, actions)
+    │   │   └── useGameStore.ts  # Zustand store (day, site, mode, gender, reduceMotion, actions)
     │   └── renderer/
     │       └── ShelterCanvas.tsx # PixiJS canvas (placeholder layered 2D scene)
     └── ui/
-        ├── TitleScreen.tsx      # Title + Start/Continue/About buttons
-        ├── SiteSelector.tsx     # Mode tabs, traveler picker, 9 hover-reactive shelter cards
-        ├── ArrivalCutscene.tsx  # Lightweight in-engine cutscene (Ken Burns + walking silhouette)
-        ├── AboutModal.tsx       # Frosted-glass world intro modal
-        ├── TopBar.tsx           # Cozy HUD (Day, site, 6 resources, Reset)
-        ├── BackgroundStage.tsx  # Full-viewport crossfade background (image/video/gradient)
-        └── AudioToggle.tsx      # Floating mute/unmute button
+        ├── TitleScreen.tsx           # Upper-sky title block + radial scrim + Continue/New Game/About
+        ├── SiteSelector.tsx          # Compact header bar, equal-height 3/2/1 responsive shelter cards
+        ├── ArrivalCutscene.tsx       # Lightweight in-engine cutscene (Ken Burns + walking, reduce-motion aware)
+        ├── SettingsPopover.tsx       # Top-right popover: Music/SFX sliders, Reduce Motion, Save export/import
+        ├── ConfirmOverwriteModal.tsx # Safety modal before overwriting an existing saved shelter
+        ├── AboutModal.tsx            # Frosted-glass world intro modal
+        ├── TopBar.tsx                # Cozy HUD (Day, site, 6 resources, Reset)
+        ├── BackgroundStage.tsx       # Full-viewport crossfade background (image/video/gradient)
+        └── AudioToggle.tsx           # Floating Settings gear + Mute/Unmute cluster
 ```
 
 ---
@@ -116,21 +118,28 @@ One-Warm-Spot/
 - [x] Per-shelter hover background + image fallback gradients
 - [x] Web Audio sound engine: menu music + procedural fallback, hover/click/claim/locked/footstep SFX
 - [x] 9-site procedural hover ambience (wind, surf, canopy, cave drips, room hum, barn creak, etc.)
-- [x] Floating AudioToggle (mute persisted in localStorage)
+- [x] Floating AudioToggle (mute persisted in localStorage) + Settings popover (`SettingsPopover.tsx`)
+- [x] Independent Music Volume (default 0.55) & SFX/Ambience Volume (default 0.70) sliders with smooth gain ramping
+- [x] Reduce Motion accessibility toggle persisted in `localStorage` (respects `prefers-reduced-motion` default)
+- [x] Settings quick Save Data row: schema-validated JSON export & import with inline feedback
+- [x] Save-Overwrite safety modal (`ConfirmOverwriteModal.tsx`) with Cancel, Export Backup (.json), and Start Fresh
+- [x] Pre-game UI polish: Title upper-sky placement with warm radial scrim, cozy button micro-interactions
+- [x] Shelter Selector polish: compact single-row header, equal-height cards, 3/2/1 responsive breakpoints
+- [x] Arrival Cutscene respects Reduce Motion (disables Ken Burns zoom & walking bob in favor of calm fades)
 - [x] Lightweight in-engine Arrival Cutscene (~3.5s, Ken Burns zoom, walking traveler, skippable)
 - [x] PixiJS placeholder shelter canvas with tarp upgrade toggle
 - [x] TopBar HUD (Day, site name, 6 resources, Reset Save)
 - [x] localStorage autosave with JSON export/import helpers
 - [x] `GAME_CONTEXT.md` and `DEV_STATUS.md` living documentation
 
-### 🔲 Next Up / Planned
+### 🚀 Next Active Milestone: M1 · Playable Day 1 Shelter View
 
-- [ ] Day 1 playable shelter loop for the 3 starter sites
-- [ ] 6-resource scavenging system (search zones, random yields)
-- [ ] Tier 1–3 visual layer swaps in PixiJS (patch → reinforce → fortify)
+- [ ] **M1:** Playable Day 1 shelter loop for the 3 starter sites (`terrace`, `pipe`, `tree`)
+- [ ] **M1:** Day 1 Survival Kit presentation & macro-upgrade panel wiring
+- [ ] **M2:** 6-resource scavenging system (search zones, random yields)
+- [ ] **M2:** Tier 1–3 visual layer swaps in PixiJS (patch → reinforce → fortify)
 - [ ] Day/Night lighting tint cycle on the shelter canvas
 - [ ] Upgrade unlock progression for locked sites (day count, upgrade count checks)
-- [ ] Survival kit UI presentation on Day 1
 - [ ] Field Journal / quest log
 - [ ] Weather events (rain, wind storms — visual + resource impact)
 - [ ] Scavenging expedition map

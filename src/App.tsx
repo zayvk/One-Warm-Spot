@@ -17,8 +17,14 @@ export default function App() {
   const tarpPitched = useGameStore((s) => s.tarpPitched);
   const pitchTarp = useGameStore((s) => s.pitchTarp);
   const resources = useGameStore((s) => s.resources);
+  const reduceMotion = useGameStore((s) => s.reduceMotion);
 
   const [screen, setScreen] = useState<Screen>('title');
+
+  /* ── Sync reduceMotion preference to root document attribute ── */
+  useEffect(() => {
+    document.documentElement.dataset.reduceMotion = String(reduceMotion);
+  }, [reduceMotion]);
 
   /* ── Unlock audio on first user interaction ── */
   useEffect(() => {
@@ -43,7 +49,6 @@ export default function App() {
   }, []);
 
   const goToArrival = useCallback(() => {
-    // New game: play arrival cutscene before shelter
     setScreen('arrival');
   }, []);
 
@@ -121,8 +126,17 @@ export default function App() {
         <ShelterCanvas />
         <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap', justifyContent: 'center' }}>
           {!tarpPitched && (
-            <button onClick={pitchTarp} disabled={resources.cloth < 1}
-              style={{ background: resources.cloth >= 1 ? 'var(--terra-400)' : 'var(--warm-gray)', color: '#fff', padding: 'var(--space-sm) var(--space-lg)', fontSize: '1rem' }}>
+            <button
+              type="button"
+              onClick={pitchTarp}
+              disabled={resources.cloth < 1}
+              className="ows-btn-terra"
+              style={{
+                background: resources.cloth >= 1 ? 'var(--terra-400)' : 'var(--warm-gray)',
+                padding: 'var(--space-sm) var(--space-lg)',
+                fontSize: '1rem',
+              }}
+            >
               ⛺ Pitch Canvas Tarp (1 🧵)
             </button>
           )}

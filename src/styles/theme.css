@@ -27,12 +27,13 @@
   --bg: var(--warm-white);
   --text: var(--charcoal);
   --text-muted: var(--warm-gray);
+  --text-secondary: #685f56;
   --accent: var(--sage-600);
   --accent-light: var(--sage-200);
   --surface: var(--terra-100);
   --surface-alt: var(--sage-100);
   --border: var(--terra-200);
-  --locked: var(--warm-gray);
+  --locked: #6d655d;
 
   /* Typography */
   --font-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -89,10 +90,17 @@ button {
   border-radius: var(--radius-sm);
   padding: var(--space-sm) var(--space-md);
   font-size: 0.95rem;
-  transition: background 0.2s, transform 0.1s, opacity 0.2s;
+  transition: background 0.2s ease, transform 0.16s ease, box-shadow 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
-button:active {
+button:focus-visible,
+[tabindex]:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--terra-400);
+  outline-offset: 2px;
+}
+
+button:active:not(:disabled) {
   transform: scale(0.97);
 }
 
@@ -101,12 +109,328 @@ button:disabled {
   opacity: 0.5;
 }
 
-/* ───── Frosted-glass card utility ───── */
+/* ───── Frosted-glass utilities ───── */
 
 .frosted-card {
-  background: rgba(255, 252, 246, 0.78);
+  background: rgba(255, 252, 246, 0.82);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1.5px solid rgba(232, 205, 181, 0.5);
+  border: 1.5px solid rgba(232, 205, 181, 0.55);
   border-radius: var(--radius-md);
+}
+
+/* ───── Title & Menu Button Micro-interactions ───── */
+
+.ows-btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 14px rgba(61, 56, 50, 0.22);
+}
+
+.ows-btn-primary:hover:not(:disabled) {
+  background: #4f7043;
+  border-color: rgba(232, 205, 181, 0.7);
+  box-shadow: 0 8px 22px rgba(61, 56, 50, 0.28), 0 0 16px rgba(232, 205, 181, 0.35);
+  transform: translateY(-1px);
+}
+
+.ows-btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.ows-btn-glass {
+  background: rgba(61, 56, 50, 0.36);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #fff;
+  border: 1.5px solid rgba(255, 252, 246, 0.38);
+  box-shadow: 0 4px 14px rgba(61, 56, 50, 0.16);
+}
+
+.ows-btn-glass:hover:not(:disabled) {
+  background: rgba(61, 56, 50, 0.5);
+  border-color: rgba(232, 205, 181, 0.78);
+  box-shadow: 0 6px 20px rgba(61, 56, 50, 0.25), 0 0 14px rgba(245, 235, 224, 0.26);
+  transform: translateY(-1px);
+}
+
+.ows-btn-glass:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.ows-btn-surface {
+  background: var(--surface);
+  color: var(--charcoal);
+  border: 1.5px solid var(--border);
+}
+
+.ows-btn-surface:hover:not(:disabled) {
+  background: #efe1d1;
+  border-color: var(--terra-400);
+  box-shadow: 0 4px 12px rgba(61, 56, 50, 0.12);
+  transform: translateY(-1px);
+}
+
+.ows-btn-terra {
+  background: var(--terra-600);
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+}
+
+.ows-btn-terra:hover:not(:disabled) {
+  background: #875934;
+  border-color: var(--terra-200);
+  box-shadow: 0 6px 18px rgba(61, 56, 50, 0.2);
+  transform: translateY(-1px);
+}
+
+/* ───── Top-right Floating Icon Buttons ───── */
+
+.ows-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(61, 56, 50, 0.38);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 252, 246, 0.35);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(61, 56, 50, 0.18);
+}
+
+.ows-icon-btn:hover,
+.ows-icon-btn[aria-expanded='true'] {
+  background: rgba(61, 56, 50, 0.56);
+  border-color: rgba(232, 205, 181, 0.8);
+  box-shadow: 0 5px 16px rgba(61, 56, 50, 0.25);
+  transform: translateY(-1px);
+}
+
+/* ───── Title Screen Upper-Sky Scrim ───── */
+
+.ows-title-scrim {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-lg) var(--space-xl);
+  border-radius: 36px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(61, 48, 36, 0.44) 0%,
+    rgba(61, 48, 36, 0.26) 52%,
+    rgba(61, 48, 36, 0) 78%
+  );
+  max-width: 640px;
+  width: 100%;
+}
+
+/* ───── Compact Pills (Mode Tabs / Traveler Picker) ───── */
+
+.ows-pill {
+  background: rgba(61, 56, 50, 0.32);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgba(255, 252, 246, 0.85);
+  border: 1.5px solid rgba(255, 252, 246, 0.22);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.ows-pill:hover {
+  background: rgba(61, 56, 50, 0.48);
+  border-color: rgba(255, 252, 246, 0.46);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.ows-pill--active {
+  background: rgba(255, 252, 246, 0.9);
+  color: var(--charcoal);
+  border-color: var(--terra-200);
+  font-weight: 600;
+  box-shadow: 0 3px 10px rgba(61, 56, 50, 0.16);
+}
+
+.ows-pill--active:hover {
+  background: #fff;
+  color: var(--charcoal);
+  border-color: var(--terra-400);
+}
+
+/* ───── Shelter Selector Responsive Header & Grid ───── */
+
+.ows-site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1080px;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 1320px) {
+  .ows-site-header {
+    padding-right: 102px;
+  }
+}
+
+.ows-site-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 1080px;
+  align-items: stretch;
+}
+
+@media (max-width: 1023px) {
+  .ows-site-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .ows-site-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ───── Shelter Cards ───── */
+
+.ows-site-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 14px;
+  gap: 8px;
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease, background 200ms ease;
+}
+
+.ows-site-card--unlocked {
+  background: rgba(255, 252, 246, 0.86);
+  border: 1.5px solid rgba(232, 205, 181, 0.65);
+}
+
+.ows-site-card--unlocked:hover,
+.ows-site-card--unlocked:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--terra-400);
+  box-shadow: 0 10px 26px rgba(61, 56, 50, 0.18), 0 0 0 2px rgba(138, 173, 122, 0.38);
+}
+
+.ows-site-card--locked {
+  background: rgba(247, 244, 238, 0.84);
+  border: 1.5px solid rgba(176, 168, 158, 0.55);
+}
+
+.ows-site-card--locked:hover,
+.ows-site-card--locked:focus-visible {
+  border-color: rgba(176, 168, 158, 0.85);
+  box-shadow: 0 4px 14px rgba(61, 56, 50, 0.12);
+}
+
+/* ───── Settings Sliders & Toggle Switch ───── */
+
+.ows-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--terra-200);
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.ows-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(61, 56, 50, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.ows-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.ows-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(61, 56, 50, 0.25);
+}
+
+.ows-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  padding: 2px;
+  background: var(--warm-gray);
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+}
+
+.ows-switch[aria-checked='true'] {
+  background: var(--accent);
+}
+
+.ows-switch-knob {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(61, 56, 50, 0.25);
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+}
+
+.ows-switch[aria-checked='true'] .ows-switch-knob {
+  transform: translateX(20px);
+}
+
+/* ───── Reduce Motion Support ───── */
+
+:root[data-reduce-motion='true'] {
+  --fade-speed: 150ms;
+}
+
+[data-reduce-motion='true'] *,
+[data-reduce-motion='true'] *::before,
+[data-reduce-motion='true'] *::after {
+  scroll-behavior: auto !important;
+}
+
+[data-reduce-motion='true'] button:hover:not(:disabled),
+[data-reduce-motion='true'] .ows-site-card--unlocked:hover,
+[data-reduce-motion='true'] .ows-site-card--unlocked:focus-visible {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fade-speed: 150ms;
+  }
 }

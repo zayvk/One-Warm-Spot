@@ -17,6 +17,8 @@ export default function TopBar() {
         alignItems: 'center',
         gap: 'var(--space-md)',
         padding: 'var(--space-sm) var(--space-md)',
+        paddingRight: '108px',
+        minHeight: '56px',
         background: 'var(--surface)',
         borderBottom: '2px solid var(--border)',
         flexWrap: 'wrap',
@@ -27,7 +29,7 @@ export default function TopBar() {
         <strong style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem' }}>
           ☀️ Day {day}
         </strong>
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{siteName}</span>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{siteName}</span>
       </div>
 
       {/* Resources */}
@@ -52,12 +54,13 @@ export default function TopBar() {
 
       {/* Reset */}
       <button
+        type="button"
         onClick={resetGame}
+        className="ows-btn-terra"
         style={{
           marginLeft: 'var(--space-sm)',
-          background: 'var(--terra-400)',
-          color: '#fff',
           fontSize: '0.8rem',
+          padding: '6px 12px',
         }}
       >
         Reset Save

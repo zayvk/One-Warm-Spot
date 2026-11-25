@@ -116,6 +116,17 @@ export const SCENE_PROPS = {
 
 export type PropId = keyof typeof SCENE_PROPS;
 
+/* ───── Arrival Cutscene Art ───── */
+
+/** Terrace elevator arrival: lobby → riding up → doors open onto the roof */
+export const CUTSCENE_ASSETS = {
+  terraceLobby: '/source/cutscenes/terrace-lobby.webp',
+  /** Lift interior with a transparent doorway cutout */
+  terraceLiftFrame: '/source/cutscenes/terrace-lift-frame.webp',
+  /** One lift door panel (mirrored for the right half) */
+  terraceLiftDoor: '/source/cutscenes/terrace-lift-door.webp',
+} as const;
+
 /** All background URLs for preloading */
 export const ALL_BG_URLS: string[] = [
   BG_TITLE.src,

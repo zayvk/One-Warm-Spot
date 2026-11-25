@@ -119,6 +119,17 @@ const FALLBACK_WALK_AREA = { xMin: 0.12, xMax: 0.88, yMin: 0.60, yMax: 0.88 };
 const FALLBACK_ENTRY = { x: -0.05, y: 0.78 };
 const FALLBACK_IDLE = { x: 0.42, y: 0.76 };
 
+/** Assumed backdrop aspect until the stage texture has loaded (painted stages are 1376×768) */
+const DEFAULT_STAGE_ASPECT = 1376 / 768;
+
+/** On-screen rectangle of the cover-fitted backdrop; all scene coords are normalized to it */
+interface StageRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /* ═══════════════════════════════════════════
    Anatomical Per-Pose Proportions & Shadows
    ═══════════════════════════════════════════ */
@@ -300,6 +311,8 @@ export class ShelterScene {
   private entryDone = false;
   private terrace: TerraceState;
   private disposed = false;
+  /** Cover-fitted backdrop rect — props, colliders and walk bounds are anchored to it */
+  private stage: StageRect = { x: 0, y: 0, width: 1, height: 1 };
 
   /* Reward callback */
   private onReward: RewardCallback | null = null;
@@ -313,6 +326,7 @@ export class ShelterScene {
     this.warmthCurrent = this.warmthTarget();
     this.width = app.screen.width;
     this.height = app.screen.height;
+    this.updateStageRect();
     this.terrace = loadTerraceState();
 
     /* Floor click catcher at base of bgLayer (no stage.hitArea so child hotspots receive hits) */
@@ -491,6 +505,32 @@ export class ShelterScene {
     this.timers.add(id);
   }
 
+  /* ── Stage space (cover-fitted backdrop) ── */
+
+  /** Recompute where the backdrop is drawn: `cover` framing, centered on screen */
+  private updateStageRect(): void {
+    const { width: W, height: H } = this;
+    const tex = this.bgSprite?.texture;
+    const texW = tex?.width || DEFAULT_STAGE_ASPECT;
+    const texH = tex?.height || 1;
+    const scale = Math.max(W / texW, H / texH);
+    const width = texW * scale;
+    const height = texH * scale;
+    this.stage = { x: (W - width) / 2, y: (H - height) / 2, width, height };
+  }
+
+  /** Normalized stage coords → screen pixels */
+  private toPx(nx: number, ny: number): { x: number; y: number } {
+    const s = this.stage;
+    return { x: s.x + nx * s.width, y: s.y + ny * s.height };
+  }
+
+  /** Screen pixels → normalized stage coords */
+  private toNorm(px: number, py: number): { x: number; y: number } {
+    const s = this.stage;
+    return { x: (px - s.x) / s.width, y: (py - s.y) / s.height };
+  }
+
   /* ── Background ── */
 
   private loadBackground(siteId: SiteId | null): void {
@@ -597,14 +637,12 @@ export class ShelterScene {
   }
 
   private layoutTraveler(shadowBlend = 1, fromPose: TravelerPose = this.currentPose): void {
-    const { width: W, height: H } = this;
-    const px = W * this.targetX;
-    const py = H * this.targetY;
+    const { x: px, y: py } = this.toPx(this.targetX, this.targetY);
     this.travelerNode.position.set(px, py);
     this.travelerNode.zIndex =
       this.sleepMode && this.sleepZ !== null ? this.sleepZ : Math.round(py);
 
-    const baseStandingHeight = H * BASE_STANDING_HEIGHT_RATIO;
+    const baseStandingHeight = this.stage.height * BASE_STANDING_HEIGHT_RATIO;
     const targetHeight = baseStandingHeight * POSE_HEIGHT_SCALE[this.currentPose];
     if (this.travelerSprite) {
       const tex = this.travelerSprite.texture;
@@ -759,8 +797,8 @@ export class ShelterScene {
     const hr = node.config.hitRect;
     if (hr) {
       /* Soft glow outline around backdrop features (e.g. the stairwell door) */
-      const { width: W, height: H } = this;
-      g.roundRect(hr.dx * W, hr.dy * H, hr.w * W, hr.h * H, 12)
+      const { width: SW, height: SH } = this.stage;
+      g.roundRect(hr.dx * SW, hr.dy * SH, hr.w * SW, hr.h * SH, 12)
         .fill({ color: 0xfff2cc, alpha: 0.07 })
         .stroke({ color: 0xfff2cc, width: 2, alpha: 0.55 });
       return;
@@ -771,15 +809,15 @@ export class ShelterScene {
   }
 
   private layoutHotspotLabel(node: HotspotNode): void {
-    const { width: W, height: H } = this;
+    const SH = this.stage.height;
     const cfg = node.config;
-    const rawX = W * cfg.position.x;
+    const { x: rawX, y: anchorY } = this.toPx(cfg.position.x, cfg.position.y);
     let rawY: number;
     if (cfg.hitRect) {
-      rawY = H * (cfg.position.y + cfg.hitRect.dy) + 30;
+      rawY = anchorY + SH * cfg.hitRect.dy + 30;
     } else {
-      const propH = cfg.propScale ? H * cfg.propScale : 44;
-      rawY = H * cfg.position.y - Math.max(44, propH + 10);
+      const propH = cfg.propScale ? SH * cfg.propScale : 44;
+      rawY = anchorY - Math.max(44, propH + 10);
     }
     this.placeLabel(node.label, node.labelPill, rawX, rawY);
   }
@@ -1123,8 +1161,8 @@ export class ShelterScene {
     node.label.visible = show;
     node.labelPill.visible = show;
     if (show) {
-      const { width: W, height: H } = this;
-      this.placeLabel(node.label, node.labelPill, W * node.config.position.x, H * node.config.position.y - 26);
+      const p = this.toPx(node.config.position.x, node.config.position.y);
+      this.placeLabel(node.label, node.labelPill, p.x, p.y - 26);
     }
   }
 
@@ -1305,9 +1343,9 @@ export class ShelterScene {
 
   private spawnLeafParticles(pos: { x: number; y: number }): void {
     if (this.state.reduceMotion) return;
-    const { width: W, height: H } = this;
-    const baseX = W * pos.x;
-    const baseY = H * pos.y - 14;
+    const base = this.toPx(pos.x, pos.y);
+    const baseX = base.x;
+    const baseY = base.y - 14;
     const colors = [0x6e9458, 0x8aad7a, 0xa8c698, 0x5b7d4e];
 
     for (let i = 0; i < 10; i++) {
@@ -1330,11 +1368,11 @@ export class ShelterScene {
 
   private spawnSparkles(pos: { x: number; y: number }, colors: number[]): void {
     if (this.state.reduceMotion) return;
-    const { width: W, height: H } = this;
+    const base = this.toPx(pos.x, pos.y);
     for (let i = 0; i < 14; i++) {
       const dot = new Graphics();
       dot.circle(0, 0, 1.4 + Math.random() * 2.2).fill(colors[i % colors.length]);
-      dot.position.set(W * pos.x + (Math.random() - 0.5) * 60, H * pos.y + (Math.random() - 0.5) * 34);
+      dot.position.set(base.x + (Math.random() - 0.5) * 60, base.y + (Math.random() - 0.5) * 34);
       this.fxLayer.addChild(dot);
       this.particles.push({
         sprite: dot,
@@ -1349,7 +1387,7 @@ export class ShelterScene {
 
   private showFloatingText(pos: { x: number; y: number }, text: string): void {
     if (!text) return;
-    const { width: W, height: H } = this;
+    const anchor = this.toPx(pos.x, pos.y);
     const txt = new Text({
       text,
       style: new TextStyle({
@@ -1362,14 +1400,14 @@ export class ShelterScene {
       }),
     });
     txt.anchor.set(0.5, 1);
-    txt.position.set(W * pos.x, H * pos.y - 34);
+    txt.position.set(anchor.x, anchor.y - 34);
     this.labelLayer.addChild(txt);
 
     const start = performance.now();
     const animate = () => {
       if (this.disposed || txt.destroyed) return;
       const p = (performance.now() - start) / 1300;
-      txt.y = H * pos.y - 34 - p * 44;
+      txt.y = anchor.y - 34 - p * 44;
       txt.alpha = Math.max(0, 1 - Math.max(0, p - 0.25) / 0.75);
       if (p < 1) {
         requestAnimationFrame(animate);
@@ -1392,9 +1430,7 @@ export class ShelterScene {
 
   private handleFloorPointerDown = (event: { global: { x: number; y: number } }): void => {
     if (this.interactionLock || !this.entryDone) return;
-    const { width: W, height: H } = this;
-    const nx = event.global.x / W;
-    const ny = event.global.y / H;
+    const { x: nx, y: ny } = this.toNorm(event.global.x, event.global.y);
 
     const area = this.sceneConfig?.walkableArea ?? FALLBACK_WALK_AREA;
     if (nx < area.xMin || nx > area.xMax || ny < area.yMin || ny > area.yMax) return;
@@ -1493,16 +1529,16 @@ export class ShelterScene {
 
   private layout(): void {
     const { width: W, height: H } = this;
+    this.updateStageRect();
+    const { width: SW, height: SH } = this.stage;
 
     this.floorHit.clear();
     this.floorHit.rect(0, 0, W, H).fill({ color: 0x000000, alpha: 0.001 });
     this.floorHit.hitArea = new Rectangle(0, 0, W, H);
 
     if (this.bgSprite) {
-      const tex = this.bgSprite.texture;
-      const scale = Math.max(W / tex.width, H / tex.height);
-      this.bgSprite.scale.set(scale);
-      this.bgSprite.position.set(W / 2, H / 2);
+      this.bgSprite.scale.set(SW / (this.bgSprite.texture.width || 1));
+      this.bgSprite.position.set(this.stage.x + SW / 2, this.stage.y + SH / 2);
     }
     this.drawFallback(this.state.siteId);
 
@@ -1518,18 +1554,17 @@ export class ShelterScene {
     this.warmth.height = H * 0.9;
 
     for (const hs of this.hotspots) {
-      const px = W * hs.config.position.x;
-      const py = H * hs.config.position.y;
+      const { x: px, y: py } = this.toPx(hs.config.position.x, hs.config.position.y);
       hs.root.position.set(px, py);
       /* Sprite-less spots (e.g. the stairwell door) sit flat beneath everything */
       hs.root.zIndex = hs.propSprite ? Math.round(py) : 0;
 
       const hr = hs.config.hitRect;
       if (hr) {
-        hs.root.hitArea = new Rectangle(hr.dx * W, hr.dy * H, hr.w * W, hr.h * H);
+        hs.root.hitArea = new Rectangle(hr.dx * SW, hr.dy * SH, hr.w * SW, hr.h * SH);
         if (hs.hovered) this.drawHoverRing(hs);
       } else if (hs.propSprite && hs.config.propScale && hs.propSprite.texture !== Texture.EMPTY) {
-        const pH = H * hs.config.propScale;
+        const pH = SH * hs.config.propScale;
         const pScale = pH / (hs.propSprite.texture.height || 100);
         const signX = hs.config.flipX ? -1 : 1;
         hs.propSprite.scale.set(pScale * signX, pScale);
@@ -1543,14 +1578,13 @@ export class ShelterScene {
 
     for (const bn of this.buildNodes) {
       const cfg = bn.config;
-      const px = W * cfg.position.x;
-      const py = H * cfg.position.y;
+      const { x: px, y: py } = this.toPx(cfg.position.x, cfg.position.y);
       bn.root.position.set(px, py);
       /* Blueprints are floor decals; built props join the Y-sort */
       bn.root.zIndex = bn.built ? Math.round(py) : 1;
 
-      const rx = Math.max(16, (cfg.collider?.rx ?? 0.03) * W * 1.15);
-      const ry = Math.max(7, (cfg.collider?.ry ?? 0.02) * H * 1.35);
+      const rx = Math.max(16, (cfg.collider?.rx ?? 0.03) * SW * 1.15);
+      const ry = Math.max(7, (cfg.collider?.ry ?? 0.02) * SH * 1.35);
       bn.blueprint.clear();
       bn.blueprint
         .ellipse(0, 0, rx, ry)
@@ -1561,7 +1595,7 @@ export class ShelterScene {
       bn.root.hitArea = new Circle(0, 0, Math.max(24, rx));
 
       if (bn.sprite.texture !== Texture.EMPTY) {
-        const pH = H * cfg.propScale;
+        const pH = SH * cfg.propScale;
         const pScale = pH / (bn.sprite.texture.height || 100);
         bn.sprite.scale.set(pScale * (cfg.flipX ? -1 : 1), pScale);
       }
@@ -1573,8 +1607,9 @@ export class ShelterScene {
     if (this.fireGlow && this.sceneConfig) {
       const fp = this.sceneConfig.hotspots.find((h) => h.id === 'firepit');
       if (fp) {
-        this.fireGlow.position.set(W * fp.position.x, H * fp.position.y - H * 0.03);
-        const fgSize = Math.min(W, H) * 0.36;
+        const p = this.toPx(fp.position.x, fp.position.y);
+        this.fireGlow.position.set(p.x, p.y - SH * 0.03);
+        const fgSize = SH * 0.36;
         this.fireGlow.width = fgSize;
         this.fireGlow.height = fgSize;
       }
@@ -1596,16 +1631,17 @@ export class ShelterScene {
       glow.visible = false;
       return;
     }
-    const { width: W, height: H } = this;
-    const pH = H * (hs.config.propScale ?? cfg.propScale);
+    const SH = this.stage.height;
+    const pH = SH * (hs.config.propScale ?? cfg.propScale);
     const pW = tex.width * (pH / (tex.height || 1));
     const sign = hs.config.flipX ? -1 : 1;
+    const base = this.toPx(hs.config.position.x, hs.config.position.y);
     glow.visible = true;
     glow.position.set(
-      W * hs.config.position.x + (cfg.lanternAnchor.x - 0.5) * pW * sign,
-      H * hs.config.position.y - (1 - cfg.lanternAnchor.y) * pH,
+      base.x + (cfg.lanternAnchor.x - 0.5) * pW * sign,
+      base.y - (1 - cfg.lanternAnchor.y) * pH,
     );
-    const size = Math.min(W, H) * 0.16;
+    const size = SH * 0.16;
     glow.width = size;
     glow.height = size;
   }
@@ -1690,7 +1726,7 @@ export class ShelterScene {
     if (this.currentPose === 'idle' && this.travelerSprite && !this.state.reduceMotion) {
       this.breathPhase += dt / 1000;
       const breathScale = 1 + 0.015 * Math.sin(this.breathPhase * 1.7);
-      const targetH = this.height * BASE_STANDING_HEIGHT_RATIO * POSE_HEIGHT_SCALE.idle;
+      const targetH = this.stage.height * BASE_STANDING_HEIGHT_RATIO * POSE_HEIGHT_SCALE.idle;
       const tex = this.travelerSprite.texture;
       const baseScale = (targetH / (tex.height || 1)) * this.poseScaleMultiplier;
       this.travelerSprite.scale.y = baseScale * breathScale;
@@ -1722,8 +1758,7 @@ export class ShelterScene {
     if (!this.fireFlames || !this.sceneConfig) return;
     const fp = this.sceneConfig.hotspots.find((h) => h.id === 'firepit');
     if (!fp) return;
-    const H = this.height;
-    const propH = H * (fp.propScale ?? 0.085);
+    const propH = this.stage.height * (fp.propScale ?? 0.085);
     /* Local to firepit root (bottom-center of firepit sprite) */
     const cy = -propH * 0.45;
     const unit = Math.max(0.7, propH / 58);
@@ -1742,10 +1777,10 @@ export class ShelterScene {
     if (this.state.reduceMotion || !this.sceneConfig) return;
     const fp = this.sceneConfig.hotspots.find((h) => h.id === 'firepit');
     if (!fp) return;
-    const { width: W, height: H } = this;
-    const propH = H * (fp.propScale ?? 0.085);
-    const baseX = W * fp.position.x;
-    const baseY = H * fp.position.y - propH * 0.48;
+    const propH = this.stage.height * (fp.propScale ?? 0.085);
+    const base = this.toPx(fp.position.x, fp.position.y);
+    const baseX = base.x;
+    const baseY = base.y - propH * 0.48;
 
     if (Math.random() < 0.28) {
       const ember = new Graphics();

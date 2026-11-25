@@ -69,7 +69,11 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
 
 1. **Title Screen** — Game title, Start / Continue / About buttons, shared menu music.
 2. **Shelter Selector** — Traveler picker (Female / Male sprite portraits), Cozy / Challenge mode tabs, 9 shelter cards with hover background crossfade and procedural ambience.
-3. **Arrival Cutscene** (~3.5s) — Smooth atmospheric Ken Burns zoom on the chosen shelter background, soft footsteps and shelter ambience swelling in, Day 1 title caption fade-in, skippable, crossfading cleanly into the playable shelter where the traveler walks onto the stage (on the Terrace, they fade in and step out of the ajar rooftop stairwell door).
+3. **Arrival Cutscene** — For most shelters, a ~3.5s atmospheric Ken Burns zoom on the shelter background with soft footsteps, swelling ambience and a Day 1 caption. **The Terrace arrives by the old apartment lift** in a ~5.2s, 3-beat illustrated vignette:
+   1. **The Quiet Lobby** — a sunlit, ivy-draped hallway; a slow push-in toward the open elevator with a few soft footsteps.
+   2. **Riding Up** — inside the old lift (green-painted walls, wood wainscot, brass rails) with the doors closed; a warm amber brass indicator ticks **1 → 2 → 3 → 4 → R** with tiny relay clicks over a low mechanical hum and a gentle 1–2px tremor.
+   3. **Doors Open to Sunlight** — a vintage brass *"ding!"*, the doors slide apart onto the sunlit rooftop, the Terrace ambience swells, an *"Old Apartment Terrace"* caption appears, and the view steps through the doorway into the live shelter, where the traveler walks out of the rooftop stairwell door.
+   Every cutscene is skippable at any moment (Skip button, click, `Space` / `Enter` / `Escape`) and respects Reduce Motion (no push-ins, tremor or sliding — calm fades instead).
 4. **Interactive Shelter** — The point-and-click painted scene (see below), with a minimal floating HUD: a **← Title** button with the shelter name (top-left), the centered **Found Materials Pouch**, and a tiny bottom-center **Build Bar** while in-scene upgrades remain. Progress auto-saves.
 
 ---
@@ -148,9 +152,9 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 
 ## Art & Audio Direction
 
-- **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP backgrounds, stage backdrops, character pose sprites, and interactive prop sprites organized under `public/source/`. Target <5 MB initial browser payload.
+- **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP backgrounds, stage backdrops, cutscene plates, character pose sprites, and interactive prop sprites organized under `public/source/`. Target <5 MB initial browser payload. Interactive stages stay locked to their painted floor on any window shape (16:9, ultrawide or portrait).
 - **Characters:** Understated, faceless 3/4-view travelers in ragged earthy gear, painted to match the backdrops.
-- **Audio:** Menu music tries an optional `public/source/audio/music-menu.mp3`; since that file isn't shipped yet, the **procedural warm-pad chord loop** is what currently plays. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle, fire extinguish hiss, box rummage, weed snip, bedroll sleep, building mallet taps, rain-barrel water-drop chimes) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
+- **Audio:** Menu music tries an optional `public/source/audio/music-menu.mp3`; since that file isn't shipped yet, the **procedural warm-pad chord loop** is what currently plays. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle, fire extinguish hiss, box rummage, weed snip, bedroll sleep, building mallet taps, rain-barrel water-drop chimes, and the Terrace lift's low hum, door slides, floor-tick relay clicks and brass arrival ding) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
 
 ---
 
@@ -161,7 +165,7 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 - **📦 More Prop Variety:** A dedicated **lit fire-pit sprite**, plus "cleared" variants for the double crate and single parcel.
 - **🛠️ More In-Scene Visual Upgrades:** Build on the Terrace v2 trio (timber shelter, herb planter, rain barrel) with more **anchor spots** — repairing the parapet walls, string lights, and second-tier versions of existing props.
 - **👕 Traveler Clothing Progression:** Start in ragged earthy traveler gear and unlock cleaner, warmer, cozier outfits as the shelter improves.
-- **🌅 Full Time-of-Day Scenes & Custom Arrival Vignettes:** Dedicated **Morning / Afternoon / Evening / Night** painted backdrops (and time-specific props) instead of tint-only lighting, plus per-shelter intro vignettes (e.g., the lift/stairwell door swinging open onto the Terrace).
+- **🌅 Full Time-of-Day Scenes & More Arrival Vignettes:** Dedicated **Morning / Afternoon / Evening / Night** painted backdrops (and time-specific props) instead of tint-only lighting, plus per-shelter intro vignettes for the other 8 shelters (the Terrace lift ride is the template).
 - **🌙 New Day Rhythm:** Reconnect sleeping (in the lean-to / timber shelter) to day progression and milestone unlocks once the in-scene day loop is finalized.
 - **🏠 More Interactive Shelters:** Bring the remaining 8 shelters to life with their own scene configs, props, hotspots and buildables.
 
@@ -170,6 +174,7 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 - Rooftop **stairwell/lift entrance** stage with the traveler arriving through its door, and the **shabby cloth lean-to** beside the fire pit as the sleeping spot.
 - **Single / double box** sprites and a **third weed species**, so no two gathering spots look alike.
 - First **in-scene visual upgrades**: reinforce the cloth lean-to into a timber shelter, a raised herb planter, and a rain barrel.
+- **Terrace arrival vignette**: the 3-beat lobby → lift ride → doors-open-to-sunlight elevator cutscene.
 
 ---
 

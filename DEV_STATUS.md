@@ -35,6 +35,7 @@ One-Warm-Spot/
 │       ├── backgrounds/         # Background images (bg-title, bg-valley, bg-terrace...bg-island.webp)
 │       ├── sprites/             # Character pose sprites ({female,male}-{idle,walk,search,sit,sleep}.webp)
 │       ├── scenes/              # Interactive stage backdrops (terrace-stage.webp — v2 with stairwell/lift bulkhead)
+│       ├── cutscenes/           # Terrace lift arrival plates (terrace-lobby, terrace-lift-frame w/ transparent doorway, terrace-lift-door)
 │       ├── props/               # Interactive prop sprites (firepit, boxes-intact/cleared, box-single/double, weeds-1/2/3,
 │       │                        #   cloth-shed, shed-upgraded, planter, rain-barrel)
 │       └── audio/               # Optional music-menu.mp3 (not shipped — procedural warm-pad loop plays instead)
@@ -53,7 +54,7 @@ One-Warm-Spot/
     │   │   ├── relics.ts        # 8 Valley Relics (Field Journal keepsakes)
     │   │   ├── survivalKit.ts   # 5-item Day 1 kit (with "how it helps" copy)
     │   │   ├── upgrades.ts      # The 10 macro upgrades (cost, energy, cozy, tier prerequisite) + categories
-    │   │   ├── media.ts         # Background, sprite, stage & prop paths + fallback gradients
+    │   │   ├── media.ts         # Background, sprite, stage, prop & cutscene (CUTSCENE_ASSETS) paths + fallback gradients
     │   │   └── scenes/
     │   │       ├── types.ts     # ShelterSceneConfig, HotspotConfig, SceneObstacle & BuildableConfig schema (normalized 0–1 coords)
     │   │       ├── terrace.ts   # Old Apartment Terrace v2 config (hotspots, obstacles, 3 buildables)
@@ -66,16 +67,17 @@ One-Warm-Spot/
     │   │   ├── terraceState.ts  # `ows_terrace_state` parse/load/save/clear (fire, boxes, weeds, builtProps)
     │   │   └── __tests__/       # Vitest suites (save, scavenging & modes, progression & unlocks, Terrace v2)
     │   ├── audio/
-    │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9 site soundscapes, shelter foley
+    │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9 site soundscapes, shelter + lift foley
     │   ├── store/
     │   │   └── useGameStore.ts  # Zustand store (day/time/energy/weather, upgrades, scavenging, relics, stats, notices)
     │   └── renderer/
     │       ├── ShelterCanvas.tsx # React bridge: Pixi Application + ResizeObserver + reward/build/notice bridges + requestBuild handle
-    │       └── shelterScene.ts   # Data-driven point-and-click Pixi scene: backdrop, pose crossfades, hotspots, obstacles, in-scene builds, particles
+    │       └── shelterScene.ts   # Data-driven point-and-click Pixi scene: stage-space (cover rect) mapping, backdrop, pose crossfades, hotspots, obstacles, in-scene builds, particles
     └── ui/
         ├── TitleScreen.tsx           # Upper-sky title block + radial scrim + Continue/New Game/About
         ├── SiteSelector.tsx          # Header bar, traveler sprite portraits, 3/2/1 responsive shelter cards
-        ├── ArrivalCutscene.tsx       # Lightweight in-engine cutscene (Ken Burns + footsteps + title card, reduce-motion aware)
+        ├── ArrivalCutscene.tsx       # Cutscene shell (fade-out, Skip button, Space/Enter/Escape); Ken Burns fade for most shelters
+        ├── TerraceLiftCutscene.tsx   # 3-beat Terrace lift arrival (lobby push-in → lift ride 1→R → doors open), reduce-motion aware
         ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + floating pouch HUD + Build Bar
         ├── BuildBar.tsx              # Bottom-center frosted chips for unbuilt in-scene upgrades (dimmed when unaffordable)
         ├── TopBar.tsx                # 💤 Dormant M1 HUD bar (unmounted — see "Archived / Unmounted M1 Files")
@@ -109,7 +111,7 @@ The game has pivoted from menu drawers to a **point-and-click illustrated scene*
 |-------|--------|
 | `ShelterScreen.tsx` | Mounts `ShelterCanvas`, a **← Title** button + shelter name, the centered Found Materials Pouch (🪵 🔩 🧵 🌱 — Stone & Water are intentionally hidden until in-scene sources exist), and the bottom-center `BuildBar` for the site's unbuilt `buildables`. Chips call `ShelterCanvas`'s imperative `requestBuild(id)`. Starts the site ambience bed. |
 | `ShelterCanvas.tsx` | Reads `chosenSite`, `timeOfDay`, `unlockedUpgrades`, `lanternLit`, `reduceMotion`, `travelerGender` from the store and forwards them to the scene. Write-backs: **rewards** (`addResources()`), **build payments** (`spendResources()` — refuses if the pouch is short), and **notices** (`pushNotice()` for the stairwell door). Each write calls `_save()`. Mirrors the scene's `{ built, pending }` build state to `ShelterScreen`. |
-| `shelterScene.ts` | Looks up configs via `getSceneConfig()` in `data/scenes/index.ts` (`terrace` only; other sites get the generic fallback walk area with no hotspots). Clamps walk targets against prop colliders, built-upgrade colliders and static `obstacles` (ellipse/rect). Persists prop + build state through `engine/terraceState.ts`. Sleep is a pose/twilight effect only — it does **not** call the store. |
+| `shelterScene.ts` | Looks up configs via `getSceneConfig()` in `data/scenes/index.ts` (`terrace` only; other sites get the generic fallback walk area with no hotspots). **All normalized scene coords (props, hotspots, colliders, obstacles, walk bounds, entry/idle points) are relative to `stageRect`** — the on-screen cover rect of the backdrop, recomputed at the start of every `layout()` — via `toPx()` / `toNorm()`; prop, traveler and glow sizes scale with `stageRect.height`. Lighting washes, sun glow and labels stay in screen space. Clamps walk targets against prop colliders, built-upgrade colliders and static `obstacles` (ellipse/rect). Persists prop + build state through `engine/terraceState.ts`. Sleep is a pose/twilight effect only — it does **not** call the store. |
 
 ### Terrace v2 In-Scene Builds
 
@@ -148,8 +150,9 @@ Consequence: in current play the day never advances and none of the 10 macro upg
 | Shelter backgrounds | `public/source/backgrounds/bg-*.webp` | WebP, 1920×1080 recommended | Cozy CSS gradient per entry in `media.ts` |
 | Traveler sprites | `public/source/sprites/{female,male}-{idle,walk,search,sit,sleep}.webp` | Transparent WebP | Graceful skip if absent |
 | Scene stages & props | `public/source/scenes/*.webp`, `public/source/props/*.webp` | WebP | Gradient/shape fallback |
+| Cutscene plates | `public/source/cutscenes/terrace-*.webp` (1376×768 lobby & lift frame, 508×680 door panel) | WebP (frame has a transparent doorway) | Dark backdrop behind layers |
 | Menu music | `public/source/audio/music-menu.mp3` (optional, **not shipped**) | MP3 (looping) | Procedural warm-pad chord loop — **currently the active menu music** |
-| UI & shelter foley | Procedural (Web Audio) | — | Always available, 0 KB (includes campfire, rummage, weed snip, sleep, build taps, water-drop chime) |
+| UI & shelter foley | Procedural (Web Audio) | — | Always available, 0 KB (includes campfire, rummage, weed snip, sleep, build taps, water-drop chime, lift hum / door slide / floor tick / ding) |
 | Site ambience | Procedural (Web Audio) | — | 9 musical soundscapes (birdsong, chimes, drips, creaks, surf…), 350ms crossfade |
 
 ---
@@ -258,10 +261,12 @@ Consequence: in current play the day never advances and none of the 10 macro upg
 - [x] **M2 · Terrace v2:** Distinct box art per spot (`boxes-intact`/`cleared`, `box-double`, `box-single` with a dusty searched tint) and all 3 weed sprites across 6 patches with varied scales/flips
 - [x] **M2 · Terrace v2:** `stairwell-door` hotspot (hover outline + "coming soon" label, walk-over + toast via `pushNotice`)
 - [x] **M2 · Terrace v2:** 3 in-scene buildables (Upgrade Shelter → timber shelter with lantern glow, Herb Planter, Rain Barrel) with bottom-center `BuildBar`, floor blueprint markers, pop-in tween, colliders + Y-sort, and `builtProps` persistence
+- [x] **M2 · Terrace lift arrival:** 3-beat elevator cutscene (`TerraceLiftCutscene.tsx`, ~5.2s) — lobby Ken Burns push-in + footsteps (0–1.7s) → cover-fitted 1376×768 lift stage with sliding door panels in the doorway cutout, amber 1→2→3→4→R indicator, hum + micro-tremor (1.7–3.7s) → ding, doors slide apart onto the sunlit Terrace, ambience swell, caption and step-through into the shelter (3.7–5.2s). Skip/keys stop all beats and the hum; Reduce Motion swaps motion for fades. New foley: `startLiftHum` / `stopLiftHum`, `playLiftDoorSlide`, `playLiftFloorTick`, `playLiftDing`
+- [x] **M2 · Stage-space anchoring:** Scene coords are mapped through the backdrop's cover rect (`stageRect`, `toPx` / `toNorm`), so props, colliders, walk bounds, hotspots and floor clicks stay locked to the painted floor on 16:9, ultrawide and portrait windows
 - [ ] **M2:** Custom interactive scene configs & prop sprites for remaining shelters (`pipe`, `tree`, etc.)
 - [ ] **M2:** Tier 1–3 painted visual layer swaps & macro-build restoration integrated into interactive scenes
 - [ ] **M2:** Weather visuals & audio on the shelter scene (rain streaks, squall haze, rain-on-roof ambience)
-- [ ] **M2 Art & Immersion Upgrades:** Lit fire-pit sprite, "cleared" variants for `box-double`/`box-single`, custom per-shelter arrival vignettes, and dedicated Morning/Afternoon/Evening/Night painted backdrops
+- [ ] **M2 Art & Immersion Upgrades:** Lit fire-pit sprite, "cleared" variants for `box-double`/`box-single`, arrival vignettes for the other 8 shelters, and dedicated Morning/Afternoon/Evening/Night painted backdrops
 - [ ] **M2 Design:** Wood-burning fire (lit campfire consumes Timber over time), beyond-the-roof gathering via the lift/stairwell door, more Terrace anchor upgrades (parapet repair, string lights), traveler clothing progression (see `GAME_CONTEXT.md` → Design Roadmap)
 
 ### 🔧 Known Technical Backlog
@@ -271,7 +276,7 @@ Consequence: in current play the day never advances and none of the 10 macro upg
 - [ ] **Buildables → Cozy Index:** Decide how in-scene buildables relate to the 10 macro upgrades (Cozy Index, `totalUpgradesBuilt` milestones) — today they are purely visual + material sinks.
 - [ ] **Scene registry:** Replicate the data-driven `ShelterSceneConfig` pattern from `src/game/data/scenes/terrace.ts` to the remaining 8 shelters and register them in `getSceneConfig()` (`src/game/data/scenes/index.ts`).
 - [ ] **Split `shelterScene.ts`** (~1,600 lines after Terrace v2) into focused modules (actor/traveler, hotspots, builds, particles/effects, lighting) **before** adding Shelter #2.
-- [ ] **Stage-space coordinates:** Hotspot/obstacle coords are normalized to the viewport while the backdrop is cover-scaled, so on aspect ratios far from 16:9 (e.g. portrait windows) props drift off the painted floor. Map config coords through the backdrop's cover transform.
+- [x] ~~**Stage-space coordinates:** Hotspot/obstacle coords were normalized to the viewport while the backdrop is cover-scaled, so props drifted off the painted floor on aspect ratios far from 16:9.~~ → Fixed: everything maps through the backdrop's cover rect (`stageRect`).
 - [ ] **Menu music asset:** `/source/audio/music-menu.mp3` is optional and not shipped; the procedural warm-pad chord loop is the active menu music until a track is added.
 
 ### 🗺️ Backlog

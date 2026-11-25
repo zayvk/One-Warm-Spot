@@ -1,9 +1,15 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import BackgroundStage from './BackgroundStage.tsx';
+import TerraceLiftCutscene, { TERRACE_LIFT_HOLD_MS } from './TerraceLiftCutscene.tsx';
 import { BG_SHELTERS } from '../game/data/media.ts';
 import { SITES } from '../game/data/sites.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
-import { playFootstep, startSiteAmbience, fadeOutMenuMusic } from '../game/audio/soundEngine.ts';
+import {
+  playFootstep,
+  startSiteAmbience,
+  fadeOutMenuMusic,
+  stopLiftHum,
+} from '../game/audio/soundEngine.ts';
 import type { SiteId } from '../game/types/game.ts';
 
 export interface ArrivalCutsceneProps {
@@ -14,10 +20,14 @@ export interface ArrivalCutsceneProps {
 const DURATION = 3500; // ms
 const REDUCED_DURATION = 2200; // calm hold for reduce-motion
 const FOOTSTEP_TIMES = [400, 900, 1400, 1950, 2500]; // ms offsets
+const LIFT_FADE_MS = 400;
 
 export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const [phase, setPhase] = useState<'walking' | 'fadeout'>('walking');
+  const [skipped, setSkipped] = useState(false);
+  /* The Terrace arrives by the old apartment lift; other shelters use the Ken Burns fade */
+  const isLift = siteId === 'terrace';
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const completeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -31,27 +41,27 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
     onComplete();
   }, [onComplete]);
 
-  /* Start ambience + fade menu music */
+  /* Fade menu music; the lift swells its own ambience when the doors open */
   useEffect(() => {
     fadeOutMenuMusic();
-    startSiteAmbience(siteId);
+    if (!isLift) startSiteAmbience(siteId);
     return () => startSiteAmbience(null);
-  }, [siteId]);
+  }, [siteId, isLift]);
 
   /* Schedule footsteps (skip walking footsteps when reduceMotion is on) */
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || isLift) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     for (const ms of FOOTSTEP_TIMES) {
       timers.push(setTimeout(playFootstep, ms));
     }
     return () => timers.forEach(clearTimeout);
-  }, [reduceMotion]);
+  }, [reduceMotion, isLift]);
 
   /* Auto-complete after duration */
   useEffect(() => {
-    const holdMs = reduceMotion ? REDUCED_DURATION : DURATION;
-    const fadeMs = reduceMotion ? 300 : 600;
+    const holdMs = isLift ? TERRACE_LIFT_HOLD_MS : reduceMotion ? REDUCED_DURATION : DURATION;
+    const fadeMs = isLift ? LIFT_FADE_MS : reduceMotion ? 300 : 600;
     timerRef.current = setTimeout(() => {
       setPhase('fadeout');
       completeTimerRef.current = setTimeout(finishOnce, fadeMs);
@@ -61,12 +71,14 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
       clearTimeout(timerRef.current);
       clearTimeout(completeTimerRef.current);
     };
-  }, [reduceMotion, finishOnce]);
+  }, [reduceMotion, finishOnce, isLift]);
 
   /* Skip handler */
   const handleSkip = useCallback(() => {
     clearTimeout(timerRef.current);
     clearTimeout(completeTimerRef.current);
+    setSkipped(true);
+    stopLiftHum();
     setPhase('fadeout');
     completeTimerRef.current = setTimeout(finishOnce, reduceMotion ? 100 : 200);
   }, [finishOnce, reduceMotion]);
@@ -93,62 +105,68 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
         zIndex: 10,
         cursor: 'pointer',
         opacity: phase === 'fadeout' ? 0 : 1,
-        transition: `opacity ${reduceMotion ? '300ms' : '600ms'} ease`,
+        transition: `opacity ${isLift ? `${LIFT_FADE_MS}ms` : reduceMotion ? '300ms' : '600ms'} ease`,
         animation: reduceMotion ? 'owsFadeOpacity 250ms ease' : undefined,
       }}
     >
-      {/* Background with Ken Burns zoom (disabled when reduceMotion is active) */}
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          overflow: 'hidden',
-          transformOrigin: 'center center',
-          transform: reduceMotion ? 'none' : 'scale(1)',
-          animation: reduceMotion ? 'none' : 'kenBurns 4s ease-out forwards',
-        }}
-      >
-        <BackgroundStage media={bgMedia} />
-      </div>
+      {isLift ? (
+        <TerraceLiftCutscene reduceMotion={reduceMotion} skipped={skipped} />
+      ) : (
+        <>
+          {/* Background with Ken Burns zoom (disabled when reduceMotion is active) */}
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              overflow: 'hidden',
+              transformOrigin: 'center center',
+              transform: reduceMotion ? 'none' : 'scale(1)',
+              animation: reduceMotion ? 'none' : 'kenBurns 4s ease-out forwards',
+            }}
+          >
+            <BackgroundStage media={bgMedia} />
+          </div>
 
-      {/* Warm sunlit caption */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '10%',
-          left: 0,
-          right: 0,
-          zIndex: 6,
-          paddingInline: 'var(--space-md)',
-          textAlign: 'center',
-          animation: reduceMotion
-            ? 'owsFadeOpacity 400ms ease 200ms both'
-            : 'fadeInUp 1.2s ease 0.8s both',
-        }}
-      >
-        <p
-          style={{
-            fontFamily: 'var(--font-game-title)',
-            fontSize: 'clamp(1.4rem, 3.5vw, 2.2rem)',
-            color: '#fff',
-            textShadow: '0 2px 16px rgba(61,56,50,0.5), 0 1px 4px rgba(61,56,50,0.3)',
-            marginBottom: 'var(--space-sm)',
-          }}
-        >
-          Day 1 · {site?.name ?? 'Your Shelter'}
-        </p>
-        <p
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(0.85rem, 1.8vw, 1.05rem)',
-            color: 'rgba(255,255,255,0.86)',
-            textShadow: '0 1px 8px rgba(61,56,50,0.4)',
-            fontStyle: 'italic',
-          }}
-        >
-          Someone passed through here once. Time to make it warm again.
-        </p>
-      </div>
+          {/* Warm sunlit caption */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '10%',
+              left: 0,
+              right: 0,
+              zIndex: 6,
+              paddingInline: 'var(--space-md)',
+              textAlign: 'center',
+              animation: reduceMotion
+                ? 'owsFadeOpacity 400ms ease 200ms both'
+                : 'fadeInUp 1.2s ease 0.8s both',
+            }}
+          >
+            <p
+              style={{
+                fontFamily: 'var(--font-game-title)',
+                fontSize: 'clamp(1.4rem, 3.5vw, 2.2rem)',
+                color: '#fff',
+                textShadow: '0 2px 16px rgba(61,56,50,0.5), 0 1px 4px rgba(61,56,50,0.3)',
+                marginBottom: 'var(--space-sm)',
+              }}
+            >
+              Day 1 · {site?.name ?? 'Your Shelter'}
+            </p>
+            <p
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(0.85rem, 1.8vw, 1.05rem)',
+                color: 'rgba(255,255,255,0.86)',
+                textShadow: '0 1px 8px rgba(61,56,50,0.4)',
+                fontStyle: 'italic',
+              }}
+            >
+              Someone passed through here once. Time to make it warm again.
+            </p>
+          </div>
+        </>
+      )}
 
       {/* Skip button */}
       <button

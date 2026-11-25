@@ -1325,3 +1325,126 @@ export function playWaterChime(): void {
   puff(c, target, t + 0.05, 0.05, 0.3, 900, 3400, 1200);
 }
 
+/* ═══════════════════════════════════════════
+   Terrace Lift Arrival Foley
+   ═══════════════════════════════════════════ */
+
+interface LiftHumInstance {
+  bus: GainNode;
+  nodes: AudioNode[];
+}
+
+let liftHum: LiftHumInstance | null = null;
+
+/** Warm, low mechanical elevator hum (~82–110 Hz) that fades in softly */
+export function startLiftHum(): void {
+  if (liftHum || muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const bus = c.createGain();
+  bus.gain.value = 0;
+  bus.connect(getSfxTarget());
+
+  const swell = c.createGain();
+  swell.gain.value = 1;
+  swell.connect(bus);
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 320;
+  lp.connect(swell);
+  const nodes: AudioNode[] = [lp, swell];
+
+  for (const [freq, type, vol] of [
+    [82, 'sine', 0.07],
+    [110.4, 'triangle', 0.035],
+    [164.5, 'sine', 0.012],
+  ] as const) {
+    const osc = c.createOscillator();
+    osc.type = type;
+    osc.frequency.value = freq;
+    const g = c.createGain();
+    g.gain.value = vol;
+    osc.connect(g).connect(lp);
+    osc.start(t);
+    nodes.push(osc, g);
+  }
+
+  // Faint motor rumble under the tone
+  const rumble = c.createBufferSource();
+  rumble.buffer = getNoise('brown');
+  rumble.loop = true;
+  const rumbleGain = c.createGain();
+  rumbleGain.gain.value = 0.04;
+  rumble.connect(rumbleGain).connect(lp);
+  rumble.start(t, rand(0, 2));
+  nodes.push(rumble, rumbleGain);
+
+  // Slow gentle swell so the hum breathes (kept off the bus so fade-out is clean)
+  const lfo = c.createOscillator();
+  lfo.frequency.value = 0.7;
+  const lfoDepth = c.createGain();
+  lfoDepth.gain.value = 0.18;
+  lfo.connect(lfoDepth).connect(swell.gain);
+  lfo.start(t);
+  nodes.push(lfo, lfoDepth);
+
+  rampGain(bus.gain, 0.85, 0.4);
+  liftHum = { bus, nodes };
+}
+
+export function stopLiftHum(): void {
+  const inst = liftHum;
+  if (!inst) return;
+  liftHum = null;
+  if (ctx) rampGain(inst.bus.gain, 0, 0.3);
+  setTimeout(() => {
+    for (const n of inst.nodes) {
+      try {
+        if (n instanceof AudioScheduledSourceNode) n.stop();
+        n.disconnect();
+      } catch {
+        /* already stopped */
+      }
+    }
+    try {
+      inst.bus.disconnect();
+    } catch {
+      /* already disconnected */
+    }
+  }, 420);
+}
+
+/** Soft metallic door slide (~450ms) ending in a gentle clunk */
+export function playLiftDoorSlide(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+
+  // Rolling track rumble + airy metal sheen
+  puff(c, target, t, 0.09, 0.42, 160, 900, 420);
+  puff(c, target, t + 0.03, 0.035, 0.38, 1800, 5200, 2600);
+  // Clunk as the panels settle
+  tone(c, target, t + 0.4, { freq: 96 * pitchVar(), glideTo: 52, glideTime: 0.08, vol: 0.12, decay: 0.12, type: 'triangle', attack: 0.002 });
+  tone(c, target, t + 0.41, { freq: 1420 * pitchVar(), vol: 0.018, decay: 0.09, attack: 0.002 });
+}
+
+/** Tiny relay click as the floor indicator ticks up */
+export function playLiftFloorTick(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  relayTick(c, getSfxTarget(), now() + 0.005, 0.045);
+}
+
+/** Warm vintage brass "ding!" on arriving at the roof */
+export function playLiftDing(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  bell(c, getSfxTarget(), now() + 0.01, 880, 0.12, 2.2, [
+    [1, 1],
+    [2.01, 0.32],
+    [3.02, 0.12],
+    [4.18, 0.05],
+  ]);
+}
+

@@ -54,6 +54,19 @@ export function canAfford(
   );
 }
 
+/** Deduct a material cost, or `null` if the stockpile can't cover it */
+export function spendResources(
+  resources: Record<ResourceId, number>,
+  cost: Partial<Record<ResourceId, number>>,
+): Record<ResourceId, number> | null {
+  if (!canAfford(cost, resources)) return null;
+  const next = { ...resources };
+  for (const [id, amount] of Object.entries(cost) as [ResourceId, number][]) {
+    next[id] = (next[id] ?? 0) - amount;
+  }
+  return next;
+}
+
 export function getUpgradeStatus(
   upgrade: Upgrade,
   builtIds: readonly string[],

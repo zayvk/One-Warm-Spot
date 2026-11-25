@@ -1282,3 +1282,46 @@ export function playSleep(): void {
   tone(c, target, t + 0.34, { freq: 220.0, vol: 0.045, decay: 1.3, attack: 0.1 });
 }
 
+/** Soft mallet taps on timber + a little sawdust brush while building in-scene */
+export function playBuild(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const base = now();
+  const target = getSfxTarget();
+
+  [0, 0.22, 0.44, 0.74].forEach((off, i) => {
+    const t = base + off;
+    tone(c, target, t, {
+      freq: (i === 3 ? 150 : 205) * pitchVar(),
+      glideTo: 90,
+      glideTime: 0.07,
+      vol: 0.12,
+      decay: 0.09,
+      type: 'triangle',
+      attack: 0.002,
+    });
+    puff(c, target, t + 0.01, 0.05, 0.12, 600, 2600, 900);
+  });
+}
+
+/** Gentle water-drop plinks into the new rain barrel */
+export function playWaterChime(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+
+  [[880, 0], [1175, 0.16], [988, 0.34]].forEach(([freq, off]) => {
+    const pv = pitchVar();
+    tone(c, target, t + off, {
+      freq: freq * pv,
+      glideTo: freq * 1.45 * pv,
+      glideTime: 0.05,
+      vol: 0.07,
+      decay: 0.35,
+      attack: 0.003,
+    });
+  });
+  puff(c, target, t + 0.05, 0.05, 0.3, 900, 3400, 1200);
+}
+

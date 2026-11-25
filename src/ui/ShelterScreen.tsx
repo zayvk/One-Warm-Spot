@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import ShelterCanvas from '../game/renderer/ShelterCanvas.tsx';
+import ShelterCanvas, { type ShelterCanvasHandle } from '../game/renderer/ShelterCanvas.tsx';
+import type { SceneBuildState } from '../game/renderer/shelterScene.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { SITES } from '../game/data/sites.ts';
 import { RESOURCES } from '../game/data/resources.ts';
+import { getSceneConfig } from '../game/data/scenes/index.ts';
 import { playClick, playHover, startSiteAmbience } from '../game/audio/soundEngine.ts';
 import type { ResourceId } from '../game/types/game.ts';
+import BuildBar from './BuildBar.tsx';
 
 export interface ShelterScreenProps {
   onBackToTitle: () => void;
-  onResetConfirmed: (clearMilestones: boolean) => void;
 }
 
 /** Soft loudness for the in-shelter ambience bed */
@@ -22,6 +24,10 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
 
   const prevResourcesRef = useRef(resources);
   const [pulsing, setPulsing] = useState<Partial<Record<ResourceId, boolean>>>({});
+  const canvasRef = useRef<ShelterCanvasHandle>(null);
+  /* Null until the scene reports its restored build state, so chips never flash */
+  const [buildState, setBuildState] = useState<SceneBuildState | null>(null);
+  const buildables = getSceneConfig(chosenSite)?.buildables ?? [];
 
   /* Soft shelter soundscape while on this screen */
   useEffect(() => {
@@ -124,8 +130,18 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
 
       {/* Interactive PixiJS canvas (full viewport) */}
       <main style={{ position: 'relative', flex: 1, minHeight: 0, background: 'var(--sky-100)' }}>
-        <ShelterCanvas />
+        <ShelterCanvas ref={canvasRef} onBuildStateChange={setBuildState} />
       </main>
+
+      {buildState && buildables.length > 0 && (
+        <BuildBar
+          buildables={buildables}
+          built={buildState.built}
+          pending={buildState.pending}
+          resources={resources}
+          onBuild={(id) => canvasRef.current?.requestBuild(id) ?? false}
+        />
+      )}
     </div>
   );
 }

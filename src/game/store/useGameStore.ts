@@ -44,20 +44,11 @@ import {
   type ScavengeResult,
 } from '../engine/scavenge.ts';
 import { morningWaterBonus, rollWeather } from '../engine/weather.ts';
+import { clearTerraceState } from '../engine/terraceState.ts';
 
 /* ── Helpers ── */
 
 const REDUCE_MOTION_KEY = 'ows_reduce_motion';
-
-function clearTerracePropState(): void {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('ows_terrace_state');
-    }
-  } catch {
-    /* ignore storage restrictions */
-  }
-}
 
 function getInitialReduceMotion(): boolean {
   try {
@@ -193,6 +184,8 @@ export interface GameState {
   getSaveSnapshot: () => SaveState;
   applyImportedSave: (save: SaveState) => void;
   dismissNotice: (id: number) => void;
+  /** Queue a gentle toast (e.g. in-scene discoveries) */
+  pushNotice: (notice: Omit<Notice, 'id'>) => void;
   _save: () => void;
 }
 
@@ -263,7 +256,7 @@ export const useGameStore = create<GameState>()((set, get) => {
 
     chooseSite(id: SiteId) {
       // Claiming always begins a fresh run with the site's mode rules
-      clearTerracePropState();
+      clearTerraceState();
       const s = get();
       const mode = SITES.find((site) => site.id === id)?.mode ?? s.selectedMode;
       set({
@@ -402,7 +395,7 @@ export const useGameStore = create<GameState>()((set, get) => {
 
     resetGame(opts) {
       clearSave();
-      clearTerracePropState();
+      clearTerraceState();
       if (opts?.clearMilestones) {
         clearProgress();
         const stats = emptyStats();
@@ -426,6 +419,13 @@ export const useGameStore = create<GameState>()((set, get) => {
 
     dismissNotice(id: number) {
       set({ notices: get().notices.filter((n) => n.id !== id) });
+    },
+
+    pushNotice(notice) {
+      const { notices } = get();
+      // Don't stack the same message while it's still on screen
+      if (notices.some((n) => n.title === notice.title)) return;
+      set({ notices: [...notices, { ...notice, id: ++noticeSeq }] });
     },
 
     _save() {

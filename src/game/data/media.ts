@@ -105,6 +105,13 @@ export const SCENE_PROPS = {
   'prop-boxes-cleared': '/source/props/prop-boxes-cleared.webp',
   'prop-weeds-1': '/source/props/prop-weeds-1.webp',
   'prop-weeds-2': '/source/props/prop-weeds-2.webp',
+  clothShed: '/source/props/prop-cloth-shed.webp',
+  shedUpgraded: '/source/props/prop-shed-upgraded.webp',
+  boxSingle: '/source/props/prop-box-single.webp',
+  boxDouble: '/source/props/prop-box-double.webp',
+  weeds3: '/source/props/prop-weeds-3.webp',
+  planter: '/source/props/prop-planter.webp',
+  rainBarrel: '/source/props/prop-rain-barrel.webp',
 } as const;
 
 export type PropId = keyof typeof SCENE_PROPS;

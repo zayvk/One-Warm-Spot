@@ -14,7 +14,6 @@ type Screen = 'title' | 'site-select' | 'arrival' | 'shelter';
 export default function App() {
   const chosenSite = useGameStore((s) => s.chosenSite);
   const reduceMotion = useGameStore((s) => s.reduceMotion);
-  const resetGame = useGameStore((s) => s.resetGame);
 
   const [screen, setScreen] = useState<Screen>('title');
   /* Arrival & shelter need a claimed site — fall back to the title otherwise */
@@ -72,14 +71,6 @@ export default function App() {
     }
   }, [chosenSite]);
 
-  const handleResetConfirmed = useCallback(
-    (clearMilestones: boolean) => {
-      resetGame({ clearMilestones });
-      goToTitle();
-    },
-    [resetGame, goToTitle],
-  );
-
   let content: React.ReactNode;
   if (activeScreen === 'title') {
     content = <TitleScreen onStart={goToSiteSelect} onContinue={handleContinue} />;
@@ -90,7 +81,7 @@ export default function App() {
       <ArrivalCutscene siteId={chosenSite} onComplete={goToShelter} />
     );
   } else {
-    content = <ShelterScreen onBackToTitle={goToTitle} onResetConfirmed={handleResetConfirmed} />;
+    content = <ShelterScreen onBackToTitle={goToTitle} />;
   }
 
   return (

@@ -13,7 +13,6 @@ type Screen = 'title' | 'site-select' | 'arrival' | 'shelter';
 
 export default function App() {
   const chosenSite = useGameStore((s) => s.chosenSite);
-  const travelerGender = useGameStore((s) => s.travelerGender);
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const resetGame = useGameStore((s) => s.resetGame);
 
@@ -88,7 +87,7 @@ export default function App() {
     content = <SiteSelector onBack={goToTitle} onChosen={goToArrival} />;
   } else if (activeScreen === 'arrival' && chosenSite) {
     content = (
-      <ArrivalCutscene siteId={chosenSite} gender={travelerGender} onComplete={goToShelter} />
+      <ArrivalCutscene siteId={chosenSite} onComplete={goToShelter} />
     );
   } else {
     content = <ShelterScreen onBackToTitle={goToTitle} onResetConfirmed={handleResetConfirmed} />;

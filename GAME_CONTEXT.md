@@ -57,8 +57,8 @@ An asteroid shook the Earth, but the dust has settled. Skies are clearing, sunli
 
 1. **Title Screen** — Game title, Start / Continue / About buttons, shared menu music.
 2. **Shelter Selector** — Traveler picker (Female / Male sprite portraits), Cozy / Challenge mode tabs, 9 shelter cards with hover background crossfade and procedural ambience.
-3. **Arrival Cutscene** (~3.5s) — Ken Burns zoom on the chosen shelter background, animated traveler sprite walking toward the site, Day 1 caption fade-in, skippable.
-4. **Day 1 Interactive Shelter** — Point-and-click illustrated scene (starting with **Old Apartment Terrace** as the reusable vertical slice): click anywhere on the floor to walk around, interact directly with props (light the fire pit for campfire glow and crackle, rummage broken boxes for Scrap & Timber, clear overgrown weeds for Seeds & Cloth, or rest under the shed), with a minimal floating HUD displaying the shelter name and Found Materials Pouch.
+3. **Arrival Cutscene** (~3.5s) — Smooth atmospheric Ken Burns zoom on the chosen shelter background, soft footsteps and shelter ambience swelling in, Day 1 title caption fade-in, skippable, crossfading cleanly into the playable shelter where the traveler walks onto the stage.
+4. **Day 1 Interactive Shelter** — Point-and-click illustrated scene (starting with **Old Apartment Terrace** as the reusable vertical slice): click anywhere on the floor to walk around (with prop collision blocking and Y-depth sorting), interact directly with scattered props (light the fire pit for campfire glow and crackle, rummage 3 box/crate clusters for Scrap, Timber & Cloth, clear 6 weed patches along the parapet and floor cracks for Seeds & Cloth, or rest under the shed), with a minimal floating HUD displaying the shelter name and Found Materials Pouch.
 
 ---
 
@@ -114,6 +114,15 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 
 - **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP backgrounds, stage backdrops, character pose sprites, and interactive prop sprites organized under `public/source/`. Target <5 MB initial browser payload.
 - **Audio:** Shared menu music bed (`public/source/audio/music-menu.mp3`) with procedural warm-pad fallback. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle, box rummage, weed snip, bedroll sleep) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
+
+---
+
+## Planned Art & Immersion Upgrades (Backlog)
+
+- **Terrace Stage v2 Redesign:** Replace the right-side wooden shed with an old apartment rooftop stairwell/lift entrance, and add a shabby cloth lean-to shed positioned near the central fire pit.
+- **Expanded Prop Variety:** Dedicated single/double box sprites, more weed species, and a dedicated lit fire-pit sprite variant.
+- **Custom Shelter Arrival Vignettes:** Per-shelter atmospheric intros (e.g., apartment lift/stairwell door opening onto the Terrace).
+- **Full Time-of-Day Painted Scenes:** Dedicated Morning, Afternoon, Evening, and Night painted stage backdrops (and time-specific props) rather than tint-only lighting.
 
 ---
 

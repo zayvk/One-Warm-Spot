@@ -1,8 +1,10 @@
 import {
   Application,
   Assets,
+  Circle,
   Container,
   Graphics,
+  Rectangle,
   Sprite,
   Text,
   TextStyle,
@@ -127,7 +129,6 @@ function createRadialTexture(): Texture {
   return Texture.from(canvas);
 }
 
-/** Get the scene config for a site (only terrace for now) */
 function getSceneConfig(siteId: SiteId): ShelterSceneConfig | null {
   if (siteId === 'terrace') return terraceScene;
   return null;
@@ -141,7 +142,7 @@ const TERRACE_STATE_KEY = 'ows_terrace_state';
 
 interface TerraceState {
   fireLit: boolean;
-  boxesSearched: boolean;
+  searchedBoxes: string[];
   clearedWeeds: string[];
 }
 
@@ -149,15 +150,22 @@ function loadTerraceState(): TerraceState {
   try {
     const raw = localStorage.getItem(TERRACE_STATE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<TerraceState>;
+      const parsed = JSON.parse(raw) as Partial<TerraceState> & { boxesSearched?: boolean };
+      const searchedBoxes = Array.isArray(parsed.searchedBoxes)
+        ? parsed.searchedBoxes.filter((v): v is string => typeof v === 'string')
+        : parsed.boxesSearched
+          ? ['boxes-1']
+          : [];
       return {
         fireLit: Boolean(parsed.fireLit),
-        boxesSearched: Boolean(parsed.boxesSearched),
-        clearedWeeds: Array.isArray(parsed.clearedWeeds) ? parsed.clearedWeeds : [],
+        searchedBoxes,
+        clearedWeeds: Array.isArray(parsed.clearedWeeds)
+          ? parsed.clearedWeeds.filter((v): v is string => typeof v === 'string')
+          : [],
       };
     }
   } catch { /* ignore */ }
-  return { fireLit: false, boxesSearched: false, clearedWeeds: [] };
+  return { fireLit: false, searchedBoxes: [], clearedWeeds: [] };
 }
 
 function saveTerraceState(s: TerraceState): void {
@@ -199,8 +207,9 @@ export class ShelterScene {
   private readonly radial: Texture;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
 
-  /* Layers: bg → lighting → hotspots → warmth → traveler → fire/particles → labels */
+  /* Layers: bg (+ floorHit) → lighting → worldLayer (Y-sorted props & traveler) → warmth/fx → labels */
   private readonly bgLayer = new Container();
+  private readonly floorHit = new Graphics();
   private bgSprite: Sprite | null = null;
   private bgFallback: Graphics | null = null;
   private bgToken = 0;
@@ -210,22 +219,24 @@ export class ShelterScene {
   private readonly sunGlow: Sprite;
   private readonly warmth: Sprite;
 
+  /* Y-sorted world layer (props + traveler share this container) */
+  private readonly worldLayer = new Container();
+
   /* Traveler */
-  private readonly travelerLayer = new Container();
+  private readonly travelerNode = new Container();
   private travelerSprite: Sprite | null = null;
   private travelerShadow: Graphics;
   private currentPose: TravelerPose = 'idle';
   private poseToken = 0;
   private poseScaleMultiplier = 1;
-  private targetX = 0.38;
-  private targetY = 0.72;
+  private targetX = 0.40;
+  private targetY = 0.73;
   private travelerFlipped = false;
   private walkingTo: { x: number; y: number } | null = null;
   private breathPhase = 0;
   private footstepAccum = 0;
 
   /* Hotspots */
-  private readonly hotspotLayer = new Container();
   private readonly labelLayer = new Container();
   private hotspots: HotspotNode[] = [];
   private sceneConfig: ShelterSceneConfig | null = null;
@@ -268,32 +279,50 @@ export class ShelterScene {
     this.height = app.screen.height;
     this.terrace = loadTerraceState();
 
-    /* Lighting washes */
+    /* Floor click catcher at base of bgLayer (no stage.hitArea so child hotspots receive hits) */
+    this.floorHit.eventMode = 'static';
+    this.floorHit.cursor = 'crosshair';
+    this.floorHit.on('pointerdown', this.handleFloorPointerDown, this);
+    this.bgLayer.addChild(this.floorHit);
+
+    /* Lighting washes (non-interactive) */
     this.mulWash = new Sprite(Texture.WHITE);
     this.mulWash.blendMode = 'multiply';
+    this.mulWash.eventMode = 'none';
     this.scrWash = new Sprite(Texture.WHITE);
     this.scrWash.blendMode = 'screen';
+    this.scrWash.eventMode = 'none';
     this.sunGlow = new Sprite(this.radial);
     this.sunGlow.anchor.set(0.5);
     this.sunGlow.blendMode = 'screen';
+    this.sunGlow.eventMode = 'none';
     this.warmth = new Sprite(this.radial);
     this.warmth.anchor.set(0.5);
     this.warmth.blendMode = 'add';
     this.warmth.tint = 0xffb060;
+    this.warmth.eventMode = 'none';
 
-    /* Traveler shadow */
+    /* Y-sorted world layer */
+    this.worldLayer.sortableChildren = true;
+
+    /* Traveler container & shadow (passive/none so props underneath stay clickable) */
+    this.travelerNode.eventMode = 'none';
     this.travelerShadow = new Graphics();
-    this.travelerLayer.addChild(this.travelerShadow);
+    this.travelerNode.addChild(this.travelerShadow);
+    this.worldLayer.addChild(this.travelerNode);
 
-    /* Build stage layer order */
+    /* Non-interactive FX & label overlays */
+    this.fxLayer.eventMode = 'none';
+    this.labelLayer.eventMode = 'none';
+
+    /* Stage layer order */
     app.stage.addChild(
       this.bgLayer,
       this.mulWash,
       this.scrWash,
       this.sunGlow,
-      this.hotspotLayer,
+      this.worldLayer,
       this.warmth,
-      this.travelerLayer,
       this.fxLayer,
       this.labelLayer,
     );
@@ -307,11 +336,6 @@ export class ShelterScene {
     this.layout();
     this.applyLighting();
     this.startEntryAnimation();
-
-    /* Pointer interaction */
-    app.stage.eventMode = 'static';
-    app.stage.hitArea = app.screen;
-    app.stage.on('pointerdown', this.handlePointerDown, this);
 
     app.ticker.add(this.update, this);
   }
@@ -351,7 +375,6 @@ export class ShelterScene {
     this.width = w;
     this.height = h;
     this.app.renderer.resize(w, h);
-    this.app.stage.hitArea = this.app.screen;
     this.layout();
     this.applyLighting();
   }
@@ -364,7 +387,7 @@ export class ShelterScene {
     this.timers.clear();
     setCampfireAudio(false);
     this.app.ticker.remove(this.update, this);
-    this.app.stage.off('pointerdown', this.handlePointerDown, this);
+    this.floorHit.off('pointerdown', this.handleFloorPointerDown, this);
     this.hotspots = [];
     this.particles = [];
     this.app.destroy({ removeView: true }, { children: true, texture: false, textureSource: false });
@@ -399,8 +422,9 @@ export class ShelterScene {
         const sprite = new Sprite(texture);
         sprite.anchor.set(0.5);
         sprite.alpha = this.state.reduceMotion ? 1 : 0;
+        sprite.eventMode = 'none';
         this.bgSprite = sprite;
-        this.bgLayer.addChild(sprite);
+        this.bgLayer.addChildAt(sprite, this.bgFallback ? 1 : 0);
         this.layout();
       })
       .catch(() => { /* keep the gradient fallback */ });
@@ -410,6 +434,7 @@ export class ShelterScene {
     const site = SITES.find((s) => s.id === siteId);
     if (!this.bgFallback) {
       this.bgFallback = new Graphics();
+      this.bgFallback.eventMode = 'none';
       this.bgLayer.addChildAt(this.bgFallback, 0);
     }
     const g = this.bgFallback;
@@ -445,7 +470,7 @@ export class ShelterScene {
         sprite.anchor.set(0.5, 1);
         sprite.alpha = old ? 0 : 1;
         this.travelerSprite = sprite;
-        this.travelerLayer.addChild(sprite);
+        this.travelerNode.addChild(sprite);
 
         if (old && !this.state.reduceMotion) {
           this.poseScaleMultiplier = 0.96;
@@ -481,22 +506,28 @@ export class ShelterScene {
   }
 
   private layoutTraveler(): void {
-    if (!this.travelerSprite) return;
     const { width: W, height: H } = this;
-    const tH = H * 0.22;
-    const tex = this.travelerSprite.texture;
-    const scale = (tH / (tex.height || 1)) * this.poseScaleMultiplier;
-    this.travelerSprite.scale.set(
-      scale * (this.travelerFlipped ? -1 : 1),
-      scale,
-    );
-    this.travelerSprite.position.set(W * this.targetX, H * this.targetY);
+    const px = W * this.targetX;
+    const py = H * this.targetY;
+    this.travelerNode.position.set(px, py);
+    this.travelerNode.zIndex = Math.round(py);
 
-    /* Ground contact shadow */
+    const tH = H * 0.22;
+    if (this.travelerSprite) {
+      const tex = this.travelerSprite.texture;
+      const scale = (tH / (tex.height || 1)) * this.poseScaleMultiplier;
+      this.travelerSprite.scale.set(
+        scale * (this.travelerFlipped ? -1 : 1),
+        scale,
+      );
+      this.travelerSprite.position.set(0, 0);
+    }
+
+    /* Ground contact shadow (local to travelerNode at feet) */
     const shadowW = this.currentPose === 'sleep' ? tH * 0.36 : tH * 0.24;
     this.travelerShadow.clear();
     this.travelerShadow.ellipse(0, 0, shadowW, tH * 0.055).fill({ color: 0x1e1812, alpha: 0.22 });
-    this.travelerShadow.position.set(W * this.targetX, H * this.targetY);
+    this.travelerShadow.position.set(0, 0);
   }
 
   private setPose(pose: TravelerPose): void {
@@ -510,9 +541,9 @@ export class ShelterScene {
     for (const hs of this.hotspots) {
       hs.root.destroy({ children: true });
     }
-    this.hotspotLayer.removeChildren();
     this.labelLayer.removeChildren();
     this.hotspots = [];
+    this.fireFlames = null;
 
     if (!this.sceneConfig) return;
 
@@ -520,15 +551,18 @@ export class ShelterScene {
       const root = new Container();
       root.eventMode = 'static';
       root.cursor = 'pointer';
+      root.hitArea = cfg.type === 'sleep' ? new Circle(0, -10, 56) : new Circle(0, -20, 42);
 
       const hoverRing = new Graphics();
       hoverRing.visible = false;
+      hoverRing.eventMode = 'none';
       root.addChild(hoverRing);
 
       let propSprite: Sprite | null = null;
       if (cfg.propSprite) {
         propSprite = Sprite.from(Texture.EMPTY);
         propSprite.anchor.set(0.5, 1);
+        propSprite.eventMode = 'none';
         root.addChild(propSprite);
 
         Assets.load<Texture>(cfg.propSprite)
@@ -540,13 +574,6 @@ export class ShelterScene {
           })
           .catch(() => { /* keep empty */ });
       }
-
-      /* Hit area */
-      const hitRadius = cfg.type === 'sleep' ? 48 : 34;
-      const hitY = cfg.propSprite ? -22 : 0;
-      const hit = new Graphics();
-      hit.circle(0, hitY, hitRadius).fill({ color: 0xffffff, alpha: 0.001 });
-      root.addChild(hit);
 
       /* Hover label */
       const label = new Text({
@@ -583,7 +610,7 @@ export class ShelterScene {
         this.onHotspotClick(node);
       });
 
-      this.hotspotLayer.addChild(root);
+      this.worldLayer.addChild(root);
       this.hotspots.push(node);
     }
   }
@@ -614,13 +641,15 @@ export class ShelterScene {
     const g = node.hoverRing;
     g.clear();
     const ry = node.config.type === 'sleep' ? 0 : -4;
-    g.ellipse(0, ry, 28, 10).stroke({ color: 0xfff2cc, width: 2, alpha: 0.85 });
+    const rx = node.config.type === 'sleep' ? 38 : 30;
+    g.ellipse(0, ry, rx, 11).stroke({ color: 0xfff2cc, width: 2.2, alpha: 0.9 });
   }
 
   private layoutHotspotLabel(node: HotspotNode): void {
     const { width: W, height: H } = this;
     const rawX = W * node.config.position.x;
-    const rawY = H * node.config.position.y - 54;
+    const propH = node.config.propScale ? H * node.config.propScale : 44;
+    const rawY = H * node.config.position.y - Math.max(44, propH + 10);
     const pw = node.label.width + 18;
     const ph = node.label.height + 10;
     const px = Math.max(pw / 2 + 12, Math.min(W - pw / 2 - 12, rawX));
@@ -630,34 +659,31 @@ export class ShelterScene {
     node.labelPill.clear();
     node.labelPill
       .roundRect(px - pw / 2, py - ph + 4, pw, ph, 10)
-      .fill({ color: 0xfffcf6, alpha: 0.92 })
+      .fill({ color: 0xfffcf6, alpha: 0.94 })
       .stroke({ color: 0xe8cdb5, width: 1.5 });
   }
 
   private onHotspotClick(node: HotspotNode): void {
-    if (this.interactionLock) return;
+    if (this.interactionLock || !this.entryDone) return;
     if (node.interacted && node.config.type !== 'sleep') return;
 
-    /* Wake from sleep if clicking a different hotspot */
     if (this.sleepMode && node.config.type !== 'sleep') {
       this.wakeUp();
     }
 
-    const scene = this.sceneConfig;
-    if (!scene) return;
-
-    const tX = Math.max(
-      scene.walkableArea.xMin,
-      Math.min(scene.walkableArea.xMax, node.config.position.x),
-    );
-    const tY = Math.max(
-      scene.walkableArea.yMin,
-      Math.min(scene.walkableArea.yMax, node.config.position.y + 0.04),
-    );
+    const cfg = node.config;
+    const rawX = cfg.position.x + (cfg.standOffset?.dx ?? 0);
+    const rawY = cfg.position.y + (cfg.standOffset?.dy ?? 0.04);
+    const standPos = this.clampFloorTarget(rawX, rawY);
 
     this.onHotspotHover(node, false);
     this.interactionLock = true;
-    this.walkTo(tX, tY, () => {
+    this.walkTo(standPos.x, standPos.y, () => {
+      /* Face toward the prop before interacting */
+      if (Math.abs(cfg.position.x - this.targetX) > 0.005) {
+        this.travelerFlipped = cfg.position.x < this.targetX;
+        this.layoutTraveler();
+      }
       this.executeInteraction(node);
     });
   }
@@ -680,16 +706,26 @@ export class ShelterScene {
     }
   }
 
+  private disableHotspotInteraction(node: HotspotNode): void {
+    node.interacted = true;
+    node.hovered = false;
+    node.label.visible = false;
+    node.labelPill.visible = false;
+    node.hoverRing.visible = false;
+    node.root.cursor = 'default';
+    node.root.eventMode = 'none';
+    if (node.propSprite) node.propSprite.tint = 0xffffff;
+  }
+
   private interactFirepit(node: HotspotNode): void {
     playFireLight();
-    node.interacted = true;
-    node.root.cursor = 'default';
+    this.disableHotspotInteraction(node);
     this.fireLit = true;
     this.terrace.fireLit = true;
     saveTerraceState(this.terrace);
     setCampfireAudio(true);
 
-    this.ensureFireEffects();
+    this.ensureFireEffects(node);
     this.layout();
 
     this.after(600, () => {
@@ -698,17 +734,20 @@ export class ShelterScene {
     });
   }
 
-  private ensureFireEffects(): void {
+  private ensureFireEffects(fireNode?: HotspotNode): void {
     if (!this.fireGlow) {
       this.fireGlow = new Sprite(this.radial);
       this.fireGlow.anchor.set(0.5);
       this.fireGlow.blendMode = 'add';
       this.fireGlow.tint = 0xff8030;
+      this.fireGlow.eventMode = 'none';
       this.fxLayer.addChild(this.fireGlow);
     }
-    if (!this.fireFlames) {
+    const targetNode = fireNode ?? this.hotspots.find((h) => h.config.id === 'firepit');
+    if (!this.fireFlames && targetNode) {
       this.fireFlames = new Graphics();
-      this.fxLayer.addChild(this.fireFlames);
+      this.fireFlames.eventMode = 'none';
+      targetNode.root.addChild(this.fireFlames);
     }
   }
 
@@ -717,9 +756,10 @@ export class ShelterScene {
     playRummage();
 
     this.after(1000, () => {
-      node.interacted = true;
-      node.root.cursor = 'default';
-      this.terrace.boxesSearched = true;
+      this.disableHotspotInteraction(node);
+      if (!this.terrace.searchedBoxes.includes(node.config.id)) {
+        this.terrace.searchedBoxes.push(node.config.id);
+      }
       saveTerraceState(this.terrace);
 
       if (node.config.propSpriteAfter && node.propSprite) {
@@ -751,8 +791,7 @@ export class ShelterScene {
     });
 
     this.after(800, () => {
-      node.interacted = true;
-      node.root.cursor = 'default';
+      this.disableHotspotInteraction(node);
       if (!this.terrace.clearedWeeds.includes(node.config.id)) {
         this.terrace.clearedWeeds.push(node.config.id);
       }
@@ -800,13 +839,57 @@ export class ShelterScene {
     this.target = LIGHTING.morning;
   }
 
+  /* ── Collision Clamping ── */
+
+  private isColliderActive(hs: HotspotNode): boolean {
+    if (!hs.config.collider) return false;
+    /* Cleared weed patches free up their floor space */
+    if (hs.config.type === 'weeds' && hs.interacted) return false;
+    return true;
+  }
+
+  /**
+   * Clamps a normalized (x, y) point into the walkable floor area and pushes it
+   * outside any active prop's elliptical collider so the traveler never stands on props.
+   */
+  private clampFloorTarget(nx: number, ny: number): { x: number; y: number } {
+    const area = this.sceneConfig?.walkableArea ?? FALLBACK_WALK_AREA;
+    let x = Math.max(area.xMin, Math.min(area.xMax, nx));
+    let y = Math.max(area.yMin, Math.min(area.yMax, ny));
+
+    for (let pass = 0; pass < 2; pass++) {
+      for (const hs of this.hotspots) {
+        if (!this.isColliderActive(hs)) continue;
+        const col = hs.config.collider!;
+        const cx = hs.config.position.x;
+        const cy = hs.config.position.y;
+        const dx = (x - cx) / col.rx;
+        const dy = (y - cy) / col.ry;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < 1) {
+          if (distSq < 1e-6) {
+            y = cy + col.ry * 1.06;
+          } else {
+            const dist = Math.sqrt(distSq);
+            x = cx + (dx / dist) * col.rx * 1.06;
+            y = cy + (dy / dist) * col.ry * 1.06;
+          }
+          x = Math.max(area.xMin, Math.min(area.xMax, x));
+          y = Math.max(area.yMin, Math.min(area.yMax, y));
+        }
+      }
+    }
+
+    return { x, y };
+  }
+
   /* ── Particles & Floating Reward Text ── */
 
   private spawnLeafParticles(pos: { x: number; y: number }): void {
     if (this.state.reduceMotion) return;
     const { width: W, height: H } = this;
     const baseX = W * pos.x;
-    const baseY = H * pos.y - 16;
+    const baseY = H * pos.y - 14;
     const colors = [0x6e9458, 0x8aad7a, 0xa8c698, 0x5b7d4e];
 
     for (let i = 0; i < 10; i++) {
@@ -874,7 +957,7 @@ export class ShelterScene {
     this.setPose('walk');
   }
 
-  private handlePointerDown = (event: { global: { x: number; y: number } }): void => {
+  private handleFloorPointerDown = (event: { global: { x: number; y: number } }): void => {
     if (this.interactionLock || !this.entryDone) return;
     const { width: W, height: H } = this;
     const nx = event.global.x / W;
@@ -888,8 +971,9 @@ export class ShelterScene {
       this.setPose('idle');
     }
 
+    const clamped = this.clampFloorTarget(nx, ny);
     playFootstep();
-    this.walkTo(nx, ny, () => {
+    this.walkTo(clamped.x, clamped.y, () => {
       this.setPose('idle');
     });
   };
@@ -941,24 +1025,22 @@ export class ShelterScene {
     if (ts.fireLit) {
       this.fireLit = true;
       setCampfireAudio(true);
-      this.ensureFireEffects();
       const fp = this.hotspots.find((h) => h.config.id === 'firepit');
       if (fp) {
-        fp.interacted = true;
-        fp.root.cursor = 'default';
+        this.disableHotspotInteraction(fp);
+        this.ensureFireEffects(fp);
       }
     }
 
-    if (ts.boxesSearched) {
-      const boxes = this.hotspots.find((h) => h.config.id === 'boxes');
-      if (boxes) {
-        boxes.interacted = true;
-        boxes.root.cursor = 'default';
-        if (boxes.config.propSpriteAfter && boxes.propSprite) {
-          Assets.load<Texture>(boxes.config.propSpriteAfter)
+    for (const boxId of ts.searchedBoxes) {
+      const box = this.hotspots.find((h) => h.config.id === boxId);
+      if (box) {
+        this.disableHotspotInteraction(box);
+        if (box.config.propSpriteAfter && box.propSprite) {
+          Assets.load<Texture>(box.config.propSpriteAfter)
             .then((tex) => {
-              if (!this.disposed && tex && boxes.propSprite && !boxes.propSprite.destroyed) {
-                boxes.propSprite.texture = tex;
+              if (!this.disposed && tex && box.propSprite && !box.propSprite.destroyed) {
+                box.propSprite.texture = tex;
                 this.layout();
               }
             })
@@ -970,8 +1052,7 @@ export class ShelterScene {
     for (const weedId of ts.clearedWeeds) {
       const weed = this.hotspots.find((h) => h.config.id === weedId);
       if (weed) {
-        weed.interacted = true;
-        weed.root.cursor = 'default';
+        this.disableHotspotInteraction(weed);
         if (weed.propSprite) weed.propSprite.alpha = 0;
       }
     }
@@ -981,6 +1062,10 @@ export class ShelterScene {
 
   private layout(): void {
     const { width: W, height: H } = this;
+
+    this.floorHit.clear();
+    this.floorHit.rect(0, 0, W, H).fill({ color: 0x000000, alpha: 0.001 });
+    this.floorHit.hitArea = new Rectangle(0, 0, W, H);
 
     if (this.bgSprite) {
       const tex = this.bgSprite.texture;
@@ -1005,9 +1090,18 @@ export class ShelterScene {
       const px = W * hs.config.position.x;
       const py = H * hs.config.position.y;
       hs.root.position.set(px, py);
+      /* Sleep spot renders flat on the floor beneath traveler boots */
+      hs.root.zIndex = hs.config.type === 'sleep' ? 0 : Math.round(py);
+
       if (hs.propSprite && hs.config.propScale && hs.propSprite.texture !== Texture.EMPTY) {
-        const pScale = (H * hs.config.propScale) / (hs.propSprite.texture.height || 100);
-        hs.propSprite.scale.set(pScale);
+        const pH = H * hs.config.propScale;
+        const pScale = pH / (hs.propSprite.texture.height || 100);
+        const signX = hs.config.flipX ? -1 : 1;
+        hs.propSprite.scale.set(pScale * signX, pScale);
+
+        const pW = hs.propSprite.texture.width * pScale;
+        const hitRadius = Math.max(30, Math.max(pW, pH) * 0.52);
+        hs.root.hitArea = new Circle(0, -pH * 0.48, hitRadius);
       }
       if (hs.hovered) this.layoutHotspotLabel(hs);
     }
@@ -1015,8 +1109,8 @@ export class ShelterScene {
     if (this.fireGlow && this.sceneConfig) {
       const fp = this.sceneConfig.hotspots.find((h) => h.id === 'firepit');
       if (fp) {
-        this.fireGlow.position.set(W * fp.position.x, H * fp.position.y - 10);
-        const fgSize = Math.min(W, H) * 0.44;
+        this.fireGlow.position.set(W * fp.position.x, H * fp.position.y - H * 0.03);
+        const fgSize = Math.min(W, H) * 0.36;
         this.fireGlow.width = fgSize;
         this.fireGlow.height = fgSize;
       }
@@ -1066,6 +1160,7 @@ export class ShelterScene {
         this.targetX = this.walkingTo.x;
         this.targetY = this.walkingTo.y;
         this.walkingTo = null;
+        this.layoutTraveler();
         if (this.pendingCallback) {
           const cb = this.pendingCallback;
           this.pendingCallback = null;
@@ -1080,8 +1175,8 @@ export class ShelterScene {
           this.footstepAccum = 0;
           if (this.entryDone) playFootstep();
         }
+        this.layoutTraveler();
       }
-      this.layoutTraveler();
     }
 
     /* Breathing idle */
@@ -1094,10 +1189,9 @@ export class ShelterScene {
       this.travelerSprite.scale.y = baseScale * breathScale;
     }
 
-    /* Walking bob */
+    /* Walking bob (relative to travelerNode feet) */
     if (this.currentPose === 'walk' && this.travelerSprite && !this.state.reduceMotion) {
-      const bobY = -3 * Math.abs(Math.sin(this.elapsed * 8.5));
-      this.travelerSprite.y = this.height * this.targetY + bobY;
+      this.travelerSprite.y = -3 * Math.abs(Math.sin(this.elapsed * 8.5));
     }
 
     /* Fire flames & particles */
@@ -1121,21 +1215,20 @@ export class ShelterScene {
     if (!this.fireFlames || !this.sceneConfig) return;
     const fp = this.sceneConfig.hotspots.find((h) => h.id === 'firepit');
     if (!fp) return;
-    const { width: W, height: H } = this;
-    const cx = W * fp.position.x;
-    const cy = H * fp.position.y - 10;
+    const H = this.height;
+    const propH = H * (fp.propScale ?? 0.085);
+    /* Local to firepit root (bottom-center of firepit sprite) */
+    const cy = -propH * 0.45;
+    const unit = Math.max(0.7, propH / 58);
     const still = this.state.reduceMotion;
-    const sway = still ? 0 : Math.sin(this.elapsed * 9) * 3;
+    const sway = still ? 0 : Math.sin(this.elapsed * 9) * 2.4 * unit;
     const hScale = still ? 1 : 0.9 + 0.18 * Math.sin(this.elapsed * 12.4);
 
     const g = this.fireFlames;
     g.clear();
-    // Outer orange flame tongue
-    g.ellipse(cx + sway * 0.5, cy - 11 * hScale, 11, 16 * hScale).fill({ color: 0xff6a1a, alpha: 0.78 });
-    // Mid amber flame tongue
-    g.ellipse(cx - sway * 0.4, cy - 9 * hScale, 7.5, 12 * hScale).fill({ color: 0xffa832, alpha: 0.88 });
-    // Bright gold core
-    g.ellipse(cx + sway * 0.2, cy - 6 * hScale, 4, 7 * hScale).fill({ color: 0xffe488, alpha: 0.95 });
+    g.ellipse(sway * 0.5, cy - 9 * unit * hScale, 9 * unit, 13 * unit * hScale).fill({ color: 0xff6a1a, alpha: 0.78 });
+    g.ellipse(-sway * 0.4, cy - 7 * unit * hScale, 6 * unit, 9.5 * unit * hScale).fill({ color: 0xffa832, alpha: 0.88 });
+    g.ellipse(sway * 0.2, cy - 5 * unit * hScale, 3.2 * unit, 5.5 * unit * hScale).fill({ color: 0xffe488, alpha: 0.95 });
   }
 
   private spawnFireEmbers(): void {
@@ -1143,21 +1236,22 @@ export class ShelterScene {
     const fp = this.sceneConfig.hotspots.find((h) => h.id === 'firepit');
     if (!fp) return;
     const { width: W, height: H } = this;
+    const propH = H * (fp.propScale ?? 0.085);
     const baseX = W * fp.position.x;
-    const baseY = H * fp.position.y - 12;
+    const baseY = H * fp.position.y - propH * 0.48;
 
     if (Math.random() < 0.28) {
       const ember = new Graphics();
-      const size = 1.6 + Math.random() * 2.4;
+      const size = 1.4 + Math.random() * 2.0;
       const isHot = Math.random() < 0.4;
       ember.circle(0, 0, size).fill(isHot ? 0xffd268 : 0xff6b24);
-      ember.position.set(baseX + (Math.random() - 0.5) * 18, baseY);
+      ember.position.set(baseX + (Math.random() - 0.5) * 14, baseY);
       this.fxLayer.addChild(ember);
       this.particles.push({
         sprite: ember,
-        vx: (Math.random() - 0.5) * 0.45,
-        vy: -(0.6 + Math.random() * 0.9),
-        gravity: -0.008, // gently accelerates up like rising heat
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: -(0.55 + Math.random() * 0.8),
+        gravity: -0.008,
         life: 0,
         maxLife: 650 + Math.random() * 750,
       });

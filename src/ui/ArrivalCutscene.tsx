@@ -1,14 +1,13 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import BackgroundStage from './BackgroundStage.tsx';
-import { BG_SHELTERS, travelerSpriteSrc } from '../game/data/media.ts';
+import { BG_SHELTERS } from '../game/data/media.ts';
 import { SITES } from '../game/data/sites.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { playFootstep, startSiteAmbience, fadeOutMenuMusic } from '../game/audio/soundEngine.ts';
-import type { SiteId, TravelerGender } from '../game/types/game.ts';
+import type { SiteId } from '../game/types/game.ts';
 
 export interface ArrivalCutsceneProps {
   siteId: SiteId;
-  gender: TravelerGender;
   onComplete: () => void;
 }
 
@@ -16,26 +15,7 @@ const DURATION = 3500; // ms
 const REDUCED_DURATION = 2200; // calm hold for reduce-motion
 const FOOTSTEP_TIMES = [400, 900, 1400, 1950, 2500]; // ms offsets
 
-/** Traveler walking sprite */
-function TravelerSprite({ gender }: { gender: TravelerGender }) {
-  return (
-    <img
-      src={travelerSpriteSrc(gender, 'walk')}
-      alt=""
-      aria-hidden="true"
-      draggable={false}
-      style={{
-        height: '124px',
-        width: 'auto',
-        objectFit: 'contain',
-        display: 'block',
-        filter: 'drop-shadow(0 4px 10px rgba(61, 56, 50, 0.45))',
-      }}
-    />
-  );
-}
-
-export default function ArrivalCutscene({ siteId, gender, onComplete }: ArrivalCutsceneProps) {
+export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const [phase, setPhase] = useState<'walking' | 'fadeout'>('walking');
 
@@ -131,27 +111,6 @@ export default function ArrivalCutscene({ siteId, gender, onComplete }: ArrivalC
         <BackgroundStage media={bgMedia} />
       </div>
 
-      {/* Traveler silhouette */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '18%',
-          left: reduceMotion ? 'calc(50vw - 30px)' : 0,
-          zIndex: 5,
-          animation: reduceMotion
-            ? 'owsFadeOpacity 350ms ease'
-            : 'walkAcross 3.5s ease-in-out forwards',
-        }}
-      >
-        <div
-          style={{
-            animation: reduceMotion ? 'none' : 'walkBob 0.5s ease-in-out infinite',
-          }}
-        >
-          <TravelerSprite gender={gender} />
-        </div>
-      </div>
-
       {/* Warm sunlit caption */}
       <div
         style={{
@@ -216,14 +175,6 @@ export default function ArrivalCutscene({ siteId, gender, onComplete }: ArrivalC
         @keyframes kenBurns {
           from { transform: scale(1); }
           to   { transform: scale(1.12); }
-        }
-        @keyframes walkAcross {
-          from { transform: translateX(-80px); }
-          to   { transform: translateX(calc(50vw - 30px)); }
-        }
-        @keyframes walkBob {
-          0%, 100% { transform: translateY(0); }
-          50%      { transform: translateY(-4px); }
         }
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(16px); }

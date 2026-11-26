@@ -10,6 +10,15 @@ import {
   startSiteAmbience,
   stopLiftHum,
 } from '../game/audio/soundEngine.ts';
+import {
+  CutsceneCaption,
+  LIFT_DOORWAY_ORIGIN,
+  LIFT_STAGE_H,
+  LIFT_STAGE_W,
+  LiftDoors,
+  LiftFloorReadout,
+  LiftFrame,
+} from './liftStage.tsx';
 
 /** Parent starts its fade-out here; the full sequence runs ~5.2s */
 export const TERRACE_LIFT_HOLD_MS = 4800;
@@ -25,12 +34,7 @@ const DOORS_OPEN = 3850;
 const CAPTION = 4150;
 const STEP_OUT = 4450;
 
-/** Painted lift art is 1376×768; the stage is cover-fitted at this aspect so layers stay aligned */
-const STAGE_ASPECT = 1376 / 768;
-const STAGE_W = `max(100vw, calc(100vh * ${STAGE_ASPECT}))`;
-const STAGE_H = `max(100vh, calc(100vw / ${STAGE_ASPECT}))`;
-
-const TERRACE_STAGE = SCENE_STAGES.terrace ?? '/source/scenes/terrace-stage.webp';
+export const TERRACE_STAGE = SCENE_STAGES.terrace ?? '/source/scenes/terrace-stage.webp';
 
 export interface TerraceLiftCutsceneProps {
   reduceMotion: boolean;
@@ -103,8 +107,6 @@ export default function TerraceLiftCutscene({ reduceMotion, skipped }: TerraceLi
   }, [reduceMotion, skipped]);
 
   const siteName = SITES.find((s) => s.id === 'terrace')?.name ?? 'Old Apartment Terrace';
-  const doorEase = 'cubic-bezier(0.45, 0.05, 0.25, 1)';
-  const doorTransition = reduceMotion ? 'opacity 400ms ease' : `transform 800ms ${doorEase}`;
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#1e1a16' }}>
@@ -114,8 +116,8 @@ export default function TerraceLiftCutscene({ reduceMotion, skipped }: TerraceLi
           position: 'absolute',
           left: '50%',
           top: '50%',
-          width: STAGE_W,
-          height: STAGE_H,
+          width: LIFT_STAGE_W,
+          height: LIFT_STAGE_H,
           transform: 'translate(-50%, -50%)',
         }}
       >
@@ -157,7 +159,7 @@ export default function TerraceLiftCutscene({ reduceMotion, skipped }: TerraceLi
             style={{
               position: 'absolute',
               inset: 0,
-              transformOrigin: '50% 54.5%',
+              transformOrigin: LIFT_DOORWAY_ORIGIN,
               transform: steppedOut && !reduceMotion ? 'scale(1.9)' : 'scale(1)',
               opacity: steppedOut ? 0 : 1,
               transition: reduceMotion
@@ -165,82 +167,9 @@ export default function TerraceLiftCutscene({ reduceMotion, skipped }: TerraceLi
                 : 'transform 650ms cubic-bezier(0.55, 0, 0.8, 0.4), opacity 650ms ease-in',
             }}
           >
-            {/* Middle: two sliding door panels inside the doorway cutout */}
-            <div
-              style={{
-                position: 'absolute',
-                left: '35.5%',
-                top: '21.5%',
-                width: '29%',
-                height: '66%',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  width: '50%',
-                  height: '100%',
-                  transform: doorsOpen && !reduceMotion ? 'translateX(-100%)' : 'translateX(0)',
-                  opacity: doorsOpen && reduceMotion ? 0 : 1,
-                  transition: doorTransition,
-                }}
-              >
-                <DoorPanel mirrored={false} />
-              </div>
-              <div
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  top: 0,
-                  width: '50%',
-                  height: '100%',
-                  transform: doorsOpen && !reduceMotion ? 'translateX(100%)' : 'translateX(0)',
-                  opacity: doorsOpen && reduceMotion ? 0 : 1,
-                  transition: doorTransition,
-                }}
-              >
-                <DoorPanel mirrored />
-              </div>
-            </div>
-
-            {/* Front: lift interior frame with a transparent doorway */}
-            <img
-              src={CUTSCENE_ASSETS.terraceLiftFrame}
-              alt=""
-              draggable={false}
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
-            />
-
-            {/* Vintage amber floor readout inside the brass indicator box */}
-            <div
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '7.9%',
-                transform: 'translate(-50%, -50%)',
-                fontFamily: '"Courier New", ui-monospace, monospace',
-                fontWeight: 700,
-                fontSize: `calc(${STAGE_H} * 0.05)`,
-                lineHeight: 1,
-                color: '#ffc061',
-                textShadow:
-                  '0 0 4px rgba(255, 176, 72, 0.95), 0 0 12px rgba(255, 140, 40, 0.7), 0 0 22px rgba(255, 120, 30, 0.35)',
-              }}
-            >
-              <span
-                key={floor}
-                style={{
-                  display: 'inline-block',
-                  animation: reduceMotion ? undefined : 'owsLiftDigit 160ms ease-out both',
-                }}
-              >
-                {floor}
-              </span>
-            </div>
+            <LiftDoors open={doorsOpen} reduceMotion={reduceMotion} />
+            <LiftFrame />
+            <LiftFloorReadout floor={floor} reduceMotion={reduceMotion} />
           </div>
         </div>
       </div>
@@ -271,66 +200,7 @@ export default function TerraceLiftCutscene({ reduceMotion, skipped }: TerraceLi
       </div>
 
       {/* Warm arrival caption */}
-      {showCaption && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '10%',
-            left: 0,
-            right: 0,
-            zIndex: 6,
-            paddingInline: 'var(--space-md)',
-            textAlign: 'center',
-            animation: reduceMotion ? 'owsFadeOpacity 400ms ease both' : 'fadeInUp 900ms ease both',
-          }}
-        >
-          <p
-            style={{
-              fontFamily: 'var(--font-game-title)',
-              fontSize: 'clamp(1.4rem, 3.5vw, 2.2rem)',
-              color: '#fff',
-              textShadow: '0 2px 16px rgba(61,56,50,0.5), 0 1px 4px rgba(61,56,50,0.3)',
-            }}
-          >
-            {siteName}
-          </p>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes owsLobbyPush {
-          from { transform: scale(1); }
-          to   { transform: scale(1.1); }
-        }
-        @keyframes owsLiftTremor {
-          0%   { transform: translateY(0); }
-          25%  { transform: translateY(1px); }
-          50%  { transform: translateY(-0.5px); }
-          75%  { transform: translateY(1.5px); }
-          100% { transform: translateY(0); }
-        }
-        @keyframes owsLiftDigit {
-          from { opacity: 0.2; transform: translateY(-12%); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+      {showCaption && <CutsceneCaption text={siteName} reduceMotion={reduceMotion} />}
     </div>
-  );
-}
-
-function DoorPanel({ mirrored }: { mirrored: boolean }) {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        backgroundImage: `url(${CUTSCENE_ASSETS.terraceLiftDoor})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'left center',
-        transform: mirrored ? 'scaleX(-1)' : undefined,
-        /* Soft seam shadow where the two panels meet */
-        boxShadow: 'inset -3px 0 4px rgba(20, 16, 12, 0.35)',
-      }}
-    />
   );
 }

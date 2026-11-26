@@ -191,19 +191,11 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
         Skip ▸
       </button>
 
-      {/* CSS animations */}
+      {/* CSS animations (fadeInUp / owsFadeOpacity live in theme.css) */}
       <style>{`
         @keyframes kenBurns {
           from { transform: scale(1); }
           to   { transform: scale(1.12); }
-        }
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(16px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes owsFadeOpacity {
-          from { opacity: 0; }
-          to   { opacity: 1; }
         }
       `}</style>
     </div>

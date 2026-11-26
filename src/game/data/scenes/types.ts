@@ -47,7 +47,7 @@ export type BuildEffect = 'lantern' | 'leaves' | 'water' | 'logs' | 'stones' | '
 
 export interface StationTierConfig {
   tier: number;
-  /** Short name for this tier (Build Bar chip & hover) */
+  /** Short name for this tier (station menu, hover label & lock hints) */
   name: string;
   sprite: string;
   /** Sprite height relative to the stage */
@@ -68,7 +68,7 @@ export interface StationConfig {
   id: StationId;
   /** Hotspot this station lives on */
   hotspotId: string;
-  /** Emoji on the Build Bar chip */
+  /** Emoji shown in the station's action menu title */
   icon: string;
   /** Tier at the start of a run (0 = not built yet, shown as a floor blueprint) */
   baseTier: 0 | 1;

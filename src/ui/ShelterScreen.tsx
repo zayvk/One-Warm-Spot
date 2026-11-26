@@ -16,6 +16,8 @@ import VitalityDialHud from './VitalityDialHud.tsx';
 
 export interface ShelterScreenProps {
   onBackToTitle: () => void;
+  /** The traveler stepped through the rooftop stairwell door (ride the lift down) */
+  onDescend?: () => void;
 }
 
 /** Soft loudness for the in-shelter ambience bed */
@@ -23,7 +25,7 @@ const SHELTER_AMBIENCE_LEVEL = 0.55;
 
 const POUCH_IDS: ResourceId[] = ['timber', 'cloth', 'seeds', 'water', 'scrap', 'stone', 'food'];
 
-export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
+export default function ShelterScreen({ onBackToTitle, onDescend }: ShelterScreenProps) {
   const chosenSite = useGameStore((s) => s.chosenSite);
   const dayPhase = useGameStore((s) => s.dayPhase);
   const resources = useGameStore((s) => s.resources);
@@ -53,6 +55,15 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
   const handlePropAction = useCallback((stationId: string, action: StationMenuAction) => {
     return canvasRef.current?.performStationAction(stationId, action) ?? false;
   }, []);
+
+  const handleDoor = useCallback(
+    (doorId: string) => {
+      if (doorId !== 'stairwell-door' || !onDescend) return false;
+      onDescend();
+      return true;
+    },
+    [onDescend],
+  );
 
   /* Soft shelter soundscape while on this screen */
   useEffect(() => {
@@ -186,6 +197,7 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
           onStationStateChange={setStationState}
           onStationOpen={openPopover}
           onStationMenuOpen={openPropMenu}
+          onDoor={handleDoor}
         />
 
         {propMenu && menuStation && stationState && (

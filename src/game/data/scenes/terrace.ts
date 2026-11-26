@@ -333,16 +333,15 @@ export const terraceScene: ShelterSceneConfig = {
     ...TERRACE_BOX_IDS.map((id) => terraceSpawnHotspot(id, DEFAULT_TERRACE_SPAWNS[id])),
     ...TERRACE_WEED_IDS.map((id) => terraceSpawnHotspot(id, DEFAULT_TERRACE_SPAWNS[id])),
 
-    /* ── Ajar rooftop stairwell/lift door ── */
+    /* ── Ajar rooftop stairwell/lift door: rides the lift down to the lobby ── */
     {
       id: 'stairwell-door',
       type: 'door',
       position: STAIRWELL_POS,
       propSprite: '',
-      label: 'Stairwell downstairs (coming soon)',
+      label: 'Take the lift downstairs',
       standOffset: { dx: -0.01, dy: 0.09 },
       hitRect: { dx: -0.065, dy: -0.32, w: 0.125, h: 0.4 },
-      message: 'The stairs lead down into the quiet building—more to explore soon.',
     },
   ],
 

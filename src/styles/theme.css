@@ -1417,3 +1417,96 @@ button:disabled {
 [data-reduce-motion='true'] .ows-scene-loader img {
   animation: none;
 }
+
+/* ───── Lift cutscenes (shared by the ride up and the ride down) ───── */
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes owsFadeOpacity {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes owsLobbyPush {
+  from { transform: scale(1); }
+  to   { transform: scale(1.1); }
+}
+
+@keyframes owsLiftTremor {
+  0%   { transform: translateY(0); }
+  25%  { transform: translateY(1px); }
+  50%  { transform: translateY(-0.5px); }
+  75%  { transform: translateY(1.5px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes owsLiftDigit {
+  from { opacity: 0.2; transform: translateY(-12%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ───── Ground-floor lobby (end of the ride down) ───── */
+
+.ows-lobby-spot {
+  position: absolute;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  transition: box-shadow 220ms ease, background-color 220ms ease;
+}
+
+.ows-lobby-spot:hover,
+.ows-lobby-spot:focus-visible {
+  background-color: rgba(255, 236, 190, 0.12);
+  box-shadow:
+    0 0 0 2px rgba(255, 236, 190, 0.85),
+    0 0 18px 4px rgba(255, 208, 130, 0.55),
+    inset 0 0 24px rgba(255, 220, 150, 0.35);
+}
+
+.ows-lobby-spot--glow {
+  animation: owsLobbyGlow 1100ms ease-out;
+}
+
+@keyframes owsLobbyGlow {
+  0%   { box-shadow: 0 0 0 2px rgba(255, 240, 200, 1), 0 0 34px 12px rgba(255, 210, 130, 0.85), inset 0 0 40px rgba(255, 226, 160, 0.6); background-color: rgba(255, 236, 190, 0.28); }
+  100% { box-shadow: 0 0 0 2px rgba(255, 236, 190, 0.85), 0 0 18px 4px rgba(255, 208, 130, 0.55), inset 0 0 24px rgba(255, 220, 150, 0.35); background-color: rgba(255, 236, 190, 0.12); }
+}
+
+.ows-lobby-label {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: rgba(255, 252, 246, 0.94);
+  border: 1.5px solid #e8cdb5;
+  color: var(--charcoal);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.ows-lobby-spot:hover .ows-lobby-label,
+.ows-lobby-spot:focus-visible .ows-lobby-label {
+  opacity: 1;
+}
+
+[data-reduce-motion='true'] .ows-lobby-spot,
+[data-reduce-motion='true'] .ows-lobby-label {
+  transition: none;
+}
+
+[data-reduce-motion='true'] .ows-lobby-spot--glow {
+  animation: none;
+}

@@ -102,7 +102,7 @@ export type SpendCallback = (cost: Partial<Record<ResourceId, number>>) => boole
 /** Eats a grill recipe; returns false if the ingredients ran short */
 export type CookCallback = (recipe: Recipe) => boolean;
 
-/** Station progress & daily readiness, mirrored to the React Build Bar and station popovers */
+/** Station progress & daily readiness, mirrored to the React station menus and popovers */
 export interface SceneStationState {
   tiers: StationTiers;
   pending: StationId | null;
@@ -123,8 +123,11 @@ export type StationMenuAction = 'primary' | 'sit' | 'extinguish' | 'upgrade';
 
 export type StationActionResult = { ok: true } | { ok: false; message: string };
 
-/** Gentle toast request (stairwell door, firewood hints) */
+/** Gentle toast request (firewood hints, doors without a destination) */
 export type NoticeCallback = (message: string, icon?: string) => void;
+
+/** The traveler reached a door hotspot; return true if it leads somewhere (e.g. `stairwell-door`) */
+export type DoorCallback = (doorId: string) => boolean;
 
 /* ═══════════════════════════════════════════
    Lighting presets
@@ -421,6 +424,7 @@ export class ShelterScene {
   private onStationMenu: StationMenuCallback | null = null;
   private onCanAfford: ((cost: Partial<Record<ResourceId, number>>) => boolean) | null = null;
   private onNotice: NoticeCallback | null = null;
+  private onDoor: DoorCallback | null = null;
   private onReady: (() => void) | null = null;
 
   /* Fire, Stars, Fireflies & Burst Particles */
@@ -628,6 +632,10 @@ export class ShelterScene {
 
   setNoticeCallback(cb: NoticeCallback): void {
     this.onNotice = cb;
+  }
+
+  setDoorCallback(cb: DoorCallback | null): void {
+    this.onDoor = cb;
   }
 
   /** Fires once the stage backdrop is decoded and the scene starts fading in */
@@ -1675,8 +1683,11 @@ export class ShelterScene {
     this.travelerFlipped = false;
     this.layoutTraveler();
     this.setPose('idle');
-    if (node.config.message) this.onNotice?.(node.config.message, '🚪');
-    this.after(400, () => {
+    playFootstep();
+    this.after(350, () => {
+      /* Doors with a destination hand off to the app (e.g. the stairwell → ride down) */
+      if (this.onDoor?.(node.config.id)) return;
+      if (node.config.message) this.onNotice?.(node.config.message, '🚪');
       this.interactionLock = false;
     });
   }

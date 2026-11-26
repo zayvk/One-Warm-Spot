@@ -37,15 +37,16 @@ One-Warm-Spot/
 │       ├── backgrounds/         # Background images (bg-title, bg-valley, bg-terrace...bg-island.webp)
 │       ├── sprites/             # Character pose sprites ({female,male}-{idle,walk,search,sit,sleep}.webp)
 │       ├── scenes/              # Interactive stage backdrops (terrace-stage.webp — v2 with stairwell/lift bulkhead)
-│       ├── cutscenes/           # Terrace lift arrival plates (terrace-lobby, terrace-lift-frame w/ transparent doorway, terrace-lift-door)
-│       ├── props/               # Interactive prop sprites (firepit-t1/t2 + firepit (T3), boxes-intact/cleared, box-single/double, weeds-1/2/3,
-│       │                        #   cloth-shed, shed-upgraded, planter, rain-barrel)
+│       ├── cutscenes/           # Terrace lift plates for both rides (terrace-lobby — also the interactive lobby, terrace-lift-frame w/ transparent doorway, terrace-lift-door)
+│       ├── props/               # Interactive prop sprites: boxes-intact/cleared, box-single/double, weeds-1/2/3, and every station tier —
+│       │                        #   shelter (cloth-shed, shed-upgraded, shelter-t3), fire pit (firepit-t1, firepit-t2, firepit), farm (planter-t1, planter, planter-t3),
+│       │                        #   barrel (barrel-t1, rain-barrel, barrel-t3), grill (grill-rack, grill-t1..t3), sewing (sew-needle, sew-scraps, knit-t1..t3)
 │       └── audio/               # Optional music-menu.mp3 (not shipped — procedural warm-pad loop plays instead)
 └── src/
     ├── main.tsx                 # React root mount
-    ├── App.tsx                  # Screen router: title → site-select → arrival → shelter (+ global toasts)
+    ├── App.tsx                  # Screen router: title → site-select → arrival → shelter ⇄ lobby (+ global toasts)
     ├── styles/
-    │   └── theme.css            # CSS custom properties, cozy palette, frosted-card util, pouch pulse
+    │   └── theme.css            # CSS custom properties, cozy palette, frosted-card util, pouch pulse/tooltips, prop menu, shared lift-cutscene keyframes, lobby door glow
     ├── game/                    # ── Pure game logic (no React imports) ──
     │   ├── types/game.ts        # SiteId, TimeOfDay, Weather, PlayerStats, Upgrade, ScavengeZone, Relic, SaveState…
     │   ├── data/
@@ -64,7 +65,7 @@ One-Warm-Spot/
     │   │       └── index.ts     # getSceneConfig() registry (terrace only for now)
     │   ├── engine/
     │   │   ├── dayCycle.ts    # Pure 3-phase 12-min day clock (240s/phase), Stamina/Strength rest & sleep math (SleepComfort, decay params)
-    │   │   ├── stations.ts      # Pure station rules: next tier, harvest/collect yields, sleep comfort, gloves/cloak perks, recipeBlocker/applyRecipe, perkBlocker
+    │   │   ├── stations.ts      # Pure station rules: next tier, harvest/collect yields, sleep comfort, gloves/cloak perks, recipeBlocker/applyRecipe, perkBlocker, stationRequirementHint (natural tier names)
     │   │   ├── progression.ts   # Pure rules: time-of-day, Cozy Index, upgrade status/build, canAfford/spendResources, site unlocks
     │   │   ├── scavenge.ts      # Pure runScavenge(), trip availability, capped resource adds
     │   │   ├── weather.ts       # Daily weather roll + soft-rain water bonus
@@ -78,15 +79,17 @@ One-Warm-Spot/
     │   ├── store/
     │   │   └── useGameStore.ts  # Zustand store (day/vitality, resources, cookRecipe, strengthDriftFactor, upgrades, scavenging, relics, stats, notices)
     │   └── renderer/
-    │       ├── ShelterCanvas.tsx # React bridge: Pixi Application + ResizeObserver + reward/build/spend/cook/sleep/notice bridges + { performStationAction, cook, craftPerk } handle
-    │       └── shelterScene.ts   # Data-driven point-and-click Pixi scene: stage-space (cover rect) mapping, backdrop, pose crossfades, hotspots, obstacles, multi-tier stations, particles
+    │       ├── ShelterCanvas.tsx # React bridge: Pixi Application + ResizeObserver + reward/build/spend/cook/sleep/notice/door bridges + { requestBuild, performStationAction, cook, craftPerk } handle
+    │       └── shelterScene.ts   # Data-driven point-and-click Pixi scene: stage-space (cover rect) mapping, backdrop, pose crossfades, hotspots & hover feedback, obstacles, multi-tier stations, overnight regrowth, particles
     └── ui/
         ├── TitleScreen.tsx           # Painted logo-title wordmark floating cleanly without backdrop halo (+ sr-only h1) + Continue/New Game + About / Load Backup
         ├── backupImport.ts           # Shared `restoreBackupFile()` used by Title Load Backup & Settings import
         ├── SiteSelector.tsx          # Uniform 38px header toggles, traveler sprite portraits, centered flex-wrap shelter cards
         ├── ArrivalCutscene.tsx       # Cutscene shell (fade-out, Skip button, Space/Enter/Escape); Ken Burns fade for most shelters
-        ├── TerraceLiftCutscene.tsx   # 3-beat Terrace lift arrival (lobby push-in → lift ride 1→R → doors open), reduce-motion aware
-        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + emblem badge + 7-item Pouch HUD (hover/focus tooltips) + VitalityDialHud + PropActionMenu + StationPopover
+        ├── TerraceLiftCutscene.tsx   # 3-beat Terrace lift ride up (lobby push-in → lift ride 1→R → doors open on the rooftop), reduce-motion aware
+        ├── TerraceLobbyScreen.tsx    # Ride down (rooftop → lift R→1 → lobby) ending in the interactive ground-floor lobby ("Coming soon" doors, lift back up)
+        ├── liftStage.tsx             # Shared lift pieces for both rides: cover-fitted stage size, sliding doors, frame, amber floor readout, caption
+        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + emblem badge + 7-item Pouch HUD (hover/focus tooltips) + VitalityDialHud + PropActionMenu + StationPopover; hands the stairwell door to the app (`onDescend`)
         ├── VitalityDialHud.tsx       # Bottom-left bronze Vitality Medallion (80px; phase sky window + progress ring + centred Day plaque) + slim smoked-glass Stamina/Strength capsule tucked behind it
         ├── PropActionMenu.tsx        # Contextual floating pill above clicked stations: Primary Action (Rest/Sleep/Light/Sit/Extinguish/Harvest/Collect/Cook/Mend) + Upgrade tier action
         ├── StationPopover.tsx        # Frosted Cooking (grill recipes) / Mending (sewing perks) popover anchored above the station
@@ -95,7 +98,7 @@ One-Warm-Spot/
         ├── ScavengePanel.tsx         # 💤 Dormant M1 Valley Scavenge drawer (unmounted)
         ├── SurvivalKitPanel.tsx      # 💤 Dormant M1 Survival Kit / Field Journal drawer (unmounted)
         ├── ConfirmResetModal.tsx     # 💤 Dormant in-shelter Reset Save confirmation (unmounted)
-        ├── NoticeToasts.tsx          # Gentle toasts (Morning of Day N, new shelter unlocked, stairwell door)
+        ├── NoticeToasts.tsx          # Gentle toasts (Day N · Morning + regrowth/weather, new shelter unlocked, firewood hint, lobby "Coming soon", backups)
         ├── SettingsPopover.tsx       # Top-right popover: Music/SFX sliders, Reduce Motion (+ helper line), Export / Load Backup
         ├── ConfirmOverwriteModal.tsx # Safety modal before overwriting an existing saved shelter
         ├── AboutModal.tsx            # Player-facing About: emblem crest, 2-paragraph story, 3 How-to-play tips, v0.1 footer
@@ -119,9 +122,9 @@ The game has pivoted from menu drawers to a **point-and-click illustrated scene*
 
 | Piece | Wiring |
 |-------|--------|
-| `ShelterScreen.tsx` | Mounts `ShelterCanvas`, a **← Title** button + shelter name, the centered Found Materials Pouch (all 7: 🪵 🧵 🌱 💧 🔩 🪨 🍅, pulsing on gains, with instant `.ows-pouch-tooltip` parchment pills on hover/focus), the bottom-left `VitalityDialHud`, and mutually exclusive contextual overlays (`PropActionMenu` for station primary actions / upgrades and `StationPopover` for Cooking/Mending — both rendered inside `<main>`, so scene pixel anchors map straight to CSS). Drives the 1s real-time phase clock while mounted and unpaused. `PropActionMenu` calls `ShelterCanvas`'s imperative `performStationAction(stationId, action)`; `StationPopover` calls `cook(recipeId)` / `craftPerk(perkId)`. Starts the site ambience bed. |
-| `ShelterCanvas.tsx` | Reads `chosenSite`, `timeOfDay`, `dayPhase`, `unlockedUpgrades`, `lanternLit`, `reduceMotion`, `travelerGender` from the store and forwards them to the scene. Write-backs: **rewards** (`addResources()`; weeds/boxes cost `gatherStaminaCost()` stamina, farm/barrel yields are free), **build payments** (`spendResources()` + build stamina cost), **spends** (materials only — firewood, mending), **cooking** (`cookRecipe()`), **rest** (`restAtShelter()`), **sleep** (`sleepAtShelter(comfort)`, whose returned overnight `RegrowOutcome` is handed back to the scene), and **notices** (`pushNotice()` with an icon). Checks material affordability live via `setCanAffordCallback()`. Each write calls `_save()`. On every station-state emit it caches crafted perks, sets the store's `strengthDriftFactor` (cloak) and mirrors `{ tiers, pending, fireLit, perks, planterReady, barrelReady }` to `ShelterScreen`; it also forwards station-menu (`onStationMenuOpen`) and station-open (`grill`/`sewing` + anchor) requests. |
-| `shelterScene.ts` | Looks up configs via `getSceneConfig()` in `data/scenes/index.ts` (`terrace` only; other sites get the generic fallback walk area with no hotspots). **All normalized scene coords (props, hotspots, colliders, obstacles, walk bounds, entry/idle points) are relative to `stageRect`** — the on-screen cover rect of the backdrop, recomputed at the start of every `layout()` — via `toPx()` / `toNorm()`; prop, traveler and glow sizes scale with `stageRect.height`. Tweens lighting over 1.4s across `day` / `dusk` / `night`, fading in twinkling stars, drifting fireflies, and brighter fire/lantern light pools at dusk/night. Context-aware `sleep-shed` rests in `sit` pose during `day`/`dusk` and sleeps until Day `N+1` morning during `night` (passing `sleepComfort(shelterTier, perks)` and refreshing the farm/barrel ready flags). Clicking stations opens `PropActionMenu` when multiple actions or an upgrade are available (or when Tier 0 blueprint is unaffordable), and executes directly for single-action maxed stations or affordable Tier 0 blueprints. On the Terrace, `resolveSceneConfig()` applies the run's saved box & weed `spawns` (`withTerraceSpawns`). Entry: the traveler appears at the stairwell threshold, waits for the 220ms reveal + 280ms, then strolls to `idlePoint` at a fixed ~2s pace (`walkTo(..., durationMs)`). Fire visuals (flame tongues, coal bed, ember rate, smoke wisps, glow size/brightness/tint, crackle level) come from the `FIRE_TIERS` profile for the current `firepitTier`; lighting the fire spends 1 timber via the spend callback. Persists prop + station state through `engine/terraceState.ts`. |
+| `ShelterScreen.tsx` | Mounts `ShelterCanvas`, a **← Title** button + shelter name, the centered Found Materials Pouch (all 7: 🪵 🧵 🌱 💧 🔩 🪨 🍅, pulsing on gains, with instant `.ows-pouch-tooltip` parchment pills on hover/focus), the bottom-left `VitalityDialHud`, and mutually exclusive contextual overlays (`PropActionMenu` for station primary actions / upgrades and `StationPopover` for Cooking/Mending — both rendered inside `<main>`, so scene pixel anchors map straight to CSS). Drives the 1s real-time phase clock while mounted and unpaused. `PropActionMenu` calls `ShelterCanvas`'s imperative `performStationAction(stationId, action)`; `StationPopover` calls `cook(recipeId)` / `craftPerk(perkId)`. Starts the site ambience bed. Its `handleDoor` turns the `stairwell-door` hotspot into `onDescend()` (App → `lobby` screen). |
+| `ShelterCanvas.tsx` | Reads `chosenSite`, `timeOfDay`, `dayPhase`, `unlockedUpgrades`, `lanternLit`, `reduceMotion`, `travelerGender` from the store and forwards them to the scene. Write-backs: **rewards** (`addResources()`; weeds/boxes cost `gatherStaminaCost()` stamina, farm/barrel yields are free), **build payments** (`spendResources()` + build stamina cost), **spends** (materials only — firewood, mending), **cooking** (`cookRecipe()`), **rest** (`restAtShelter()`), **sleep** (`sleepAtShelter(comfort)`, whose returned overnight `RegrowOutcome` is handed back to the scene), and **notices** (`pushNotice()` with an icon). Forwards door arrivals to `onDoor(doorId)` (returns whether the door leads somewhere). Checks material affordability live via `setCanAffordCallback()`. Each write calls `_save()`. On every station-state emit it caches crafted perks, sets the store's `strengthDriftFactor` (cloak) and mirrors `{ tiers, pending, fireLit, perks, planterReady, barrelReady }` to `ShelterScreen`; it also forwards station-menu (`onStationMenuOpen`) and station-open (`grill`/`sewing` + anchor) requests. |
+| `shelterScene.ts` | Looks up configs via `getSceneConfig()` in `data/scenes/index.ts` (`terrace` only; other sites get the generic fallback walk area with no hotspots). **All normalized scene coords (props, hotspots, colliders, obstacles, walk bounds, entry/idle points) are relative to `stageRect`** — the on-screen cover rect of the backdrop, recomputed at the start of every `layout()` — via `toPx()` / `toNorm()`; prop, traveler and glow sizes scale with `stageRect.height`. Tweens lighting over 1.4s across `day` / `dusk` / `night`, fading in twinkling stars, drifting fireflies, and brighter fire/lantern light pools at dusk/night. Context-aware `sleep-shed` rests in `sit` pose during `day`/`dusk` and sleeps until Day `N+1` morning during `night` (passing `sleepComfort(shelterTier, perks)` and refreshing the farm/barrel ready flags). Clicking stations opens `PropActionMenu` when multiple actions or an upgrade are available (or when Tier 0 blueprint is unaffordable), and executes directly for single-action maxed stations or affordable Tier 0 blueprints. Hover: parchment label, warm sprite tint and a 3% lift (`applyHotspotSpriteScale`, no lift under Reduce Motion); blueprints brighten. Door hotspots (`stairwell-door`) have no outline — just the label — and on arrival call `onDoor(id)`; if nothing handles it they fall back to their optional `message` toast and unlock. On the Terrace, `resolveSceneConfig()` applies the run's saved box & weed `spawns` (`withTerraceSpawns`). Entry: the traveler appears at the stairwell threshold, waits for the 220ms reveal + 280ms, then strolls to `idlePoint` at a fixed ~2s pace (`walkTo(..., durationMs)`). Fire visuals (flame tongues, coal bed, ember rate, smoke wisps, glow size/brightness/tint, crackle level) come from the `FIRE_TIERS` profile for the current `firepitTier`; lighting the fire spends 1 timber via the spend callback. Persists prop + station state through `engine/terraceState.ts`. |
 
 ### Terrace Multi-Tier Stations
 
@@ -138,7 +141,7 @@ The game has pivoted from menu drawers to a **point-and-click illustrated scene*
 
 Anchors are fixed and curated (no grid editor), grouped into three zones that hug the brick walls and keep the centre walkway open: **Living & Mending nook** (shelter, sewing kit, farm), **Central Hearth** (fire pit) and **Cooking & Utility line** (grill + barrel).
 
-Flow: Station or blueprint click → `onHotspotClick()` routes affordable Tier 0 blueprints (`"Empty spot — Craft {name} ({cost})"`) and single-action maxed stations straight into `walkToHotspotAndRun()`, while stations with multiple actions / available upgrades (or unaffordable Tier 0 spots) open the contextual `PropActionMenu` above the prop → choosing an action calls `performStationAction(stationId, action)` → `requestBuild(stationId)` (or primary action). Building walks to `buildStandOffset` → search pose + `playBuild()` → `onBuild(next.cost)` pays from the store → tier field written via `STATION_TIER_KEY` (a fresh T1 farm/barrel starts ready) → `applyStationTier()` swaps the hotspot's config/sprite/collider/stand spot/glows (or shows the floor blueprint at tier 0) with a pop-in + per-`effect` flourish (`playLogStack`, `playStoneSet`, `playWaterChime`, `playSew`, leaf burst). `restoreTerraceState()` applies every saved tier without animation. `emitStationState()` reports tiers/pending/fire/perks/ready flags to React. Hover labels come from `stationLabel()` (e.g. *"Empty spot — Craft Seedling Crate (1 🪵 1 🌱)"*, *"Harvest Herb Planter · +2 🍅 +1 🌱"*, *"Growing — ready tomorrow"*, *"Light fire pit · 1 🪵"*). `cook()` / `craftPerk()` re-check tier, fire and materials, then play `playCook()` + steam or `playSew()` + sparkles with floating feedback. Stations are independent of the 10 macro upgrades (no Cozy Index / milestone effect yet).
+Flow: Station or blueprint click → `onHotspotClick()` routes affordable Tier 0 blueprints (hover label *"Craft {name} ({cost})"*) and single-action maxed stations straight into `walkToHotspotAndRun()`, while stations with multiple actions / available upgrades (or unaffordable Tier 0 spots) open the contextual `PropActionMenu` above the prop (title = current tier name; main action; *"Upgrade to {next name}"* + cost) → choosing an action calls `performStationAction(stationId, action)` → `requestBuild(stationId)` (or primary action). Building walks to `buildStandOffset` → search pose + `playBuild()` → `onBuild(next.cost)` pays from the store → tier field written via `STATION_TIER_KEY` (a fresh T1 farm/barrel starts ready) → `applyStationTier()` swaps the hotspot's config/sprite/collider/stand spot/glows (or shows the floor blueprint at tier 0) with a pop-in + per-`effect` flourish (`playLogStack`, `playStoneSet`, `playWaterChime`, `playSew`, leaf burst). `restoreTerraceState()` applies every saved tier without animation. `emitStationState()` reports tiers/pending/fire/perks/ready flags to React. Hover labels come from `stationLabel()` (e.g. *"Craft Seedling Crate (1 🪵 1 🌱)"*, *"Harvest Herb Planter · +2 🍅 +1 🌱"*, *"Growing — ready tomorrow"*, *"Light fire pit · 1 🪵"*). `cook()` / `craftPerk()` re-check tier, fire and materials, then play `playCook()` + steam or `playSew()` + sparkles with floating feedback. Locked recipes/perks name the tier they need via `stationRequirementHint()` (*"Needs Grill Counter"*) and show 🔒 in the popover — players never see `T1–T5`. Stations are independent of the 10 macro upgrades (no Cozy Index / milestone effect yet).
 
 Rules live in `engine/stations.ts` (pure, unit-tested): `nextStationTier`, `planterHarvest` (+tier 🍅, +1 🌱 at T2+), `barrelCollect` (+tier 💧), `sleepComfort` (stamina target 75/90/100 by shelter tier, +10 with `warm-sheets`, cap 100; overnight strength loss 10 → 5 at T3), `gatherStaminaCost` (×0.7 with `mended-gloves`), `strengthDriftFactor` / `phaseStrengthDecay` (×0.5 with `cozy-cloak`), `recipeBlocker` / `applyRecipe`, `perkBlocker`. `applySleep()` never lowers stamina you already have.
 
@@ -167,6 +170,27 @@ Flow:
 3. The scene's `applyOvernightRegrowth()` adopts the new `spawns` / `clearedWeeds` / `searchedBoxes` and re-resolves the scene config. It destroys only the regrown hotspot nodes and recreates them via `createHotspotNode()`, popping them in once their art loads (instant under Reduce Motion).
 4. The scene then refreshes the farm/barrel ready flags and saves.
 
+### Terrace Lift Rides & Ground-Floor Lobby
+
+Both rides share `ui/liftStage.tsx`: a 1376×768 cover-fitted stage (`LIFT_STAGE_W/H`), `LiftDoors` (two sliding panels inside the frame's transparent doorway), `LiftFrame`, `LiftFloorReadout` and `CutsceneCaption`. The keyframes `owsLiftTremor`, `owsLiftDigit`, `owsLobbyPush`, `fadeInUp` and `owsFadeOpacity` live in `theme.css`.
+
+| | Ride up (`TerraceLiftCutscene`, inside `ArrivalCutscene`) | Ride down (`TerraceLobbyScreen`) |
+|---|---|---|
+| Starts from | Title/selector (claiming the Terrace) **or** the lobby's lift / ↑ Rooftop button | Rooftop `stairwell-door` click (traveler walks over, footstep, 350ms) |
+| Beats | Lobby push-in → doors shut → 1→2→3→4→R → ding → doors open on the rooftop → step through | Pull back into the lift with the rooftop framed (60ms) → doors shut, rooftop ambience off (1.0s) → hum, R→4→3→2→1 (1.75–3.27s; the hidden view swaps to the lobby at 1.85s) → ding, lobby birdsong (3.65s) → doors open (3.8s) → *"Ground Floor · Lobby"* caption (4.1s) → step out (4.4s) → interactive lobby (5.1s) |
+| Ends in | `ShelterScreen` (traveler strolls out of the stairwell) | The lobby scene on the same stage (no screen swap) |
+| Skip | Skip button, click, `Space`/`Enter`/`Escape` | Same — jumps straight to the interactive lobby |
+
+**Lobby scene:** the `terrace-lobby.webp` painting with `LOBBY_SPOTS` buttons positioned in % of the painting.
+- **Locked doors** — Apartment 1A, Apartment 1B and the open side doorway. Hover/focus gives a warm outline glow and a name tag (`.ows-lobby-spot`, `.ows-lobby-label`). A click plays `playLocked()`, flares `.ows-lobby-spot--glow` (re-keyed so it replays) and pushes a *"Coming soon"* toast.
+- **Lift** — rides back up. So does the **↑ Rooftop** pill (top-left, beside a "Ground Floor Lobby" title). Both route through `App` → `arrival`, so the traveler re-enters via the stairwell stroll.
+
+**Behaviour while downstairs:**
+- `ShelterScreen` is unmounted, so the day clock and the rooftop ambience stop; the run is saved on unmount.
+- The rooftop state stays in `ows_terrace_state`.
+- A page refresh returns to the Title (Continue → rooftop).
+- Reduce Motion turns every push, slide and tremor into fades.
+
 ### Archived / Unmounted M1 Files (intentionally dormant — not broken wiring)
 
 The M1 drawer-based loop is **paused on purpose** while gathering, day rhythm and visual upgrades are redesigned for the in-scene experience. These files and actions are kept compiling, typed and (for engine rules) unit-tested so they can be reused or ported; **do not delete them, and do not treat their missing call sites as bugs**.
@@ -194,9 +218,9 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 | Shelter backgrounds | `public/source/backgrounds/bg-*.webp` | WebP, 1920×1080 recommended | Cozy CSS gradient per entry in `media.ts` |
 | Traveler sprites | `public/source/sprites/{female,male}-{idle,walk,search,sit,sleep}.webp` | Transparent WebP | Graceful skip if absent |
 | Scene stages & props | `public/source/scenes/*.webp`, `public/source/props/*.webp` | WebP | Stage preloaded into Pixi `Assets` during the arrival cutscene; the scene stays veiled until it's decoded, then fades in (220ms). A failed load shows a neutral `#F5EFE4` base |
-| Cutscene plates | `public/source/cutscenes/terrace-*.webp` (1376×768 lobby & lift frame, 508×680 door panel) | WebP (frame has a transparent doorway) | Dark backdrop behind layers |
+| Cutscene plates | `public/source/cutscenes/terrace-*.webp` (1376×768 lobby & lift frame, 508×680 door panel) | WebP (frame has a transparent doorway) | Dark backdrop behind layers. Used by the ride up, the ride down and the interactive lobby |
 | Menu music | `public/source/audio/music-menu.mp3` (optional, **not shipped**) | MP3 (looping) | Procedural warm-pad chord loop — **currently the active menu music** |
-| UI & shelter foley | Procedural (Web Audio) | — | Always available, 0 KB (includes campfire, rummage, weed snip, sleep, build taps, water-drop chime, lift hum / door slide / floor tick / ding) |
+| UI & shelter foley | Procedural (Web Audio) | — | Always available, 0 KB (includes campfire, rummage, weed snip, sleep, build taps, log stack, stone set, water-drop chime, harvest, cook, sew, lift hum / door slide / floor tick / ding) |
 | Site ambience | Procedural (Web Audio) | — | 9 musical soundscapes (birdsong, chimes, drips, creaks, surf…), 350ms crossfade |
 
 ---
@@ -215,6 +239,8 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 ---
 
 ## Gameplay Rules (M1-A + M1-B — engine rules, UI currently dormant)
+
+*Live overlap:* the shelter's real-time day cycle replaces the Day-loop/Energy rows in play. `sleepAtShelter()` still uses the **Weather** row: it rolls the weather, adds the Soft Rain 💧 bonus and names the weather in the morning toast. It also uses the **Unlocks** row for days survived.
 
 | System | Rule |
 |--------|------|
@@ -308,7 +334,7 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - [x] **M2 · Terrace v2:** New stage with rooftop stairwell/lift bulkhead; traveler fades in and steps out of the ajar door; static `obstacles` (left parapet ellipse, bulkhead rect) keep walk targets off painted scenery
 - [x] **M2 · Terrace v2:** Shabby cloth lean-to (`prop-cloth-shed.webp`) behind-left of the fire pit as the sleep spot (own collider; sleeper sorts just above the shelter so they lie on its bedding)
 - [x] **M2 · Terrace v2:** Distinct box art per spot (`boxes-intact`/`cleared`, `box-double`, `box-single` with a dusty searched tint) and all 3 weed sprites across 6 patches with varied scales/flips
-- [x] **M2 · Terrace v2:** `stairwell-door` hotspot (hover outline + "coming soon" label, walk-over + toast via `pushNotice`)
+- [x] **M2 · Terrace v2:** `stairwell-door` hotspot (hover outline + "coming soon" label, walk-over + toast via `pushNotice`) *(superseded: the door now rides the lift down to the lobby; its outline and "coming soon" toast are gone)*
 - [x] **M2 · Terrace v2:** 3 in-scene buildables (Upgrade Shelter → timber shelter with lantern glow, Herb Planter, Rain Barrel) with bottom-center `BuildBar`, floor blueprint markers, pop-in tween, colliders + Y-sort, and `builtProps` persistence *(superseded by the multi-tier stations below; old `builtProps` migrate to Tier 2)*
 - [x] **M2 · Terrace lift arrival:** 3-beat elevator cutscene (`TerraceLiftCutscene.tsx`, ~5.2s) — lobby Ken Burns push-in + footsteps (0–1.7s) → cover-fitted 1376×768 lift stage with sliding door panels in the doorway cutout, amber 1→2→3→4→R indicator, hum + micro-tremor (1.7–3.7s) → ding, doors slide apart onto the sunlit Terrace, ambience swell, caption and step-through into the shelter (3.7–5.2s). Skip/keys stop all beats and the hum; Reduce Motion swaps motion for fades. New foley: `startLiftHum` / `stopLiftHum`, `playLiftDoorSlide`, `playLiftFloorTick`, `playLiftDing`
 - [x] **M2 · Stage-space anchoring:** Scene coords are mapped through the backdrop's cover rect (`stageRect`, `toPx` / `toNorm`), so props, colliders, walk bounds, hotspots and floor clicks stay locked to the painted floor on 16:9, ultrawide and portrait windows
@@ -329,12 +355,13 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - [x] **M2 · Composed Terrace layout:** stations re-anchored into a Living & Mending nook (shelter 0.30/0.56, sewing 0.46/0.54, farm 0.17/0.68), the Central Hearth (0.49/0.72) and a Cooking & Utility line (grill 0.62/0.56, barrel 0.76/0.57); `keepClear` and the default layout updated; box/weed spawns biased to the rooftop perimeter (`perimeterBand`); older saved layouts repaired on load
 - [x] **M2 · Overnight regrowth:** `regrowTerraceSpawns` (1–2 cleared weeds per night, one searched box every 2nd day, new valid spots) wired through `sleepAtShelter()` → `regrowStoredTerrace()` → `ShelterScene.applyOvernightRegrowth()`, with a morning-toast note
 - [x] **M2 · Core Vitality & Multi-Tier Progression:** 🍅 `food` as the 7th resource (save/backup migration → 0, 7-item pouch); 14 new station sprites in `SCENE_PROPS`; `TERRACE_STATIONS` (Shelter 1–3, Fire Pit 1–3, Farm 0–3, Rainwater Barrel 0–3, Cooking Grill 0–4, Sewing Kit 0–5) replacing the one-off buildables, with legacy `builtProps` → Tier 2 migration; shelter-tier sleep comfort + morning farm/barrel refresh; farm harvest & rainwater collection; `StationPopover` for grill Cooking (5 recipes) and sewing Mending (3 perks: sheets, gloves, cloak); `playHarvest` / `playCook` / `playSew`; grill steam; T3 hut window + lantern glows; ⚠️ `TEST_MODE_GENEROUS_START` pool
-- [x] **Polish · Pre-Game & In-World Contextual Menu Pass:** removed boxy dark halo scrim behind `TitleScreen` wordmark (keeping clean `drop-shadow`); centered `SiteSelector` flex-wrap card rows and equalized `.ows-pill` top-bar toggle heights (`38px`); replaced bottom `BuildBar` with contextual in-world `PropActionMenu` above clicked stations and cleaner Tier 0 `"Empty spot — Craft ..."` blueprint hints; added instant `.ows-pouch-tooltip` parchment hover/focus tooltips to all 7 pouch materials
+- [x] **Polish · Pre-Game & In-World Contextual Menu Pass:** removed boxy dark halo scrim behind `TitleScreen` wordmark (keeping clean `drop-shadow`); centered `SiteSelector` flex-wrap card rows and equalized `.ows-pill` top-bar toggle heights (`38px`); replaced bottom `BuildBar` with contextual in-world `PropActionMenu` above clicked stations and *"Craft {name} ({cost})"* blueprint hints; natural tier names in lock hints (`stationRequirementHint`, 🔒 rows); prop hover tint + 3% lift replacing the old hover rings; added instant `.ows-pouch-tooltip` parchment hover/focus tooltips to all 7 pouch materials
+- [x] **M2 · Ride down to the lobby:** rooftop `stairwell-door` → `TerraceLobbyScreen` (reverse lift ride R→1, skippable, Reduce Motion fades) ending in an interactive ground-floor lobby — glowing *"Coming soon"* apartment doors and the lift / ↑ Rooftop back up via the arrival ride; shared `liftStage.tsx` and global lift keyframes; scene `DoorCallback`
 - [ ] **M2:** Custom interactive scene configs & prop sprites for remaining shelters (`pipe`, `tree`, etc.)
 - [ ] **M2:** Tier 1–3 painted visual layer swaps & macro-build restoration integrated into interactive scenes
 - [ ] **M2:** Weather visuals & audio on the shelter scene (rain streaks, squall haze, rain-on-roof ambience)
 - [ ] **M2 Art & Immersion Upgrades:** Lit fire-pit sprites, "cleared" variants for `box-double`/`box-single`, arrival vignettes for the other 8 shelters, and dedicated Morning/Afternoon/Evening/Night painted backdrops
-- [ ] **M2 Design:** Wood-burning fire over time (lighting already costs 1 Timber), beyond-the-roof gathering via the lift/stairwell door (then switch off `TEST_MODE_GENEROUS_START` and tune scarcity), more Terrace anchor upgrades (parapet repair, string lights), traveler clothing progression (cozy cloak → Tier 2 outfit sprite) (see `GAME_CONTEXT.md` → Design Roadmap)
+- [ ] **M2 Design:** Wood-burning fire over time (lighting already costs 1 Timber), beyond-the-roof gathering behind the lobby's apartment doors (then switch off `TEST_MODE_GENEROUS_START` and tune scarcity), more Terrace anchor upgrades (parapet repair, string lights), traveler clothing progression (cozy cloak → Tier 2 outfit sprite) (see `GAME_CONTEXT.md` → Design Roadmap)
 
 ### 🔧 Known Technical Backlog
 
@@ -342,9 +369,12 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - [x] ~~**Sleep → day progression:** Connect the lean-to / timber-shelter sleep hotspot to `sleepToNextDay` / day progression and milestone unlocks once the new day rhythm is finalized.~~ → Implemented via `sleepAtShelter()` (`day + 1`, `"Day N · Morning"` toast, day-survival milestone checks) and `restAtShelter()`.
 - [ ] **Stations → Cozy Index:** Decide how the in-scene stations relate to the 10 macro upgrades (Cozy Index, `totalUpgradesBuilt` milestones) — today they are visual + vitality/material loops only.
 - [ ] **Station art tuning:** `propScale`, colliders, stand offsets and glow anchors for the 14 tier sprites (now at their composed anchors) are first estimates — verify in the browser, especially the larger T3/T4/T5 sprites against the back parapet.
+- [ ] **Lobby hotspot tuning:** `LOBBY_SPOTS` rects in `TerraceLobbyScreen.tsx` were measured by eye from the painting — nudge them if a glow doesn't sit on its door frame.
+- [ ] **Station-menu UX review:** an affordable empty blueprint builds on a single click (no confirm), and maxed single-action stations skip the menu while upgradeable ones open it — revisit if either feels surprising in play.
+- [ ] **`stationRequirementHint` is Terrace-only** (looks up `TERRACE_STATIONS`); make it site-aware when Shelter #2 gets stations.
 - [ ] **Generous test pool:** `TEST_MODE_GENEROUS_START` (`data/modes.ts`) must be switched off once downstairs scavenging provides Stone/extra materials.
 - [ ] **Scene registry:** Replicate the data-driven `ShelterSceneConfig` pattern from `src/game/data/scenes/terrace.ts` to the remaining 8 shelters and register them in `getSceneConfig()` (`src/game/data/scenes/index.ts`).
-- [ ] **Split `shelterScene.ts`** (~2,400 lines after the day cycle, fire tiers and stations) into focused modules (actor/traveler, hotspots, stations, fire/particles, lighting) **before** adding Shelter #2.
+- [ ] **Split `shelterScene.ts`** (~2,500 lines after the day cycle, fire tiers, stations, regrowth and station menus) into focused modules (actor/traveler, hotspots, stations, fire/particles, lighting) **before** adding Shelter #2.
 - [x] ~~**Stage-space coordinates:** Hotspot/obstacle coords were normalized to the viewport while the backdrop is cover-scaled, so props drifted off the painted floor on aspect ratios far from 16:9.~~ → Fixed: everything maps through the backdrop's cover rect (`stageRect`).
 - [ ] **Menu music asset:** `/source/audio/music-menu.mp3` is optional and not shipped; the procedural warm-pad chord loop is the active menu music until a track is added.
 

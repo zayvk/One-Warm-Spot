@@ -41,6 +41,8 @@ export interface ShelterCanvasProps {
   onStationStateChange?: (state: SceneStationState) => void;
   onStationOpen?: StationOpenCallback;
   onStationMenuOpen?: StationMenuCallback;
+  /** The traveler reached a door; return true if it leads somewhere (e.g. `stairwell-door`) */
+  onDoor?: (doorId: string) => boolean;
 }
 
 const NOT_READY: StationActionResult = { ok: false, message: 'The rooftop is still settling in' };
@@ -55,12 +57,14 @@ export default function ShelterCanvas({
   onStationStateChange,
   onStationOpen,
   onStationMenuOpen,
+  onDoor,
 }: ShelterCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<ShelterScene | null>(null);
   const stationStateCbRef = useRef(onStationStateChange);
   const stationOpenCbRef = useRef(onStationOpen);
   const stationMenuCbRef = useRef(onStationMenuOpen);
+  const doorCbRef = useRef(onDoor);
   /* Crafted perks shape gathering costs (gloves) and strength drift (cloak) */
   const perksRef = useRef<string[]>([]);
 
@@ -68,7 +72,8 @@ export default function ShelterCanvas({
     stationStateCbRef.current = onStationStateChange;
     stationOpenCbRef.current = onStationOpen;
     stationMenuCbRef.current = onStationMenuOpen;
-  }, [onStationStateChange, onStationOpen, onStationMenuOpen]);
+    doorCbRef.current = onDoor;
+  }, [onStationStateChange, onStationOpen, onStationMenuOpen, onDoor]);
 
   useImperativeHandle(ref, () => ({
     requestBuild: (id: string) => sceneRef.current?.requestBuild(id) ?? false,
@@ -192,6 +197,7 @@ export default function ShelterCanvas({
         scene.setSpendCallback(handleSpend);
         scene.setCookCallback(handleCook);
         scene.setNoticeCallback(handleNotice);
+        scene.setDoorCallback((doorId) => doorCbRef.current?.(doorId) ?? false);
         scene.setRestCallback(handleRest);
         scene.setSleepCallback(handleSleep);
         scene.setCanAffordCallback((cost) => canAfford(cost, useGameStore.getState().resources));

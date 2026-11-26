@@ -81,29 +81,36 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
 ## 🏙️ Current Terrace Gameplay (Active Vertical Slice — Terrace v2)
 
 - **Stage:** An overgrown apartment rooftop with a crumbling brick parapet and, on the right, an old **brick stairwell/lift bulkhead with an ajar metal door** — where the traveler arrives. The parapet and bulkhead are solid scenery the traveler walks around.
+- **Calm arrival:** After the lift cutscene the traveler appears right at the stairwell threshold, pauses for a breath as the rooftop fades in, then takes a slow ~2s stroll a few steps onto the terrace and settles into idle before the player takes over.
 - **Traveler:** Real painted **Female / Male** traveler sprites in an understated, faceless **3/4 view** style, with **5 poses** — `idle`, `walk`, `sit`, `sleep`, `search`. Each pose is scaled by anatomical height ratios (so sitting and sleeping read at believable proportions) with pose-adapted soft shadows and smooth crossfades between poses.
 - **Click-to-walk:** Click anywhere on the rooftop floor to walk there. Movement stays inside the walkable area, props block the way with **elliptical obstacle colliders**, and everything is **Y-depth sorted** so the traveler passes naturally in front of or behind props.
 - **Interactive props:**
-  - **Central Fire Pit** — walk over and light it (flickering flames, embers, warm glow and a looping campfire crackle), and the traveler **sits by the fire**. Click it again to **extinguish** it with a soft hiss. At Dusk and Night its radial glow warms up the rooftop.
+  - **Central Fire Pit (3 tiers)** — walk over and light it (flickering flames, embers, warm glow and a looping campfire crackle), and the traveler **sits by the fire**. Click it again to **extinguish** it with a soft hiss. At Dusk and Night its radial glow warms up the rooftop. It grows with the shelter:
+    - **Tier 1 · Makeshift Twigs** (start) — a modest, delicate flame, sparse sparks and a soft compact glow.
+    - **Tier 2 · Stacked Logs** — a taller, livelier multi-tongue flame (deep amber outside, bright gold core), steadier rising embers, a ~35% wider and brighter glow pool, and a fuller crackle.
+    - **Tier 3 · Stone-Ring Hearth** — a rich hearth fire: layered dancing flames over a pulsing coal bed, frequent drifting embers, curling translucent smoke wisps, a lush wide golden glow that transforms the rooftop at Dusk and Night, and the richest crackle.
   - **Shabby Cloth Lean-to / Timber Shelter (Context-Aware Rest & Sleep)** — tucked behind-left of the fire pit:
-    - During **Day** or **Dusk**, hovering reads **"Rest by shelter"** — clicking sits beside the shelter with a tin mug, restores **+25 Stamina**, and smoothly shifts the sky to the next phase over 1.4s.
+    - During **Day** or **Dusk**, hovering reads **"Rest by shelter"** — clicking sits beside the shelter, restores **+25 Stamina**, and smoothly shifts the sky to the next phase over 1.4s.
     - During **Night**, hovering reads **"Sleep until morning"** — clicking tucks into the bedroll under the shelter in starry twilight, then transitions into **Day N+1 · Morning** (restoring `Stamina = 100`, gently easing `Strength -10`, and showing a morning toast).
+  - **3 searchable box spots, each with distinct art** — broken boxes, a double crate stack, and a single parcel with a leaning plank. Rummage once each (search pose + rummage foley) for Timber, Scrap and Cloth; the broken boxes show a cleared sprite and the others take on a dusty, rummaged look.
+  - **6 cleanable weed patches** — 3 weed species (grassy tufts, leafy brush, dandelion clusters), two of each; clearing each (leaf particles + snip foley) yields Seeds and Cloth.
+  - **A fresh rooftop every run:** each new game lays the boxes and weeds out differently — new spots, shuffled art, slight size variation (0.92–1.08×) and random flips. Boxes lean toward the parapet edges and corners; weeds scatter across cracks and wall edges. Nothing ever overlaps the fire pit, shelter, planter/barrel spots, the stairwell path or each other. The layout is remembered for the whole run (refresh / Continue), and **Start Fresh** rolls a new one. *(This generator is also the groundwork for future rooftop regrowth.)*
+  - **Stairwell door** — hovering highlights the ajar door (*"Stairwell downstairs (coming soon)"*); clicking walks the traveler over and a gentle toast says the stairs lead down into the quiet building—more to explore soon.
 - **3-Phase Real-Time Day Cycle & Vitality (`Stamina` & `Strength`):**
   - A full day lasts **12 real-time minutes** (`240s` per phase: **Day** Full Sun → **Dusk** Sunset → **Night** Half Moon), paused when outside the shelter or inside Settings. Night holds calmly without harsh pass-outs until the player chooses to sleep.
   - **Stamina (`0–100`, restedness)** is gently spent by clearing weeds (`-6`), searching boxes (`-10`), and building upgrades (`-12`), and restored by resting or sleeping.
   - **Strength (`0–100`, nourishment/resilience)** eases gently across phase shifts (`-8`) and overnight (`-10`), non-lethal and zero-stress.
   - Displayed in the bottom-left **Time-Dial + Test-Tube Vitality HUD**, paired with **twinkling night stars**, **drifting warm fireflies**, and brighter fire pit / lantern glow pools at night.
-  - **3 searchable box spots, each with distinct art** — broken boxes by the back-left parapet, a double crate stack in the front-left corner, and a single parcel with a leaning plank by the back-right parapet. Rummage once each (search pose + rummage foley) for Timber, Scrap and Cloth; the broken boxes show a cleared sprite and the others take on a dusty, rummaged look.
-  - **6 cleanable weed patches** — 3 weed species (grassy tufts, leafy brush, dandelion clusters) at varied sizes and flips along the parapet and concrete cracks; clearing each (leaf particles + snip foley) yields Seeds and Cloth.
-  - **Stairwell door** — hovering highlights the ajar door (*"Stairwell downstairs (coming soon)"*); clicking walks the traveler over and a gentle toast says the stairs lead down into the quiet building—more to explore soon.
-- **In-scene building (no menu drawers):** Spend found materials directly on the rooftop. A tiny bottom-center **Build Bar** shows a frosted chip for each unbuilt upgrade with its material cost; chips you can't afford yet are dimmed. Planter and barrel spots also glow as soft blueprint markers on the floor that can be clicked directly. Building walks the traveler over, plays soft mallet foley and a warm chime, deducts the materials from the pouch, and pops the new prop in:
+- **In-scene building (no menu drawers):** Spend found materials directly on the rooftop. A tiny bottom-center **Build Bar** shows a frosted chip for each unbuilt, unlocked upgrade with its material cost; chips you can't afford yet are dimmed. Planter and barrel spots also glow as soft blueprint markers on the floor that can be clicked directly. Building walks the traveler over, plays soft mallet foley and a warm chime, deducts the materials from the pouch, and pops the new prop in:
+  - **🔥 Stack Firepit Logs** (2 🪵) — fire pit Tier 1 → 2, with a wood-stacking knock.
+  - **🧱 Stone-Ring Hearth** (2 🪵 + 1 🔩) — appears once the logs are stacked; fire pit Tier 2 → 3, with stony clacks as the ring is set.
   - **🛖 Upgrade Shelter** (3 🪵 + 2 🧵) — the cloth lean-to becomes a **cozy timber shelter** with a bedroll and a hanging lantern that glows warmly at dusk, at night and while you sleep.
   - **🌿 Herb Planter** (2 🪵 + 2 🌱) — a raised planter of herbs and tomatoes by the left parapet, with a leafy sparkle burst.
   - **🛢️ Rain Barrel** (2 🔩 + 1 🪵) — a rainwater barrel beside the stairwell bulkhead, with gentle water-drop chimes.
-  - Built props become solid scenery (colliders + Y-sorting). The Build Bar vanishes once all three are built. The rooftop's boxes and weeds alone yield enough for all three.
+  - Built props become solid scenery (colliders + Y-sorting). The Build Bar vanishes once everything is built. The rooftop's boxes and weeds alone cover every build plus the Tier 2 fire pit; the Day 1 supplies make up the rest for the Stone-Ring Hearth.
   - These Terrace buildables are separate from the paused 10 macro upgrades: they don't yet raise the Cozy Index or count toward milestone unlocks.
 - **Found Materials Pouch:** A minimal, centered pouch that pulses when something new is found. It currently surfaces only the **4 Terrace-gatherable materials — 🪵 Timber, 🔩 Scrap, 🧵 Cloth, 🌱 Seeds**. **🪨 Stone & 💧 Water are intentionally held back** until in-scene sources for them exist.
-- **Persistence:** Fire state, searched boxes, cleared weeds and built upgrades are remembered between visits; claiming a new shelter or resetting starts the Terrace fresh.
+- **Persistence:** Fire state, fire pit tier, the box & weed layout, searched boxes, cleared weeds and built upgrades are remembered between visits; claiming a new shelter or resetting starts the Terrace fresh with a new layout.
 
 ---
 
@@ -161,7 +168,7 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 
 - **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP backgrounds, stage backdrops, cutscene plates, character pose sprites, and interactive prop sprites organized under `public/source/`. Target <5 MB initial browser payload. Interactive stages stay locked to their painted floor on any window shape (16:9, ultrawide or portrait).
 - **Characters:** Understated, faceless 3/4-view travelers in ragged earthy gear, painted to match the backdrops.
-- **Audio:** Menu music tries an optional `public/source/audio/music-menu.mp3`; since that file isn't shipped yet, the **procedural warm-pad chord loop** is what currently plays. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle, fire extinguish hiss, box rummage, weed snip, bedroll sleep, building mallet taps, rain-barrel water-drop chimes, and the Terrace lift's low hum, door slides, floor-tick relay clicks and brass arrival ding) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
+- **Audio:** Menu music tries an optional `public/source/audio/music-menu.mp3`; since that file isn't shipped yet, the **procedural warm-pad chord loop** is what currently plays. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle that grows fuller with each fire pit tier, fire extinguish hiss, box rummage, weed snip, bedroll sleep, rest chime, building mallet taps, log-stacking knocks, hearth stone clacks, rain-barrel water-drop chimes, and the Terrace lift's low hum, door slides, floor-tick relay clicks and brass arrival ding) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
 
 ---
 
@@ -173,15 +180,18 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 - **🛠️ More In-Scene Visual Upgrades:** Build on the Terrace v2 trio (timber shelter, herb planter, rain barrel) with more **anchor spots** — repairing the parapet walls, string lights, and second-tier versions of existing props.
 - **👕 Traveler Clothing Progression:** Start in ragged earthy traveler gear and unlock cleaner, warmer, cozier outfits as the shelter improves.
 - **🌅 Full Time-of-Day Scenes & More Arrival Vignettes:** Dedicated **Morning / Afternoon / Evening / Night** painted backdrops (and time-specific props) instead of tint-only lighting, plus per-shelter intro vignettes for the other 8 shelters (the Terrace lift ride is the template).
-- **🌙 New Day Rhythm:** Reconnect sleeping (in the lean-to / timber shelter) to day progression and milestone unlocks once the in-scene day loop is finalized.
 - **🏠 More Interactive Shelters:** Bring the remaining 8 shelters to life with their own scene configs, props, hotspots and buildables.
+- **🌱 Rooftop Regrowth:** Reuse the per-run layout generator to let a few new sprouts and debris gently reappear over the days.
 
 ### ✅ Shipped from the roadmap (Terrace v2)
 
 - Rooftop **stairwell/lift entrance** stage with the traveler arriving through its door, and the **shabby cloth lean-to** beside the fire pit as the sleeping spot.
 - **Single / double box** sprites and a **third weed species**, so no two gathering spots look alike.
 - First **in-scene visual upgrades**: reinforce the cloth lean-to into a timber shelter, a raised herb planter, and a rain barrel.
-- **Terrace arrival vignette**: the 3-beat lobby → lift ride → doors-open-to-sunlight elevator cutscene.
+- **Terrace arrival vignette**: the 3-beat lobby → lift ride → doors-open-to-sunlight elevator cutscene, ending in a calm stroll out of the stairwell.
+- **New day rhythm**: the real-time Day → Dusk → Night cycle, with resting and sleeping at the shelter advancing the day and milestone unlocks.
+- **3-tier fire pit** (twigs → stacked logs → stone-ring hearth) with fire, glow and crackle that grow each tier.
+- **Randomized box & weed layout** per run.
 
 ---
 
@@ -193,4 +203,5 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 - Optional `.webm` animated shelter backgrounds
 - V2 outpost network (multiple shelters connected)
 - Journal / quest log with hand-drawn illustrations
+- 📔 **Found Traveler Diary Pages / Two-Tab Cozy Scrapbook** *(parked story idea)* — torn diary pages left by earlier travelers turn up while exploring, gently telling their story; they're kept in a cozy two-tab scrapbook alongside your own keepsakes.
 - Sound: ambient day/night cycle

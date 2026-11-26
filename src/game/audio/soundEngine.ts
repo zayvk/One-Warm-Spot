@@ -1116,6 +1116,7 @@ interface CampfireInstance {
 }
 
 let campfireDesired = false;
+let campfireLevel = 1;
 let currentCampfire: CampfireInstance | null = null;
 
 function stopCampfireInstance(inst: CampfireInstance): void {
@@ -1194,25 +1195,67 @@ function applyCampfire(): void {
       src.start(t, rand(0, 3));
       src.stop(t + dur + 0.02);
 
-      // Occasional warm double-pop
-      if (Math.random() < 0.28) {
+      // Occasional warm double-pop (a bigger hearth pops & crackles more often)
+      if (Math.random() < 0.16 + 0.14 * campfireLevel) {
         scheduleCrackle(rand(45, 130));
       } else {
-        scheduleCrackle(rand(180, 720));
+        scheduleCrackle(rand(180, 720) * (1.3 - 0.4 * campfireLevel));
       }
     }, delay);
     inst.timers.add(id);
   };
   scheduleCrackle(rand(120, 350));
 
-  rampGain(bus.gain, 1, 0.45);
+  rampGain(bus.gain, campfireLevel, 0.45);
   currentCampfire = inst;
 }
 
-/** Start or stop the looping procedural campfire crackle */
-export function setCampfireAudio(active: boolean): void {
+/**
+ * Start or stop the looping procedural campfire crackle.
+ * `level` (0–1) sets loudness & crackle density — bigger fire pits sound fuller.
+ */
+export function setCampfireAudio(active: boolean, level = 1): void {
   campfireDesired = active;
+  campfireLevel = clamp01(level);
+  if (currentCampfire && ctx && active) rampGain(currentCampfire.bus.gain, campfireLevel, 0.6);
   applyCampfire();
+}
+
+/** Hollow woody knocks as split logs are stacked in the fire pit */
+export function playLogStack(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const base = now();
+  const target = getSfxTarget();
+
+  [0, 0.17, 0.38].forEach((off, i) => {
+    const t = base + off;
+    tone(c, target, t, {
+      freq: (180 - i * 22) * pitchVar(),
+      glideTo: 70,
+      glideTime: 0.09,
+      vol: 0.13,
+      decay: 0.13,
+      type: 'triangle',
+      attack: 0.002,
+    });
+    puff(c, target, t + 0.005, 0.06, 0.16, 300, 1800, 600);
+  });
+}
+
+/** Stony clacks and a low settling thunk as the hearth ring is set */
+export function playStoneSet(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const base = now();
+  const target = getSfxTarget();
+
+  [0, 0.14, 0.3, 0.5].forEach((off, i) => {
+    const t = base + off;
+    puff(c, target, t, 0.08, 0.05, 1400, 3600 - i * 300, 1800);
+    tone(c, target, t, { freq: 620 * pitchVar(), glideTo: 380, glideTime: 0.03, vol: 0.04, decay: 0.05, attack: 0.001 });
+  });
+  tone(c, target, base + 0.62, { freq: 92, glideTo: 55, glideTime: 0.1, vol: 0.11, decay: 0.16, type: 'triangle', attack: 0.003 });
 }
 
 /** Soft cardboard & timber rummaging taps when searching crates */

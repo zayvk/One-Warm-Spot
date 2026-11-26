@@ -59,8 +59,12 @@ export interface BuildableConfig {
    */
   upgradesHotspot?: string;
   hotspotOverrides?: Partial<Pick<HotspotConfig, 'label' | 'propScale' | 'collider' | 'standOffset' | 'restOffset'>>;
+  /** Another buildable that must be built first (e.g. Tier 2 before Tier 3) */
+  requires?: string;
+  /** For tiered upgrades of the fire pit: the tier this build reaches */
+  tier?: 2 | 3;
   /** Finishing flourish once built */
-  effect: 'lantern' | 'leaves' | 'water';
+  effect: 'lantern' | 'leaves' | 'water' | 'logs' | 'stones';
   /** Lantern glow anchor as a fraction of the sprite (0–1 from left, 0–1 from top) */
   lanternAnchor?: { x: number; y: number };
 }

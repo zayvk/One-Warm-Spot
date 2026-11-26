@@ -22,7 +22,13 @@ import { BG_SHELTERS, travelerSpriteSrc, SCENE_STAGES } from '../data/media.ts';
 import type { TravelerPose } from '../data/media.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
 import { getSceneConfig } from '../data/scenes/index.ts';
-import { loadTerraceState, saveTerraceState, type TerraceState } from '../engine/terraceState.ts';
+import { withTerraceSpawns } from '../data/scenes/terrace.ts';
+import {
+  loadTerraceState,
+  saveTerraceState,
+  type FirepitTier,
+  type TerraceState,
+} from '../engine/terraceState.ts';
 import {
   playFireLight,
   playFireDouse,
@@ -34,6 +40,8 @@ import {
   playFootstep,
   playBuild,
   playClaim,
+  playLogStack,
+  playStoneSet,
   playWaterChime,
 } from '../audio/soundEngine.ts';
 
@@ -179,6 +187,41 @@ const POSE_SHADOW: Record<TravelerPose, { rx: number; ry: number; alpha: number 
 };
 
 /* ═══════════════════════════════════════════
+   Fire Pit Tiers — flame, embers, smoke & glow
+   ═══════════════════════════════════════════ */
+
+interface FireProfile {
+  /** Flame height multiplier (Tier 1 = the original modest flame) */
+  flame: number;
+  /** Extra side flame tongues around the main flame */
+  tongues: number;
+  /** Ember spawn chance per frame */
+  emberChance: number;
+  /** Glow pool size & brightness multipliers */
+  glowScale: number;
+  glowBoost: number;
+  /** Extra glow growth at night */
+  nightGlow: number;
+  glowTint: number;
+  /** Pulsing coal bed at the base */
+  coals: boolean;
+  /** Translucent smoke wisp spawn chance per frame */
+  smokeChance: number;
+  /** Campfire crackle level (0–1) */
+  crackle: number;
+}
+
+const FIRE_TIERS: Record<FirepitTier, FireProfile> = {
+  1: { flame: 1, tongues: 0, emberChance: 0.16, glowScale: 1, glowBoost: 1, nightGlow: 0.1, glowTint: 0xff8030, coals: false, smokeChance: 0, crackle: 0.72 },
+  2: { flame: 1.4, tongues: 2, emberChance: 0.32, glowScale: 1.35, glowBoost: 1.18, nightGlow: 0.12, glowTint: 0xff8a36, coals: false, smokeChance: 0, crackle: 0.86 },
+  3: { flame: 1.65, tongues: 4, emberChance: 0.5, glowScale: 1.75, glowBoost: 1.36, nightGlow: 0.16, glowTint: 0xffa042, coals: true, smokeChance: 0.045, crackle: 1 },
+};
+
+/** Gentle stroll pace for the arrival walk out of the stairwell */
+const ENTRY_STROLL_MS = 2000;
+const ENTRY_PAUSE_MS = 280;
+
+/* ═══════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════ */
 
@@ -282,6 +325,8 @@ interface SceneParticle {
   gravity: number;
   life: number;
   maxLife: number;
+  /** Smoke: soft fade in/out at this peak alpha and expand as it rises */
+  smoke?: { peakAlpha: number; grow: number };
 }
 
 /* ═══════════════════════════════════════════
@@ -319,6 +364,8 @@ export class ShelterScene {
   private targetY = 0.73;
   private travelerFlipped = false;
   private walkingTo: { x: number; y: number } | null = null;
+  /** Normalized units per ms for the current walk (null = normal pace) */
+  private walkSpeed: number | null = null;
   private breathPhase = 0;
   private footstepAccum = 0;
 
@@ -443,7 +490,7 @@ export class ShelterScene {
       this.labelLayer,
     );
 
-    this.sceneConfig = getSceneConfig(initial.siteId);
+    this.sceneConfig = this.resolveSceneConfig(initial.siteId);
     this.preloadTravelerPoses(initial.gender);
     this.buildNightEffects();
     this.buildHotspots();
@@ -466,7 +513,7 @@ export class ShelterScene {
     const prev = this.state;
     this.state = next;
     if (next.siteId !== prev.siteId) {
-      this.sceneConfig = getSceneConfig(next.siteId);
+      this.sceneConfig = this.resolveSceneConfig(next.siteId);
       this.loadBackground(next.siteId);
       this.buildHotspots();
       this.buildBuildables();
@@ -527,12 +574,12 @@ export class ShelterScene {
 
   /**
    * Walk over and build an in-scene upgrade. Returns false if the scene is busy
-   * or the upgrade is unknown/already built; materials are paid on arrival.
+   * or the upgrade is unknown/already built/still locked; materials are paid on arrival.
    */
   requestBuild(id: string): boolean {
     if (this.disposed || this.interactionLock || !this.entryDone) return false;
     const cfg = this.sceneConfig?.buildables?.find((b) => b.id === id);
-    if (!cfg || this.terrace.builtProps.includes(id)) return false;
+    if (!cfg || !this.isBuildableAvailable(cfg)) return false;
 
     if (this.sleepMode || this.currentPose === 'sleep') this.wakeUp();
     for (const hs of this.hotspots) if (hs.hovered) this.onHotspotHover(hs, false);
@@ -1064,7 +1111,7 @@ export class ShelterScene {
       this.fireLit = true;
       this.terrace.fireLit = true;
       saveTerraceState(this.terrace);
-      setCampfireAudio(true);
+      setCampfireAudio(true, this.fireProfile().crackle);
 
       this.ensureFireEffects(node);
       if (this.fireFlames) this.fireFlames.alpha = 1;
@@ -1273,8 +1320,40 @@ export class ShelterScene {
 
   /* ── In-Scene Builds ── */
 
+  /** Base config for a site, with the Terrace's per-run box & weed layout applied */
+  private resolveSceneConfig(siteId: SiteId | null): ShelterSceneConfig | null {
+    const base = getSceneConfig(siteId);
+    if (base && siteId === 'terrace' && this.terrace.spawns) {
+      return withTerraceSpawns(base, this.terrace.spawns);
+    }
+    return base;
+  }
+
+  /** Tiered fire pit builds are tracked by `firepitTier`; everything else by `builtProps` */
+  private isBuildableBuilt(cfg: BuildableConfig): boolean {
+    if (cfg.tier && cfg.upgradesHotspot === 'firepit') return this.terrace.firepitTier >= cfg.tier;
+    return this.terrace.builtProps.includes(cfg.id);
+  }
+
+  private isBuildableAvailable(cfg: BuildableConfig): boolean {
+    if (this.isBuildableBuilt(cfg)) return false;
+    if (!cfg.requires) return true;
+    const prereq = this.sceneConfig?.buildables?.find((b) => b.id === cfg.requires);
+    return !!prereq && this.isBuildableBuilt(prereq);
+  }
+
+  private markBuilt(cfg: BuildableConfig): void {
+    if (cfg.tier && cfg.upgradesHotspot === 'firepit') {
+      this.terrace.firepitTier = Math.max(this.terrace.firepitTier, cfg.tier) as FirepitTier;
+    } else if (!this.terrace.builtProps.includes(cfg.id)) {
+      this.terrace.builtProps.push(cfg.id);
+    }
+    saveTerraceState(this.terrace);
+  }
+
   private emitBuildState(): void {
-    this.onBuildState?.({ built: [...this.terrace.builtProps], pending: this.pendingBuildId });
+    const built = (this.sceneConfig?.buildables ?? []).filter((b) => this.isBuildableBuilt(b)).map((b) => b.id);
+    this.onBuildState?.({ built, pending: this.pendingBuildId });
   }
 
   private buildBuildables(): void {
@@ -1349,8 +1428,7 @@ export class ShelterScene {
       const paid = this.onBuild?.(cfg.cost) ?? false;
       const lift = { x: cfg.position.x, y: cfg.position.y - cfg.propScale * 0.55 };
       if (paid) {
-        if (!this.terrace.builtProps.includes(cfg.id)) this.terrace.builtProps.push(cfg.id);
-        saveTerraceState(this.terrace);
+        this.markBuilt(cfg);
         this.applyBuilt(cfg, true);
         playClaim();
         this.showFloatingText(lift, formatMaterials(cfg.cost, '−'));
@@ -1360,6 +1438,12 @@ export class ShelterScene {
         } else if (cfg.effect === 'water') {
           playWaterChime();
           this.spawnSparkles(lift, [0x9fd3f0, 0xc8e8fa, 0xffffff]);
+        } else if (cfg.effect === 'logs') {
+          playLogStack();
+          this.spawnSparkles(lift, [0xffb35c, 0xffd38a, 0xc98a52]);
+        } else if (cfg.effect === 'stones') {
+          playStoneSet();
+          this.spawnSparkles(lift, [0xffc56a, 0xfff0c8, 0xd9cfc2]);
         } else {
           this.spawnSparkles(lift, [0xffd89a, 0xfff1c8, 0xffb860]);
         }
@@ -1384,6 +1468,10 @@ export class ShelterScene {
         if (animate) this.popIn(hs.root);
       });
       if (cfg.lanternAnchor) this.ensureShedLantern();
+      /* A bigger fire pit crackles fuller right away if it's already lit */
+      if (cfg.upgradesHotspot === 'firepit' && this.fireLit) {
+        setCampfireAudio(true, this.fireProfile().crackle);
+      }
       return;
     }
 
@@ -1595,9 +1683,11 @@ export class ShelterScene {
 
   /* ── Walking ── */
 
-  private walkTo(x: number, y: number, onArrive?: () => void): void {
+  /** `durationMs` walks at a calm fixed pace that covers the distance in that time */
+  private walkTo(x: number, y: number, onArrive?: () => void, durationMs?: number): void {
     this.travelerFlipped = x < this.targetX;
     this.walkingTo = { x, y };
+    this.walkSpeed = durationMs ? Math.hypot(x - this.targetX, y - this.targetY) / durationMs : null;
     this.pendingCallback = onArrive ?? null;
     this.footstepAccum = 0;
     this.setPose('walk');
@@ -1639,22 +1729,29 @@ export class ShelterScene {
       return;
     }
 
-    /* Fade in as the traveler steps out of the entry (doorway or screen edge) */
+    /* Appear at the threshold, pause a breath as the scene fades in, then stroll onto the roof */
     this.travelerNode.alpha = 0;
-    this.setPose('walk');
+    this.travelerFlipped = idle.x < entry.x;
+    this.setPose('idle');
+    this.layoutTraveler();
     this.interactionLock = true;
 
-    const footstepTimes = [260, 620, 980, 1340];
-    for (const ms of footstepTimes) {
+    const startAt = STAGE_REVEAL_MS + ENTRY_PAUSE_MS;
+    for (const ms of [startAt + 320, startAt + 980, startAt + 1640]) {
       this.after(ms, playFootstep);
     }
 
-    this.after(180, () => {
-      this.walkTo(idle.x, idle.y, () => {
-        this.setPose('idle');
-        this.entryDone = true;
-        this.interactionLock = false;
-      });
+    this.after(startAt, () => {
+      this.walkTo(
+        idle.x,
+        idle.y,
+        () => {
+          this.setPose('idle');
+          this.entryDone = true;
+          this.interactionLock = false;
+        },
+        ENTRY_STROLL_MS,
+      );
     });
   }
 
@@ -1670,7 +1767,7 @@ export class ShelterScene {
 
     if (ts.fireLit) {
       this.fireLit = true;
-      setCampfireAudio(true);
+      setCampfireAudio(true, this.fireProfile().crackle);
       const fp = this.hotspots.find((h) => h.config.id === 'firepit');
       if (fp) {
         this.ensureFireEffects(fp);
@@ -1694,9 +1791,9 @@ export class ShelterScene {
       }
     }
 
-    for (const buildId of ts.builtProps) {
-      const cfg = this.sceneConfig?.buildables?.find((b) => b.id === buildId);
-      if (cfg) this.applyBuilt(cfg, false);
+    /* Built upgrades in config order, so fire pit Tier 2 is applied before Tier 3 */
+    for (const cfg of this.sceneConfig?.buildables ?? []) {
+      if (this.isBuildableBuilt(cfg)) this.applyBuilt(cfg, false);
     }
   }
 
@@ -1784,7 +1881,7 @@ export class ShelterScene {
       if (fp) {
         const p = this.toPx(fp.position.x, fp.position.y);
         this.fireGlow.position.set(p.x, p.y - SH * 0.03);
-        const fgSize = SH * (0.34 + this.current.nightFactor * 0.1);
+        const fgSize = this.fireGlowSize();
         this.fireGlow.width = fgSize;
         this.fireGlow.height = fgSize;
       }
@@ -1911,7 +2008,8 @@ export class ShelterScene {
 
     /* Walking */
     if (this.walkingTo) {
-      const speed = (this.state.reduceMotion ? 0.0012 : 0.00055) * dt;
+      const pace = this.walkSpeed ?? (this.state.reduceMotion ? 0.0012 : 0.00055);
+      const speed = pace * dt;
       const dx = this.walkingTo.x - this.targetX;
       const dy = this.walkingTo.y - this.targetY;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1919,6 +2017,7 @@ export class ShelterScene {
         this.targetX = this.walkingTo.x;
         this.targetY = this.walkingTo.y;
         this.walkingTo = null;
+        this.walkSpeed = null;
         this.layoutTraveler();
         if (this.pendingCallback) {
           const cb = this.pendingCallback;
@@ -1948,9 +2047,10 @@ export class ShelterScene {
       this.travelerSprite.scale.y = baseScale * breathScale;
     }
 
-    /* Walking bob (relative to travelerNode feet) */
+    /* Walking bob (relative to travelerNode feet); calmer cadence on a slow stroll */
     if (this.currentPose === 'walk' && this.travelerSprite && !this.state.reduceMotion) {
-      this.travelerSprite.y = -3 * Math.abs(Math.sin(this.elapsed * 8.5));
+      const cadence = this.walkSpeed ? 0.55 : 1;
+      this.travelerSprite.y = -3 * Math.abs(Math.sin(this.elapsed * 8.5 * cadence));
     }
 
     /* Fire flames & particles */
@@ -1961,12 +2061,13 @@ export class ShelterScene {
     this.updateParticles(dt);
 
     if (this.fireGlow && this.fireLit) {
+      const prof = this.fireProfile();
       const flicker = this.state.reduceMotion
         ? 0.78
         : 0.72 + 0.18 * Math.sin(this.elapsed * 7.2) + 0.1 * Math.sin(this.elapsed * 13.7);
-      this.fireGlow.alpha = this.current.fireIntensity * flicker;
-      const SH = this.stage.height;
-      const fgSize = SH * (0.34 + this.current.nightFactor * 0.1);
+      this.fireGlow.alpha = Math.min(1, this.current.fireIntensity * flicker * prof.glowBoost);
+      this.fireGlow.tint = prof.glowTint;
+      const fgSize = this.fireGlowSize();
       this.fireGlow.width = fgSize;
       this.fireGlow.height = fgSize;
     }
@@ -1974,48 +2075,121 @@ export class ShelterScene {
     this.applyLighting();
   }
 
+  private fireTier(): FirepitTier {
+    return this.state.siteId === 'terrace' ? this.terrace.firepitTier : 3;
+  }
+
+  private fireProfile(): FireProfile {
+    return FIRE_TIERS[this.fireTier()];
+  }
+
+  /** Warm radial pool size: wider per tier, and wider still at dusk/night */
+  private fireGlowSize(): number {
+    const prof = this.fireProfile();
+    return this.stage.height * (0.34 + this.current.nightFactor * prof.nightGlow) * prof.glowScale;
+  }
+
+  private firepitNode(): HotspotNode | undefined {
+    return this.hotspots.find((h) => h.config.id === 'firepit');
+  }
+
   private drawFlames(): void {
-    if (!this.fireFlames || !this.sceneConfig) return;
-    const fp = this.sceneConfig.hotspots.find((h) => h.id === 'firepit');
-    if (!fp) return;
-    const propH = this.stage.height * (fp.propScale ?? 0.085);
-    /* Local to firepit root (bottom-center of firepit sprite) */
+    const node = this.firepitNode();
+    if (!this.fireFlames || !node) return;
+    const prof = this.fireProfile();
+    const SH = this.stage.height;
+    const propH = SH * (node.config.propScale ?? 0.085);
+    /* Local to firepit root (bottom-center of the fire pit sprite) */
     const cy = -propH * 0.45;
-    const unit = Math.max(0.7, propH / 58);
+    /* Sized against the original ring so Tier 1 keeps the familiar modest flame */
+    const base = Math.max(0.7, (SH * 0.085) / 58);
+    const unit = base * prof.flame;
+    const wide = base * (1 + (prof.flame - 1) * 0.6);
     const still = this.state.reduceMotion;
-    const sway = still ? 0 : Math.sin(this.elapsed * 9) * 2.4 * unit;
-    const hScale = still ? 1 : 0.9 + 0.18 * Math.sin(this.elapsed * 12.4);
+    const t = this.elapsed;
+    const sway = still ? 0 : Math.sin(t * 9) * 2.4 * unit;
+    const hScale = still ? 1 : 0.9 + 0.18 * Math.sin(t * 12.4);
 
     const g = this.fireFlames;
     g.clear();
-    g.ellipse(sway * 0.5, cy - 9 * unit * hScale, 9 * unit, 13 * unit * hScale).fill({ color: 0xff6a1a, alpha: 0.78 });
-    g.ellipse(-sway * 0.4, cy - 7 * unit * hScale, 6 * unit, 9.5 * unit * hScale).fill({ color: 0xffa832, alpha: 0.88 });
-    g.ellipse(sway * 0.2, cy - 5 * unit * hScale, 3.2 * unit, 5.5 * unit * hScale).fill({ color: 0xffe488, alpha: 0.95 });
+
+    /* Tier 3: warm glowing coal bed pulsing beneath the flames */
+    if (prof.coals) {
+      const pulse = still ? 0.6 : 0.5 + 0.22 * Math.sin(t * 2.3) + 0.08 * Math.sin(t * 5.1);
+      g.ellipse(0, cy + 3 * base, 15 * wide, 4.2 * base).fill({ color: 0xc2410c, alpha: 0.55 * pulse + 0.2 });
+      g.ellipse(0, cy + 2.6 * base, 9.5 * wide, 2.8 * base).fill({ color: 0xff7a24, alpha: 0.7 * pulse + 0.15 });
+      g.ellipse(0, cy + 2.2 * base, 5 * wide, 1.6 * base).fill({ color: 0xffc860, alpha: 0.8 * pulse + 0.1 });
+    }
+
+    /* Side tongues (Tier 2+): smaller licks swaying on their own rhythm */
+    for (let i = 1; i <= prof.tongues; i++) {
+      const side = i % 2 === 0 ? 1 : -1;
+      const ring = Math.ceil(i / 2);
+      const phase = i * 1.7;
+      const lick = still ? 1 : 0.82 + 0.26 * Math.sin(t * (10 + i * 1.3) + phase);
+      const tSway = still ? 0 : Math.sin(t * (7.5 + i) + phase) * 1.8 * unit;
+      const ox = side * (4.5 + 3.2 * ring) * wide + tSway * 0.6;
+      const h = (0.72 - ring * 0.1) * lick;
+      g.ellipse(ox, cy - 7 * unit * h, 5.2 * wide, 10 * unit * h).fill({ color: 0xe8551a, alpha: 0.72 });
+      g.ellipse(ox * 0.95, cy - 5.6 * unit * h, 3.1 * wide, 6.6 * unit * h).fill({ color: 0xffb53a, alpha: 0.85 });
+    }
+
+    /* Main flame: deep amber outer, golden middle, bright core */
+    g.ellipse(sway * 0.5, cy - 9 * unit * hScale, 9 * wide, 13 * unit * hScale).fill({ color: 0xff6a1a, alpha: 0.78 });
+    g.ellipse(-sway * 0.4, cy - 7 * unit * hScale, 6 * wide, 9.5 * unit * hScale).fill({ color: 0xffa832, alpha: 0.88 });
+    g.ellipse(sway * 0.2, cy - 5 * unit * hScale, 3.2 * wide, 5.5 * unit * hScale).fill({ color: 0xffe488, alpha: 0.95 });
+
+    /* Tier 3: an extra flickering tip licking above the main flame */
+    if (prof.tongues >= 4 && !still) {
+      const tip = 0.6 + 0.4 * Math.max(0, Math.sin(t * 6.7));
+      g.ellipse(sway * 0.8, cy - 21 * unit * hScale, 3.4 * wide, 6 * unit * tip).fill({ color: 0xff8a2a, alpha: 0.55 * tip });
+    }
   }
 
   private spawnFireEmbers(): void {
-    if (this.state.reduceMotion || !this.sceneConfig) return;
-    const fp = this.sceneConfig.hotspots.find((h) => h.id === 'firepit');
-    if (!fp) return;
-    const propH = this.stage.height * (fp.propScale ?? 0.085);
-    const base = this.toPx(fp.position.x, fp.position.y);
+    const node = this.firepitNode();
+    if (this.state.reduceMotion || !node) return;
+    const prof = this.fireProfile();
+    const SH = this.stage.height;
+    const propH = SH * (node.config.propScale ?? 0.085);
+    const base = this.toPx(node.config.position.x, node.config.position.y);
     const baseX = base.x;
     const baseY = base.y - propH * 0.48;
+    const spread = 14 * (1 + (prof.flame - 1) * 0.8);
 
-    if (Math.random() < 0.28) {
+    if (Math.random() < prof.emberChance) {
       const ember = new Graphics();
       const size = 1.4 + Math.random() * 2.0;
       const isHot = Math.random() < 0.4;
       ember.circle(0, 0, size).fill(isHot ? 0xffd268 : 0xff6b24);
-      ember.position.set(baseX + (Math.random() - 0.5) * 14, baseY);
+      ember.position.set(baseX + (Math.random() - 0.5) * spread, baseY);
       this.fxLayer.addChild(ember);
+      /* Bigger fires loft their embers higher and steadier */
+      const lift = 0.85 + (prof.flame - 1) * 0.6;
       this.particles.push({
         sprite: ember,
         vx: (Math.random() - 0.5) * 0.4,
-        vy: -(0.55 + Math.random() * 0.8),
+        vy: -(0.55 + Math.random() * 0.8) * lift,
         gravity: -0.008,
         life: 0,
-        maxLife: 650 + Math.random() * 750,
+        maxLife: (650 + Math.random() * 750) * lift,
+      });
+    }
+
+    /* Tier 3: soft, curling translucent smoke wisps */
+    if (prof.smokeChance > 0 && Math.random() < prof.smokeChance) {
+      const wisp = new Graphics();
+      wisp.circle(0, 0, 5 + Math.random() * 3).fill({ color: 0xd9d0c6 });
+      wisp.position.set(baseX + (Math.random() - 0.5) * 8, baseY - 26 * Math.max(0.7, (SH * 0.085) / 58) * prof.flame);
+      this.fxLayer.addChild(wisp);
+      this.particles.push({
+        sprite: wisp,
+        vx: (Math.random() - 0.5) * 0.35 + 0.12,
+        vy: -(0.32 + Math.random() * 0.2),
+        gravity: -0.002,
+        life: 0,
+        maxLife: 2000 + Math.random() * 900,
+        smoke: { peakAlpha: 0.16 + Math.random() * 0.08, grow: 2.2 },
       });
     }
   }
@@ -2029,8 +2203,13 @@ export class ShelterScene {
       p.sprite.x += p.vx * step;
       p.sprite.y += p.vy * step;
       const ratio = p.life / p.maxLife;
-      p.sprite.alpha = Math.max(0, 1 - ratio);
-      p.sprite.scale.set(Math.max(0.25, 1 - ratio * 0.65));
+        if (p.smoke) {
+          p.sprite.alpha = p.smoke.peakAlpha * Math.sin(Math.PI * Math.min(1, ratio));
+          p.sprite.scale.set(1 + ratio * p.smoke.grow);
+        } else {
+          p.sprite.alpha = Math.max(0, 1 - ratio);
+          p.sprite.scale.set(Math.max(0.25, 1 - ratio * 0.65));
+        }
       if (p.life >= p.maxLife) {
         p.sprite.destroy();
         this.particles.splice(i, 1);

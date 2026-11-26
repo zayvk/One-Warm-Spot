@@ -13,9 +13,11 @@ export interface BuildBarProps {
   onBuild: (id: string) => boolean;
 }
 
-/** Tiny bottom-center row of frosted blueprint chips for unbuilt in-scene upgrades */
+/** Tiny bottom-center row of frosted blueprint chips for unbuilt, unlocked in-scene upgrades */
 export default function BuildBar({ buildables, built, pending, resources, onBuild }: BuildBarProps) {
-  const remaining = buildables.filter((b) => !built.includes(b.id));
+  const remaining = buildables.filter(
+    (b) => !built.includes(b.id) && (!b.requires || built.includes(b.requires)),
+  );
   if (remaining.length === 0) return null;
 
   return (

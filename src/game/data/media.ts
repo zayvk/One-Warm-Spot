@@ -100,7 +100,10 @@ export const SCENE_STAGES: Partial<Record<SiteId, string>> = {
 /* ───── Scene Props ───── */
 
 export const SCENE_PROPS = {
-  'prop-firepit': '/source/props/prop-firepit.webp',
+  /** Fire pit tiers: makeshift twigs → stacked logs → full stone-ring hearth */
+  firepitT1: '/source/props/prop-firepit-t1.webp',
+  firepitT2: '/source/props/prop-firepit-t2.webp',
+  firepit: '/source/props/prop-firepit.webp',
   'prop-boxes-intact': '/source/props/prop-boxes-intact.webp',
   'prop-boxes-cleared': '/source/props/prop-boxes-cleared.webp',
   'prop-weeds-1': '/source/props/prop-weeds-1.webp',

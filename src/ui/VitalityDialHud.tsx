@@ -8,9 +8,9 @@ const PHASE_LABEL: Record<DayPhase, string> = {
   night: 'Night · Quiet Moonlight',
 };
 
-/* Progress ring runs inside the 78px medallion's bronze bezel */
-const MEDALLION = 78;
-const RING_R = 35.5;
+/* Progress ring runs inside the 80px medallion's bronze bezel (sky window inset 7px) */
+const MEDALLION = 80;
+const RING_R = 36.5;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
 const RING_COLOR: Record<DayPhase, string> = {
@@ -149,7 +149,7 @@ export default function VitalityDialHud() {
   return (
     <aside className="ows-vitality-hud" aria-label="Traveler clock and vitality">
       <div className="ows-medallion-wrap">
-        {/* Day plaque perched above the medallion — never under the ring */}
+        {/* Day plaque centred over the top of the medallion */}
         <span className="ows-day-crest">Day {day}</span>
 
         <div className={`ows-medallion ows-medallion--${dayPhase}`} title={dialTitle} role="img" aria-label={dialTitle}>

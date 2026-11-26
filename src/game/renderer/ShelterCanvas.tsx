@@ -117,9 +117,7 @@ export default function ShelterCanvas({ ref, onStationStateChange, onStationOpen
     useGameStore.getState().restAtShelter();
   }, []);
 
-  const handleSleep = useCallback<SleepCallback>((comfort) => {
-    useGameStore.getState().sleepAtShelter(comfort);
-  }, []);
+  const handleSleep = useCallback<SleepCallback>((comfort) => useGameStore.getState().sleepAtShelter(comfort), []);
 
   const handleStationState = useCallback((state: SceneStationState) => {
     perksRef.current = state.perks;

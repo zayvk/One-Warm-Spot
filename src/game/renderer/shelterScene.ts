@@ -42,6 +42,7 @@ import {
   type StationTiers,
 } from '../engine/stations.ts';
 import type { SleepComfort } from '../engine/dayCycle.ts';
+import type { RegrowOutcome } from '../engine/terraceSpawns.ts';
 import {
   playFireLight,
   playFireDouse,
@@ -85,8 +86,11 @@ export type RewardCallback = (reward: Record<string, number>, source?: RewardSou
 /** Callback when the traveler rests by the shelter during day/dusk */
 export type RestCallback = () => void;
 
-/** Callback when the traveler sleeps until morning during night (comfort from shelter tier & perks) */
-export type SleepCallback = (comfort: SleepComfort) => void;
+/**
+ * Callback when the traveler sleeps until morning during night (comfort from shelter
+ * tier & perks). Returns the rooftop's overnight regrowth, if any, so it can pop in.
+ */
+export type SleepCallback = (comfort: SleepComfort) => RegrowOutcome<TerraceState> | null | void;
 
 /** Pays for an in-scene build (materials + build stamina); returns false if the materials ran short */
 export type BuildCallback = (cost: Partial<Record<ResourceId, number>>) => boolean;
@@ -915,60 +919,99 @@ export class ShelterScene {
     if (!this.sceneConfig) return;
 
     for (const cfg of this.sceneConfig.hotspots) {
-      const root = new Container();
-      root.eventMode = 'static';
-      root.cursor = 'pointer';
-      root.hitArea = new Circle(0, -20, 42);
-
-      const hoverRing = new Graphics();
-      hoverRing.visible = false;
-      hoverRing.eventMode = 'none';
-      root.addChild(hoverRing);
-
-      /* Stations get a floor blueprint (shown while unbuilt) beneath their sprite */
-      let blueprint: Graphics | null = null;
-      if (cfg.station) {
-        blueprint = new Graphics();
-        blueprint.eventMode = 'none';
-        blueprint.visible = false;
-        root.addChild(blueprint);
-      }
-
-      let propSprite: Sprite | null = null;
-      if (cfg.propSprite || cfg.station) {
-        propSprite = Sprite.from(Texture.EMPTY);
-        propSprite.anchor.set(0.5, 1);
-        propSprite.eventMode = 'none';
-        root.addChild(propSprite);
-      }
-
-      const { label, pill: labelPill } = this.createLabel(cfg.label);
-
-      const node: HotspotNode = {
-        config: cfg,
-        root,
-        propSprite,
-        spriteSrc: cfg.propSprite,
-        hoverRing,
-        label,
-        labelPill,
-        hovered: false,
-        interacted: false,
-        blueprint,
-        glows: [],
-      };
-      if (cfg.propSprite) this.setHotspotSprite(node, cfg.propSprite);
-
-      root.on('pointerenter', () => this.onHotspotHover(node, true));
-      root.on('pointerleave', () => this.onHotspotHover(node, false));
-      root.on('pointerdown', (e: { stopPropagation: () => void }) => {
-        e.stopPropagation();
-        this.onHotspotClick(node);
-      });
-
-      this.worldLayer.addChild(root);
-      this.hotspots.push(node);
+      this.hotspots.push(this.createHotspotNode(cfg));
     }
+  }
+
+  private createHotspotNode(cfg: HotspotConfig, onSpriteReady?: () => void): HotspotNode {
+    const root = new Container();
+    root.eventMode = 'static';
+    root.cursor = 'pointer';
+    root.hitArea = new Circle(0, -20, 42);
+
+    const hoverRing = new Graphics();
+    hoverRing.visible = false;
+    hoverRing.eventMode = 'none';
+    root.addChild(hoverRing);
+
+    /* Stations get a floor blueprint (shown while unbuilt) beneath their sprite */
+    let blueprint: Graphics | null = null;
+    if (cfg.station) {
+      blueprint = new Graphics();
+      blueprint.eventMode = 'none';
+      blueprint.visible = false;
+      root.addChild(blueprint);
+    }
+
+    let propSprite: Sprite | null = null;
+    if (cfg.propSprite || cfg.station) {
+      propSprite = Sprite.from(Texture.EMPTY);
+      propSprite.anchor.set(0.5, 1);
+      propSprite.eventMode = 'none';
+      root.addChild(propSprite);
+    }
+
+    const { label, pill: labelPill } = this.createLabel(cfg.label);
+
+    const node: HotspotNode = {
+      config: cfg,
+      root,
+      propSprite,
+      spriteSrc: cfg.propSprite,
+      hoverRing,
+      label,
+      labelPill,
+      hovered: false,
+      interacted: false,
+      blueprint,
+      glows: [],
+    };
+    if (cfg.propSprite) this.setHotspotSprite(node, cfg.propSprite, onSpriteReady);
+
+    root.on('pointerenter', () => this.onHotspotHover(node, true));
+    root.on('pointerleave', () => this.onHotspotHover(node, false));
+    root.on('pointerdown', (e: { stopPropagation: () => void }) => {
+      e.stopPropagation();
+      this.onHotspotClick(node);
+    });
+
+    this.worldLayer.addChild(root);
+    return node;
+  }
+
+  private destroyHotspotNode(hs: HotspotNode): void {
+    for (const g of hs.glows) g.sprite.destroy();
+    hs.label.destroy();
+    hs.labelPill.destroy();
+    hs.root.destroy({ children: true });
+  }
+
+  /**
+   * Morning after sleep: adopt the store's regrown rooftop and swap in only the
+   * weeds / boxes that sprouted or turned up overnight (fresh spot, art & size),
+   * popping them in as the morning light fades up.
+   */
+  private applyOvernightRegrowth(outcome: RegrowOutcome<TerraceState>): void {
+    const ids = [...outcome.regrownWeeds, ...outcome.refreshedBoxes];
+    if (ids.length === 0 || this.state.siteId !== 'terrace') return;
+    this.terrace.spawns = outcome.state.spawns;
+    this.terrace.clearedWeeds = [...outcome.state.clearedWeeds];
+    this.terrace.searchedBoxes = [...outcome.state.searchedBoxes];
+    this.sceneConfig = this.resolveSceneConfig(this.state.siteId);
+
+    for (const id of ids) {
+      const cfg = this.sceneConfig?.hotspots.find((h) => h.id === id);
+      const index = this.hotspots.findIndex((h) => h.config.id === id);
+      if (!cfg || index < 0) continue;
+      this.destroyHotspotNode(this.hotspots[index]);
+      let node: HotspotNode | null = null;
+      node = this.createHotspotNode(cfg, () => {
+        if (node && !node.root.destroyed) this.popIn(node.root);
+      });
+      node.root.alpha = 0;
+      this.hotspots[index] = node;
+    }
+    this.layout();
   }
 
   private createLabel(text: string): { label: Text; pill: Graphics } {
@@ -1495,7 +1538,8 @@ export class ShelterScene {
 
     /* Hold briefly in starry twilight, then roll into Day N+1 morning */
     this.after(1600, () => {
-      this.onSleep?.(sleepComfort(this.terrace.shelterTier, this.terrace.craftedPerks));
+      const regrowth = this.onSleep?.(sleepComfort(this.terrace.shelterTier, this.terrace.craftedPerks));
+      if (regrowth) this.applyOvernightRegrowth(regrowth);
       /* A new morning: the farm has grown and the barrel has filled */
       this.terrace.planterReady = this.terrace.planterTier >= 1;
       this.terrace.barrelReady = this.terrace.barrelTier >= 1;

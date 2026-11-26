@@ -12,7 +12,13 @@ import {
 } from '../data/scenes/terrace.ts';
 import type { StationId } from '../data/scenes/types.ts';
 import { PERK_IDS } from '../data/recipes.ts';
-import { generateTerraceSpawns } from './terraceSpawns.ts';
+import {
+  generateTerraceSpawns,
+  regrowTerraceSpawns,
+  repairTerraceSpawns,
+  type RegrowOutcome,
+  type Rng,
+} from './terraceSpawns.ts';
 import { stationMaxTier, type StationTiers } from './stations.ts';
 
 export const TERRACE_STATE_KEY = 'ows_terrace_state';
@@ -190,6 +196,8 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
   } else {
     state.spawns = parseSpawns(obj.spawns);
     if (!state.spawns && strict) return null;
+    /* Layouts saved before the stations were recomposed: nudge only the props that now overlap */
+    if (state.spawns) state.spawns = repairTerraceSpawns(state.spawns);
   }
   return state;
 }
@@ -244,6 +252,18 @@ export function saveTerraceState(s: TerraceState): void {
   try {
     localStorage.setItem(TERRACE_STATE_KEY, JSON.stringify(s));
   } catch { /* ignore storage restrictions */ }
+}
+
+/**
+ * Overnight regrowth on the stored rooftop for the morning of `day` (persisted when
+ * anything regrew). `null` if no rooftop has been saved yet.
+ */
+export function regrowStoredTerrace(day: number, rng?: Rng): RegrowOutcome<TerraceState> | null {
+  const stored = readStoredTerraceState();
+  if (!stored) return null;
+  const outcome = regrowTerraceSpawns(stored, day, rng);
+  if (outcome.state !== stored) saveTerraceState(outcome.state);
+  return outcome;
 }
 
 export function clearTerraceState(): void {

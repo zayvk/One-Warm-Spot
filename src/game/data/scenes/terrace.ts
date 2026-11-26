@@ -99,17 +99,17 @@ export function terraceVariantConfig(v: TerracePropVariant): TerracePropVariantC
   return isBoxVariant(v) ? TERRACE_BOX_VARIANTS[v] : TERRACE_WEED_VARIANTS[v];
 }
 
-/** Hand-placed layout (used for saves from before randomized placement) */
+/** Hand-placed layout (used for saves from before randomized placement), composed around the station zones */
 export const DEFAULT_TERRACE_SPAWNS: TerraceSpawns = {
-  'boxes-1': { x: 0.25, y: 0.555, variant: 'boxes-intact', scale: 1, flipX: false },
-  'boxes-2': { x: 0.18, y: 0.8, variant: 'box-double', scale: 1, flipX: false },
-  'boxes-3': { x: 0.66, y: 0.555, variant: 'box-single', scale: 1, flipX: true },
-  'weeds-1': { x: 0.45, y: 0.53, variant: 'weeds-3', scale: 0.94, flipX: false },
-  'weeds-2': { x: 0.575, y: 0.535, variant: 'weeds-1', scale: 1.03, flipX: true },
-  'weeds-3': { x: 0.145, y: 0.665, variant: 'weeds-2', scale: 1.03, flipX: false },
-  'weeds-4': { x: 0.37, y: 0.835, variant: 'weeds-3', scale: 1.06, flipX: true },
-  'weeds-5': { x: 0.655, y: 0.81, variant: 'weeds-2', scale: 0.97, flipX: true },
-  'weeds-6': { x: 0.85, y: 0.865, variant: 'weeds-1', scale: 0.97, flipX: false },
+  'boxes-1': { x: 0.436, y: 0.85, variant: 'box-single', scale: 1.05, flipX: true },
+  'boxes-2': { x: 0.594, y: 0.825, variant: 'boxes-intact', scale: 1.04, flipX: false },
+  'boxes-3': { x: 0.731, y: 0.855, variant: 'box-double', scale: 1.06, flipX: false },
+  'weeds-1': { x: 0.656, y: 0.767, variant: 'weeds-3', scale: 1.04, flipX: true },
+  'weeds-2': { x: 0.823, y: 0.835, variant: 'weeds-2', scale: 1, flipX: true },
+  'weeds-3': { x: 0.552, y: 0.623, variant: 'weeds-2', scale: 0.96, flipX: true },
+  'weeds-4': { x: 0.269, y: 0.736, variant: 'weeds-1', scale: 0.94, flipX: true },
+  'weeds-5': { x: 0.341, y: 0.848, variant: 'weeds-3', scale: 1, flipX: false },
+  'weeds-6': { x: 0.525, y: 0.827, variant: 'weeds-1', scale: 1.02, flipX: false },
 };
 
 /** Box or weed hotspot for a spawn; the traveler stands on the open-floor side */
@@ -144,15 +144,23 @@ export function withTerraceSpawns(base: ShelterSceneConfig, spawns: TerraceSpawn
 
 /* ── Fixed structures ── */
 
-const FIREPIT_POS = { x: 0.5, y: 0.7 };
+/*
+ * Composed in three zones so the middle of the rooftop stays open:
+ * Living & Mending nook (back-left parapet), the Central Hearth, and a
+ * Cooking & Utility line (back-right parapet against the stairwell).
+ */
+const FIREPIT_POS = { x: 0.49, y: 0.72 };
 const FIREPIT_STAND = { dx: -0.058, dy: 0.015 };
-const SHED_POS = { x: 0.36, y: 0.61 };
-const HERB_PLANTER_POS = { x: 0.24, y: 0.69 };
-const RAIN_BARREL_POS = { x: 0.75, y: 0.59 };
-/** Cooking grill sits back-right of the fire pit */
-const GRILL_POS = { x: 0.62, y: 0.66 };
-/** Sewing / knitting kit tucked right of the shelter, behind the fire */
-const SEWING_POS = { x: 0.47, y: 0.565 };
+/** Shelter tucked into the back-left corner, sheltered by the brick wall */
+const SHED_POS = { x: 0.3, y: 0.56 };
+/** Farm along the sunny left brick parapet */
+const HERB_PLANTER_POS = { x: 0.17, y: 0.68 };
+/** Rainwater barrel snug against the stairwell bulkhead */
+const RAIN_BARREL_POS = { x: 0.76, y: 0.57 };
+/** Cooking grill on the back-right parapet, in a kitchen line with the barrel */
+const GRILL_POS = { x: 0.62, y: 0.56 };
+/** Sewing / knitting kit beside the shelter along the back parapet */
+const SEWING_POS = { x: 0.46, y: 0.54 };
 const STAIRWELL_POS = { x: 0.86, y: 0.66 };
 
 const PLANTER_STAND = { dx: 0.058, dy: 0.02 };
@@ -359,18 +367,19 @@ export const TERRACE_SPAWN_RULES = {
   aspect: 1376 / 768,
   /** Open rooftop floor where prop anchors may land */
   bounds: { xMin: 0.16, xMax: 0.86, yMin: 0.555, yMax: 0.86 },
-  /** Extra no-spawn rects (front-left low brick wall) */
+  /** Extra no-spawn rects (front-left low brick wall / steps) */
   noSpawn: [{ xMin: 0, xMax: 0.29, yMin: 0.83, yMax: 1 }],
   /** Every station at its largest tier, their stand spots and the entry path stay clear */
   keepClear: [
     { x: FIREPIT_POS.x, y: FIREPIT_POS.y, r: 0.085 },
     standSpot(FIREPIT_POS, FIREPIT_STAND, 0.04),
     { x: SHED_POS.x, y: SHED_POS.y - 0.01, r: 0.125 },
-    { x: 0.445, y: 0.645, r: 0.04 },
+    /* Rest / build spot beside the shelter (T1–T3 rest offsets) */
+    standSpot(SHED_POS, { dx: 0.0875, dy: 0.035 }, 0.045),
     { x: HERB_PLANTER_POS.x, y: HERB_PLANTER_POS.y, r: 0.085 },
-    standSpot(HERB_PLANTER_POS, PLANTER_STAND, 0.035),
+    standSpot(HERB_PLANTER_POS, { dx: 0.061, dy: 0.02 }, 0.04),
     { x: RAIN_BARREL_POS.x, y: RAIN_BARREL_POS.y, r: 0.08 },
-    standSpot(RAIN_BARREL_POS, BARREL_STAND, 0.035),
+    standSpot(RAIN_BARREL_POS, { dx: -0.05, dy: 0.028 }, 0.04),
     { x: GRILL_POS.x, y: GRILL_POS.y - 0.02, r: 0.1 },
     standSpot(GRILL_POS, GRILL_STAND, 0.035),
     { x: SEWING_POS.x, y: SEWING_POS.y - 0.01, r: 0.085 },
@@ -382,4 +391,6 @@ export const TERRACE_SPAWN_RULES = {
   ] as SpawnCircle[],
   /** Breathing room between neighbouring props (stage-height units) */
   gap: 0.018,
+  /** Boxes & weeds prefer spots within this distance of a wall, edge or the front-left steps */
+  perimeterBand: 0.1,
 } as const;

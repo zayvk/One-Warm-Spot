@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseTerraceState, freshTerraceState, validateTerraceState } from '../terraceState.ts';
 import { spendResources } from '../progression.ts';
-import { generateTerraceSpawns } from '../terraceSpawns.ts';
+import { findSpawnProblems, generateTerraceSpawns } from '../terraceSpawns.ts';
 import {
   TERRACE_BOX_VARIANTS,
   TERRACE_STATIONS,
@@ -103,6 +103,15 @@ describe('parseTerraceState', () => {
     };
     expect(parseTerraceState(JSON.stringify(state))).toEqual(state);
     expect(validateTerraceState(JSON.parse(JSON.stringify(state)))).toEqual(state);
+  });
+
+  it('nudges saved props that now sit on a recomposed station, keeping the rest of the layout', () => {
+    const spawns = generateTerraceSpawns(31);
+    const stale = { ...spawns, 'boxes-3': { ...spawns['boxes-3'], x: 0.3, y: 0.58 } };
+    const restored = parseTerraceState(JSON.stringify({ spawns: stale })).spawns!;
+    expect(findSpawnProblems(restored)).toEqual([]);
+    expect(restored['boxes-3']).not.toMatchObject({ x: 0.3, y: 0.58 });
+    expect(restored['weeds-1']).toEqual(spawns['weeds-1']);
   });
 
   it('falls back to the default layout when the saved spawns are damaged', () => {

@@ -1091,6 +1091,7 @@ button:disabled {
 
 /* ───── Bottom-Left Vitality Medallion HUD (bronze bezel + smoked-glass bars) ───── */
 
+/* Single flex row: medallion and capsule share one vertical centre line */
 .ows-vitality-hud {
   position: fixed;
   left: 20px;
@@ -1101,20 +1102,22 @@ button:disabled {
   pointer-events: none;
 }
 
+/* Exactly the medallion's 80px box, so the absolute Day plaque centres on the circle */
 .ows-medallion-wrap {
   position: relative;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  width: 80px;
+  height: 80px;
   flex-shrink: 0;
 }
 
-/* Small bronze plaque perched above the bezel (separate from the progress ring) */
+/* Bronze plaque dead-centre above the medallion, docked over the top of the bezel */
 .ows-day-crest {
-  position: relative;
-  z-index: 3;
-  margin-bottom: 3px;
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
   padding: 1px 10px 2px;
   border-radius: 6px;
   background: linear-gradient(180deg, #8a5c34 0%, #5c3a20 100%);
@@ -1134,8 +1137,10 @@ button:disabled {
 
 .ows-medallion {
   position: relative;
-  width: 78px;
-  height: 78px;
+  z-index: 2;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
   border-radius: 50%;
   pointer-events: auto;
   /* Antique bronze / warm espresso bezel */
@@ -1203,20 +1208,25 @@ button:disabled {
   transition: stroke-dashoffset 0.9s linear, stroke 600ms ease;
 }
 
-/* Smoked-glass bar panel tucked behind the medallion */
+/*
+ * Smoked-glass capsule, slimmer than the 80px circle and tucked behind its right
+ * half: its 10px-inset top/bottom borders meet the bezel's curve, so no flat left
+ * edge or square corner ever shows behind the medallion.
+ */
 .ows-vitality-tube {
   position: relative;
   z-index: 1;
-  align-self: flex-end;
-  margin-bottom: 9px;
-  margin-left: -18px;
-  padding: 9px 16px 10px 28px;
-  min-width: 184px;
+  box-sizing: border-box;
+  height: 62px;
+  margin-left: -28px;
+  padding: 8px 18px 8px 38px;
+  min-width: 196px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  justify-content: center;
+  gap: 3px;
   pointer-events: auto;
-  border-radius: 0 14px 14px 0;
+  border-radius: 0 999px 999px 0;
   border: 1px solid rgba(201, 154, 92, 0.6);
   border-left: none;
   background:
@@ -1232,7 +1242,7 @@ button:disabled {
 .ows-vitality-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .ows-vitality-meta {
@@ -1245,7 +1255,7 @@ button:disabled {
 
 .ows-vitality-label {
   font-family: 'Cinzel', var(--font-display), serif;
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1254,14 +1264,15 @@ button:disabled {
 
 .ows-vitality-val {
   font-variant-numeric: tabular-nums;
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   font-weight: 600;
   color: rgba(242, 226, 196, 0.78);
 }
 
 .ows-vitality-track {
   position: relative;
-  height: 7px;
+  box-sizing: border-box;
+  height: 8px;
   border-radius: 999px;
   background: rgba(14, 9, 5, 0.45);
   border: 1px solid rgba(201, 154, 92, 0.38);
@@ -1309,8 +1320,8 @@ button:disabled {
   }
 
   .ows-vitality-tube {
-    min-width: 150px;
-    padding: 8px 12px 9px 26px;
+    min-width: 164px;
+    padding: 8px 14px 8px 38px;
   }
 
   .ows-build-bar {

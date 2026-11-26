@@ -45,7 +45,13 @@ import {
   type ScavengeResult,
 } from '../engine/scavenge.ts';
 import { morningWaterBonus, rollWeather } from '../engine/weather.ts';
-import { clearTerraceState, saveTerraceState, type TerraceState } from '../engine/terraceState.ts';
+import {
+  clearTerraceState,
+  regrowStoredTerrace,
+  saveTerraceState,
+  type TerraceState,
+} from '../engine/terraceState.ts';
+import type { RegrowOutcome } from '../engine/terraceSpawns.ts';
 import {
   advancePhaseClock,
   applyRest,
@@ -60,6 +66,14 @@ import { applyRecipe, phaseStrengthDecay } from '../engine/stations.ts';
 import type { Recipe } from '../data/recipes.ts';
 
 /* ── Helpers ── */
+
+/** Morning toast line for overnight rooftop regrowth ('' when nothing regrew) */
+function regrowthNote(weeds: number, boxes: number): string {
+  if (weeds > 0 && boxes > 0) return 'Fresh weeds sprouted and a weathered crate turned up overnight.';
+  if (weeds > 0) return 'Fresh weeds sprouted overnight.';
+  if (boxes > 0) return 'A weathered crate turned up by the wall overnight.';
+  return '';
+}
 
 const REDUCE_MOTION_KEY = 'ows_reduce_motion';
 
@@ -212,7 +226,8 @@ export interface GameState {
   spendStamina: (amount: number) => void;
   restAtShelter: () => boolean;
   /** Sleep into Day N+1; `comfort` comes from the shelter tier & mending perks */
-  sleepAtShelter: (comfort?: SleepComfort) => void;
+  /** Sleep into Day N+1; returns the Terrace's overnight regrowth (`null` off the Terrace) */
+  sleepAtShelter: (comfort?: SleepComfort) => RegrowOutcome<TerraceState> | null;
   /** Eat a grill recipe: spends ingredients, restores Stamina & Strength */
   cookRecipe: (recipe: Recipe) => boolean;
   /** Runtime multiplier on Strength drift per phase (Quilted Cozy Cloak = 0.5) */
@@ -494,6 +509,8 @@ export const useGameStore = create<GameState>()((set, get) => {
       const outcome = applySleep(s.day, s.strength, comfort, s.stamina);
       const weather = rollWeather(s.selectedMode);
       const water = morningWaterBonus(weather, s.unlockedUpgrades);
+      /* The rooftop gently renews overnight (persisted before the scene reloads it) */
+      const regrowth = s.chosenSite === 'terrace' ? regrowStoredTerrace(outcome.day) : null;
       set({
         day: outcome.day,
         dayPhase: outcome.dayPhase,
@@ -510,6 +527,7 @@ export const useGameStore = create<GameState>()((set, get) => {
         water > 0
           ? `Soft rain overnight — +${water} ${RESOURCE_MAP.water.emoji} collected.`
           : `${info.label} skies greet the rooftop. Stamina ${outcome.stamina}/100.`;
+      const regrowLine = regrowth ? regrowthNote(regrowth.regrownWeeds.length, regrowth.refreshedBoxes.length) : '';
       commitStats(
         { ...s.stats, maxDaysSurvived: Math.max(s.stats.maxDaysSurvived, daysSurvivedOn(outcome.day)) },
         [
@@ -517,12 +535,13 @@ export const useGameStore = create<GameState>()((set, get) => {
             id: ++noticeSeq,
             icon: '☀️',
             title: `Day ${outcome.day} · Morning`,
-            body: weatherLine,
+            body: regrowLine ? `${regrowLine} ${weatherLine}` : weatherLine,
             tone: 'morning',
           },
         ],
       );
       get()._save();
+      return regrowth;
     },
 
     cookRecipe(recipe: Recipe) {

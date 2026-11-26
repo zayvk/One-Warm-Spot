@@ -4,6 +4,7 @@ import type { ResourceId } from '../types/game.ts';
 import type { StationConfig, StationId, StationTierConfig } from '../data/scenes/types.ts';
 import type { MendingPerk, Recipe } from '../data/recipes.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
+import { TERRACE_STATIONS } from '../data/scenes/terrace.ts';
 import { canAfford, spendResources } from './progression.ts';
 import {
   clampVitality,
@@ -86,6 +87,14 @@ function shortfall(cost: ResourceGains, resources: Record<ResourceId, number>): 
   return missing.length ? `Need ${missing.join(' ')} more` : null;
 }
 
+/** Cozy player-facing requirement label for a locked recipe or perk */
+export function stationRequirementHint(stationId: StationId, minTier: number): string {
+  const station = TERRACE_STATIONS.find((s) => s.id === stationId);
+  const name = station ? stationTierConfig(station, minTier)?.name : undefined;
+  if (name) return `Needs ${name}`;
+  return stationId === 'grill' ? 'Upgrade cooking grill first' : 'Upgrade sewing kit first';
+}
+
 export interface CookContext {
   grillTier: number;
   fireLit: boolean;
@@ -94,7 +103,7 @@ export interface CookContext {
 
 /** Why a recipe can't be cooked right now (`null` = ready to cook) */
 export function recipeBlocker(recipe: Recipe, ctx: CookContext): string | null {
-  if (ctx.grillTier < recipe.minTier) return `Needs Grill T${recipe.minTier}`;
+  if (ctx.grillTier < recipe.minTier) return stationRequirementHint('grill', recipe.minTier);
   if (recipe.needsFire && !ctx.fireLit) return 'Light the fire pit first';
   return shortfall(recipe.ingredients, ctx.resources);
 }
@@ -130,6 +139,6 @@ export interface MendContext {
 /** Why a perk can't be crafted right now (`null` = ready) */
 export function perkBlocker(perk: MendingPerk, ctx: MendContext): string | null {
   if (ctx.perks.includes(perk.id)) return 'Already crafted';
-  if (ctx.sewingTier < perk.minTier) return `Needs Sewing Kit T${perk.minTier}`;
+  if (ctx.sewingTier < perk.minTier) return stationRequirementHint('sewing', perk.minTier);
   return canAfford(perk.cost, ctx.resources) ? null : shortfall(perk.cost, ctx.resources);
 }

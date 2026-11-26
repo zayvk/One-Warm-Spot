@@ -28,7 +28,7 @@ function CostList({ cost, resources }: { cost: Partial<Record<ResourceId, number
   return (
     <span className="ows-station-pop__cost">
       {(Object.entries(cost) as [ResourceId, number][]).map(([id, n]) => (
-        <span key={id} className={(resources[id] ?? 0) < n ? 'ows-build-chip__short' : undefined}>
+        <span key={id} className={(resources[id] ?? 0) < n ? 'ows-cost-short' : undefined}>
           {n}
           {RESOURCE_MAP[id]?.emoji}
         </span>
@@ -121,6 +121,7 @@ export default function StationPopover({
                   <span className="ows-station-pop__meta">
                     <CostList cost={r.ingredients} resources={resources} />
                     <span className="ows-station-pop__gain">{gains}</span>
+                    {locked && blocker && <span className="ows-station-pop__req">{blocker}</span>}
                   </span>
                 </span>
                 <button
@@ -128,10 +129,11 @@ export default function StationPopover({
                   className="ows-station-pop__act"
                   disabled={blocker !== null}
                   title={blocker ?? `Cook ${r.name}`}
+                  aria-label={blocker ?? `Cook ${r.name}`}
                   onMouseEnter={blocker ? undefined : playHover}
                   onClick={() => run(onCook(r.id))}
                 >
-                  {locked ? `T${r.minTier}` : 'Cook'}
+                  {locked ? '🔒' : 'Cook'}
                 </button>
               </li>
             );
@@ -150,6 +152,7 @@ export default function StationPopover({
                   <span className="ows-station-pop__meta">
                     {!crafted && <CostList cost={p.cost} resources={resources} />}
                     <span className="ows-station-pop__gain">{p.effect}</span>
+                    {locked && blocker && <span className="ows-station-pop__req">{blocker}</span>}
                   </span>
                 </span>
                 <button
@@ -157,10 +160,11 @@ export default function StationPopover({
                   className="ows-station-pop__act"
                   disabled={blocker !== null}
                   title={blocker ?? `Craft ${p.name}`}
+                  aria-label={blocker ?? `Craft ${p.name}`}
                   onMouseEnter={blocker ? undefined : playHover}
                   onClick={() => run(onCraft(p.id))}
                 >
-                  {crafted ? '✓' : locked ? `T${p.minTier}` : 'Craft'}
+                  {crafted ? '✓' : locked ? '🔒' : 'Craft'}
                 </button>
               </li>
             );

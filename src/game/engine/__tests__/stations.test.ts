@@ -117,7 +117,7 @@ describe('mending perks', () => {
   it('explains why a perk can’t be crafted yet', () => {
     const ctx = { sewingTier: 1, perks: [] as string[], resources: pantry };
     expect(perkBlocker(perk('warm-sheets'), ctx)).toBeNull();
-    expect(perkBlocker(perk('mended-gloves'), ctx)).toBe('Needs Sewing Kit T3');
+    expect(perkBlocker(perk('mended-gloves'), ctx)).toBe('Needs Knitting Basket');
     expect(perkBlocker(perk('cozy-cloak'), { ...ctx, sewingTier: 5, resources: { ...pantry, cloth: 1 } })).toBe('Need 3 🧵 more');
     expect(perkBlocker(perk('warm-sheets'), { ...ctx, perks: ['warm-sheets'] })).toBe('Already crafted');
   });
@@ -128,7 +128,7 @@ describe('grill cooking', () => {
     ['cool-rainwater', 1, false, null],
     ['toasted-seeds', 1, false, 'Light the fire pit first'],
     ['toasted-seeds', 1, true, null],
-    ['cool-rainwater', 0, true, 'Needs Grill T1'],
+    ['cool-rainwater', 0, true, 'Needs Grill Rack'],
   ] as const)('%s at Grill T%i (fire %s) → %j', (id, grillTier, fireLit, blocker) => {
     expect(recipeBlocker(recipe(id), { grillTier, fireLit, resources: pantry })).toBe(blocker);
   });
@@ -136,7 +136,7 @@ describe('grill cooking', () => {
   it('unlocks recipes by grill tier and reports missing ingredients', () => {
     const ctx = { grillTier: 2, fireLit: true, resources: pantry };
     expect(recipeBlocker(recipe('herbal-tea'), ctx)).toBeNull();
-    expect(recipeBlocker(recipe('veggie-stew'), ctx)).toBe('Needs Grill T3');
+    expect(recipeBlocker(recipe('veggie-stew'), ctx)).toBe('Needs Grill Counter');
     expect(recipeBlocker(recipe('hearth-feast'), { ...ctx, grillTier: 4 })).toBeNull();
     expect(recipeBlocker(recipe('veggie-stew'), { ...ctx, grillTier: 3, resources: { ...empty, water: 1 } })).toBe('Need 2 🍅 more');
   });

@@ -6,10 +6,11 @@ import { SITES } from '../game/data/sites.ts';
 import { RESOURCE_MAP } from '../game/data/resources.ts';
 import { UI_ASSETS } from '../game/data/media.ts';
 import { getSceneConfig } from '../game/data/scenes/index.ts';
+import type { StationId } from '../game/data/scenes/types.ts';
 import { stationTierConfig } from '../game/engine/stations.ts';
 import { playClick, playHover, startSiteAmbience } from '../game/audio/soundEngine.ts';
 import type { ResourceId } from '../game/types/game.ts';
-import BuildBar from './BuildBar.tsx';
+import PropActionMenu, { type StationMenuAction } from './PropActionMenu.tsx';
 import StationPopover, { type PopoverStation } from './StationPopover.tsx';
 import VitalityDialHud from './VitalityDialHud.tsx';
 
@@ -24,18 +25,33 @@ const POUCH_IDS: ResourceId[] = ['timber', 'cloth', 'seeds', 'water', 'scrap', '
 
 export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
   const chosenSite = useGameStore((s) => s.chosenSite);
+  const dayPhase = useGameStore((s) => s.dayPhase);
   const resources = useGameStore((s) => s.resources);
 
   const prevResourcesRef = useRef(resources);
   const [pulsing, setPulsing] = useState<Partial<Record<ResourceId, boolean>>>({});
   const canvasRef = useRef<ShelterCanvasHandle>(null);
-  /* Null until the scene reports its restored station state, so chips never flash */
+  /* Null until the scene reports its restored station state */
   const [stationState, setStationState] = useState<SceneStationState | null>(null);
   const [popover, setPopover] = useState<{ station: PopoverStation; anchor: { x: number; y: number } } | null>(null);
+  const [propMenu, setPropMenu] = useState<{ stationId: StationId; anchor: { x: number; y: number } } | null>(null);
+
   const stations = getSceneConfig(chosenSite)?.stations ?? [];
+
   const closePopover = useCallback(() => setPopover(null), []);
   const openPopover = useCallback((station: PopoverStation, anchor: { x: number; y: number }) => {
+    setPropMenu(null);
     setPopover({ station, anchor });
+  }, []);
+
+  const closePropMenu = useCallback(() => setPropMenu(null), []);
+  const openPropMenu = useCallback((stationId: StationId, anchor: { x: number; y: number }) => {
+    setPopover(null);
+    setPropMenu({ stationId, anchor });
+  }, []);
+
+  const handlePropAction = useCallback((stationId: string, action: StationMenuAction) => {
+    return canvasRef.current?.performStationAction(stationId, action) ?? false;
   }, []);
 
   /* Soft shelter soundscape while on this screen */
@@ -92,6 +108,7 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
     popoverStation && stationState
       ? (stationTierConfig(popoverStation, stationState.tiers[popoverStation.id])?.name ?? '')
       : '';
+  const menuStation = propMenu ? stations.find((s) => s.id === propMenu.stationId) : undefined;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -144,27 +161,46 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
         </span>
       </header>
 
-      {/* Enlarged, horizontally centered Found Materials Pouch */}
-      <div
-        className="ows-hud-bar ows-pouch-bar"
-        title="Found Materials Pouch"
-        aria-label="Found Materials Pouch"
-      >
+      {/* Enlarged, horizontally centered Found Materials Pouch with instant hover tooltips */}
+      <div className="ows-hud-bar ows-pouch-bar" aria-label="Found Materials Pouch">
         {pouchResources.map((r) => (
           <span
             key={r.id}
-            title={r.name}
+            tabIndex={0}
+            aria-label={`${r.name}: ${resources[r.id]}`}
             className={`ows-pouch-item ${pulsing[r.id] ? 'ows-pouch-item--pulse' : ''}`}
           >
-            <span>{r.emoji}</span>
+            <span aria-hidden="true">{r.emoji}</span>
             <span>{resources[r.id]}</span>
+            <span className="ows-pouch-tooltip" role="tooltip">
+              {r.name}
+            </span>
           </span>
         ))}
       </div>
 
       {/* Interactive PixiJS canvas (full viewport) */}
       <main style={{ position: 'relative', flex: 1, minHeight: 0, background: '#F5EFE4' }}>
-        <ShelterCanvas ref={canvasRef} onStationStateChange={setStationState} onStationOpen={openPopover} />
+        <ShelterCanvas
+          ref={canvasRef}
+          onStationStateChange={setStationState}
+          onStationOpen={openPopover}
+          onStationMenuOpen={openPropMenu}
+        />
+
+        {propMenu && menuStation && stationState && (
+          <PropActionMenu
+            key={`${propMenu.stationId}-${propMenu.anchor.x}-${propMenu.anchor.y}`}
+            station={menuStation}
+            anchor={propMenu.anchor}
+            dayPhase={dayPhase}
+            stationState={stationState}
+            resources={resources}
+            onAction={handlePropAction}
+            onClose={closePropMenu}
+          />
+        )}
+
         {popover && stationState && (
           <StationPopover
             key={`${popover.station}-${popover.anchor.x}-${popover.anchor.y}`}
@@ -181,19 +217,6 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
       </main>
 
       <VitalityDialHud />
-
-      {stationState && stations.length > 0 && (
-        <BuildBar
-          stations={stations}
-          tiers={stationState.tiers}
-          pending={stationState.pending}
-          resources={resources}
-          onBuild={(id) => {
-            setPopover(null);
-            return canvasRef.current?.requestBuild(id) ?? false;
-          }}
-        />
-      )}
     </div>
   );
 }

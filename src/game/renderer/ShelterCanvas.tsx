@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useImperativeHandle, useState, type Ref
 import { Application } from 'pixi.js';
 import { useGameStore } from '../store/useGameStore.ts';
 import { UI_ASSETS } from '../data/media.ts';
-import { computeCozyIndex, spendResources } from '../engine/progression.ts';
+import { canAfford, computeCozyIndex, spendResources } from '../engine/progression.ts';
 import {
   BOX_STAMINA_COST,
   BUILD_STAMINA_COST,
@@ -19,6 +19,8 @@ import {
   type SleepCallback,
   type SpendCallback,
   type StationActionResult,
+  type StationMenuAction,
+  type StationMenuCallback,
   type StationOpenCallback,
 } from './shelterScene.ts';
 import { addResources } from '../engine/scavenge.ts';
@@ -26,6 +28,8 @@ import { addResources } from '../engine/scavenge.ts';
 export interface ShelterCanvasHandle {
   /** Ask the traveler to walk over and build a station's next tier */
   requestBuild: (stationId: string) => boolean;
+  /** Execute a contextual action from the in-world PropActionMenu */
+  performStationAction: (stationId: string, action: StationMenuAction) => boolean;
   /** Cook a grill recipe */
   cook: (recipeId: string) => StationActionResult;
   /** Craft a mending perk at the sewing kit */
@@ -36,6 +40,7 @@ export interface ShelterCanvasProps {
   ref?: Ref<ShelterCanvasHandle>;
   onStationStateChange?: (state: SceneStationState) => void;
   onStationOpen?: StationOpenCallback;
+  onStationMenuOpen?: StationMenuCallback;
 }
 
 const NOT_READY: StationActionResult = { ok: false, message: 'The rooftop is still settling in' };
@@ -45,21 +50,30 @@ const NOT_READY: StationActionResult = { ok: false, message: 'The rooftop is sti
  * container (via ResizeObserver) and forwards store state to `ShelterScene`.
  * Scene rewards, station builds, cooking, mending and toasts flow back into the store.
  */
-export default function ShelterCanvas({ ref, onStationStateChange, onStationOpen }: ShelterCanvasProps) {
+export default function ShelterCanvas({
+  ref,
+  onStationStateChange,
+  onStationOpen,
+  onStationMenuOpen,
+}: ShelterCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<ShelterScene | null>(null);
   const stationStateCbRef = useRef(onStationStateChange);
   const stationOpenCbRef = useRef(onStationOpen);
+  const stationMenuCbRef = useRef(onStationMenuOpen);
   /* Crafted perks shape gathering costs (gloves) and strength drift (cloak) */
   const perksRef = useRef<string[]>([]);
 
   useEffect(() => {
     stationStateCbRef.current = onStationStateChange;
     stationOpenCbRef.current = onStationOpen;
-  }, [onStationStateChange, onStationOpen]);
+    stationMenuCbRef.current = onStationMenuOpen;
+  }, [onStationStateChange, onStationOpen, onStationMenuOpen]);
 
   useImperativeHandle(ref, () => ({
     requestBuild: (id: string) => sceneRef.current?.requestBuild(id) ?? false,
+    performStationAction: (id: string, action: StationMenuAction) =>
+      sceneRef.current?.performStationAction(id, action) ?? false,
     cook: (id: string) => sceneRef.current?.cook(id) ?? NOT_READY,
     craftPerk: (id: string) => sceneRef.current?.craftPerk(id) ?? NOT_READY,
   }), []);
@@ -180,7 +194,9 @@ export default function ShelterCanvas({ ref, onStationStateChange, onStationOpen
         scene.setNoticeCallback(handleNotice);
         scene.setRestCallback(handleRest);
         scene.setSleepCallback(handleSleep);
+        scene.setCanAffordCallback((cost) => canAfford(cost, useGameStore.getState().resources));
         scene.setStationOpenCallback((station, anchor) => stationOpenCbRef.current?.(station, anchor));
+        scene.setStationMenuCallback((stationId, anchor) => stationMenuCbRef.current?.(stationId, anchor));
         scene.setStationStateCallback(handleStationState);
         scene.setReadyCallback(() => {
           if (!disposed) setReadyRevision(sceneRevision);

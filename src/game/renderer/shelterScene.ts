@@ -38,6 +38,7 @@ import {
   nextStationTier,
   planterHarvest,
   sleepComfort,
+  stationRequirementHint,
   stationTierConfig,
   type StationTiers,
 } from '../engine/stations.ts';
@@ -114,6 +115,11 @@ export type StationStateCallback = (state: SceneStationState) => void;
 
 /** Open the Cooking / Mending popover anchored above a station (screen pixels) */
 export type StationOpenCallback = (station: 'grill' | 'sewing', anchor: { x: number; y: number }) => void;
+
+/** Callback when a station (or empty blueprint) opens its contextual action menu */
+export type StationMenuCallback = (stationId: StationId, anchor: { x: number; y: number }) => void;
+
+export type StationMenuAction = 'primary' | 'sit' | 'extinguish' | 'upgrade';
 
 export type StationActionResult = { ok: true } | { ok: false; message: string };
 
@@ -339,7 +345,6 @@ interface HotspotNode {
   propSprite: Sprite | null;
   /** The sprite URL this node should currently show (guards late texture loads) */
   spriteSrc: string;
-  hoverRing: Graphics;
   label: Text;
   labelPill: Graphics;
   hovered: boolean;
@@ -413,6 +418,8 @@ export class ShelterScene {
   private onCook: CookCallback | null = null;
   private onStationState: StationStateCallback | null = null;
   private onStationOpen: StationOpenCallback | null = null;
+  private onStationMenu: StationMenuCallback | null = null;
+  private onCanAfford: ((cost: Partial<Record<ResourceId, number>>) => boolean) | null = null;
   private onNotice: NoticeCallback | null = null;
   private onReady: (() => void) | null = null;
 
@@ -606,6 +613,14 @@ export class ShelterScene {
     this.onStationOpen = cb;
   }
 
+  setStationMenuCallback(cb: StationMenuCallback): void {
+    this.onStationMenu = cb;
+  }
+
+  setCanAffordCallback(cb: (cost: Partial<Record<ResourceId, number>>) => boolean): void {
+    this.onCanAfford = cb;
+  }
+
   setStationStateCallback(cb: StationStateCallback): void {
     this.onStationState = cb;
     this.emitStationState();
@@ -657,11 +672,54 @@ export class ShelterScene {
     return true;
   }
 
+  /** Run a station action chosen from the in-world PropActionMenu */
+  performStationAction(stationId: string, action: StationMenuAction): boolean {
+    if (this.disposed || this.interactionLock || !this.entryDone) return false;
+    if (action === 'upgrade') return this.requestBuild(stationId);
+
+    const station = this.sceneConfig?.stations?.find((s) => s.id === stationId);
+    const hs = station && this.stationHotspot(station);
+    if (!station || !hs || this.tierOf(station.id) === 0) return false;
+
+    if (hs.config.type === 'planter' && !this.terrace.planterReady) {
+      this.showFloatingText(this.stationTop(hs, 0.6), 'Growing — ready tomorrow');
+      return false;
+    }
+    if (hs.config.type === 'barrel' && !this.terrace.barrelReady) {
+      this.showFloatingText(this.stationTop(hs, 0.6), 'Filling — ready tomorrow');
+      return false;
+    }
+
+    if (action === 'sit' && hs.config.type === 'firepit') {
+      if (!this.fireLit) return false;
+      this.walkToHotspotAndRun(hs, false, () => {
+        this.setPose('sit');
+        this.after(200, () => {
+          this.interactionLock = false;
+        });
+      });
+      return true;
+    }
+
+    if (action === 'extinguish' && hs.config.type === 'firepit') {
+      if (!this.fireLit) return false;
+      this.walkToHotspotAndRun(hs, false, () => this.interactFirepit(hs));
+      return true;
+    }
+
+    const isRestTurn = hs.config.type === 'sleep' && this.state.dayPhase !== 'night';
+    this.walkToHotspotAndRun(hs, isRestTurn, () => {
+      if (isRestTurn) this.interactRest();
+      else this.executeInteraction(hs);
+    });
+    return true;
+  }
+
   /** Cook a grill recipe (called from the Cooking popover while standing at the grill) */
   cook(recipeId: string): StationActionResult {
     const recipe = RECIPES.find((r) => r.id === recipeId);
     if (!recipe || this.disposed) return { ok: false, message: 'Unknown recipe' };
-    if (this.terrace.grillTier < recipe.minTier) return { ok: false, message: `Needs Grill T${recipe.minTier}` };
+    if (this.terrace.grillTier < recipe.minTier) return { ok: false, message: stationRequirementHint('grill', recipe.minTier) };
     if (recipe.needsFire && !this.fireLit) return { ok: false, message: 'Light the fire pit first' };
     if (!(this.onCook?.(recipe) ?? false)) return { ok: false, message: 'Not enough ingredients' };
 
@@ -683,7 +741,7 @@ export class ShelterScene {
     const perk = MENDING_PERKS.find((p) => p.id === perkId);
     if (!perk || this.disposed) return { ok: false, message: 'Unknown craft' };
     if (this.terrace.craftedPerks.includes(perk.id)) return { ok: false, message: 'Already crafted' };
-    if (this.terrace.sewingTier < perk.minTier) return { ok: false, message: `Needs Sewing Kit T${perk.minTier}` };
+    if (this.terrace.sewingTier < perk.minTier) return { ok: false, message: stationRequirementHint('sewing', perk.minTier) };
     if (!(this.onSpend?.(perk.cost) ?? false)) return { ok: false, message: 'Not enough materials' };
 
     this.terrace.craftedPerks.push(perk.id);
@@ -929,11 +987,6 @@ export class ShelterScene {
     root.cursor = 'pointer';
     root.hitArea = new Circle(0, -20, 42);
 
-    const hoverRing = new Graphics();
-    hoverRing.visible = false;
-    hoverRing.eventMode = 'none';
-    root.addChild(hoverRing);
-
     /* Stations get a floor blueprint (shown while unbuilt) beneath their sprite */
     let blueprint: Graphics | null = null;
     if (cfg.station) {
@@ -958,7 +1011,6 @@ export class ShelterScene {
       root,
       propSprite,
       spriteSrc: cfg.propSprite,
-      hoverRing,
       label,
       labelPill,
       hovered: false,
@@ -1059,7 +1111,7 @@ export class ShelterScene {
     const cfg = stationTierConfig(station, tier);
     if (!cfg) {
       const first = nextStationTier(station, 0);
-      return first ? `Build ${first.name} · ${formatMaterials(first.cost)}` : hs.config.label;
+      return first ? `Craft ${first.name} (${formatMaterials(first.cost)})` : hs.config.label;
     }
     switch (station.id) {
       case 'shelter':
@@ -1136,37 +1188,51 @@ export class ShelterScene {
       node.hovered = false;
       node.label.visible = false;
       node.labelPill.visible = false;
-      node.hoverRing.visible = false;
+      if (node.propSprite) {
+        node.propSprite.tint = 0xffffff;
+        this.applyHotspotSpriteScale(node);
+      }
       return;
     }
     node.hovered = enter;
     node.label.visible = enter;
     node.labelPill.visible = enter;
-    node.hoverRing.visible = enter;
-    if (node.propSprite && !this.state.reduceMotion) {
+    if (node.propSprite) {
       node.propSprite.tint = enter ? 0xfff6e5 : 0xffffff;
+      this.applyHotspotSpriteScale(node);
+    }
+    if (node.blueprint?.visible) {
+      this.drawBlueprint(node);
     }
     if (enter) {
-      this.drawHoverRing(node);
       this.layoutHotspotLabel(node);
     }
   }
 
-  private drawHoverRing(node: HotspotNode): void {
-    const g = node.hoverRing;
-    g.clear();
-    const hr = node.config.hitRect;
-    if (hr) {
-      /* Soft glow outline around backdrop features (e.g. the stairwell door) */
-      const { width: SW, height: SH } = this.stage;
-      g.roundRect(hr.dx * SW, hr.dy * SH, hr.w * SW, hr.h * SH, 12)
-        .fill({ color: 0xfff2cc, alpha: 0.07 })
-        .stroke({ color: 0xfff2cc, width: 2, alpha: 0.55 });
-      return;
-    }
-    const ry = node.config.type === 'sleep' ? 0 : -4;
-    const rx = node.config.type === 'sleep' ? 46 : 30;
-    g.ellipse(0, ry, rx, 11).stroke({ color: 0xfff2cc, width: 2.2, alpha: 0.9 });
+  private applyHotspotSpriteScale(node: HotspotNode): void {
+    const sprite = node.propSprite;
+    if (!sprite || !node.config.propScale || sprite.texture === Texture.EMPTY) return;
+    const pH = this.stage.height * node.config.propScale;
+    const baseScale = pH / (sprite.texture.height || 100);
+    const hoverScale = node.hovered && !this.state.reduceMotion ? 1.03 : 1;
+    const signX = node.config.flipX ? -1 : 1;
+    sprite.scale.set(baseScale * hoverScale * signX, baseScale * hoverScale);
+  }
+
+  private drawBlueprint(node: HotspotNode): number {
+    if (!node.blueprint) return 24;
+    const { width: SW, height: SH } = this.stage;
+    const first = this.stationOf(node)?.tiers[0];
+    const rx = Math.max(16, (first?.collider.rx ?? 0.03) * SW * 1.15);
+    const ry = Math.max(7, (first?.collider.ry ?? 0.02) * SH * 1.35);
+    node.blueprint.clear();
+    node.blueprint
+      .ellipse(0, 0, rx, ry)
+      .fill({ color: 0xfff6e0, alpha: node.hovered ? 0.24 : 0.16 })
+      .stroke({ color: 0xfff2cc, width: node.hovered ? 2.1 : 1.8, alpha: node.hovered ? 0.98 : 0.68 });
+    node.blueprint.rect(-6, -1.2, 12, 2.4).fill({ color: 0xfffcf6, alpha: node.hovered ? 1 : 0.9 });
+    node.blueprint.rect(-1.2, -6, 2.4, 12).fill({ color: 0xfffcf6, alpha: node.hovered ? 1 : 0.9 });
+    return rx;
   }
 
   private layoutHotspotLabel(node: HotspotNode): void {
@@ -1198,33 +1264,28 @@ export class ShelterScene {
       .stroke({ color: 0xe8cdb5, width: 1.5 });
   }
 
-  private onHotspotClick(node: HotspotNode): void {
-    if (this.interactionLock || !this.entryDone) return;
-    if (!this.isHotspotInteractive(node)) return;
+  private emitStationMenu(stationId: StationId, hs: HotspotNode): void {
+    this.onHotspotHover(hs, false);
+    const tier = this.tierOf(stationId);
+    const top = tier === 0
+      ? { x: hs.config.position.x, y: hs.config.position.y - 0.04 }
+      : this.stationTop(hs, 1);
+    const anchor = this.toPx(top.x, top.y);
+    this.onStationMenu?.(stationId, anchor);
+  }
 
-    /* Unbuilt stations: clicking the blueprint builds Tier 1 */
-    const station = this.stationOf(node);
-    if (station && this.tierOf(station.id) === 0) {
-      this.requestBuild(station.id);
-      return;
-    }
-    /* Already harvested / collected today: a calm note instead of a walk */
-    if (
-      (node.config.type === 'planter' && !this.terrace.planterReady) ||
-      (node.config.type === 'barrel' && !this.terrace.barrelReady)
-    ) {
-      this.showFloatingText(this.stationTop(node, 0.6), node.config.type === 'planter' ? 'Growing — ready tomorrow' : 'Filling — ready tomorrow');
-      return;
-    }
-
+  private walkToHotspotAndRun(
+    node: HotspotNode,
+    useRestSpot: boolean,
+    onArrive: () => void,
+  ): void {
     if (this.sleepMode && node.config.type !== 'sleep') {
       this.wakeUp();
     }
 
     const cfg = node.config;
-    const isSleepTurn = cfg.type === 'sleep' && this.state.dayPhase === 'night';
-    const isRestTurn = cfg.type === 'sleep' && this.state.dayPhase !== 'night';
-    const offset = isRestTurn ? (cfg.restOffset ?? { dx: 0.085, dy: 0.035 }) : cfg.standOffset;
+    const isSleepTurn = cfg.type === 'sleep' && !useRestSpot;
+    const offset = useRestSpot ? (cfg.restOffset ?? { dx: 0.085, dy: 0.035 }) : cfg.standOffset;
     const rawX = cfg.position.x + (offset?.dx ?? 0);
     const rawY = cfg.position.y + (offset?.dy ?? 0.04);
     /* Only actual sleeping enters the shelter's collider; resting sits beside it */
@@ -1234,18 +1295,14 @@ export class ShelterScene {
     this.interactionLock = true;
 
     const finishArrival = () => {
-      if (isRestTurn) {
+      if (useRestSpot) {
         this.travelerFlipped = false;
         this.layoutTraveler();
       } else if (Math.abs(cfg.position.x - this.targetX) > 0.005) {
         this.travelerFlipped = cfg.position.x < this.targetX;
         this.layoutTraveler();
       }
-      if (isRestTurn) {
-        this.interactRest();
-      } else {
-        this.executeInteraction(node);
-      }
+      onArrive();
     };
 
     const dx = standPos.x - this.targetX;
@@ -1256,6 +1313,50 @@ export class ShelterScene {
     }
 
     this.walkTo(standPos.x, standPos.y, finishArrival);
+  }
+
+  private onHotspotClick(node: HotspotNode): void {
+    if (this.interactionLock || !this.entryDone) return;
+    if (!this.isHotspotInteractive(node)) return;
+
+    const station = this.stationOf(node);
+    if (station) {
+      const tier = this.tierOf(station.id);
+      if (tier === 0) {
+        const first = nextStationTier(station, 0);
+        if (first && !(this.onCanAfford?.(first.cost) ?? true)) {
+          this.emitStationMenu(station.id, node);
+          return;
+        }
+        this.requestBuild(station.id);
+        return;
+      }
+
+      const hasUpgrade = nextStationTier(station, tier) !== null;
+      const hasMultipleFireActions = station.id === 'firepit' && this.fireLit;
+      if (hasUpgrade || hasMultipleFireActions) {
+        this.emitStationMenu(station.id, node);
+        return;
+      }
+    }
+
+    /* Already harvested / collected today: a calm note instead of a walk */
+    if (
+      (node.config.type === 'planter' && !this.terrace.planterReady) ||
+      (node.config.type === 'barrel' && !this.terrace.barrelReady)
+    ) {
+      this.showFloatingText(
+        this.stationTop(node, 0.6),
+        node.config.type === 'planter' ? 'Growing — ready tomorrow' : 'Filling — ready tomorrow',
+      );
+      return;
+    }
+
+    const isRestTurn = node.config.type === 'sleep' && this.state.dayPhase !== 'night';
+    this.walkToHotspotAndRun(node, isRestTurn, () => {
+      if (isRestTurn) this.interactRest();
+      else this.executeInteraction(node);
+    });
   }
 
   private executeInteraction(node: HotspotNode): void {
@@ -1340,10 +1441,12 @@ export class ShelterScene {
     node.hovered = false;
     node.label.visible = false;
     node.labelPill.visible = false;
-    node.hoverRing.visible = false;
     node.root.cursor = 'default';
     node.root.eventMode = 'none';
-    if (node.propSprite) node.propSprite.tint = 0xffffff;
+    if (node.propSprite) {
+      node.propSprite.tint = 0xffffff;
+      this.applyHotspotSpriteScale(node);
+    }
   }
 
   private interactFirepit(node: HotspotNode): void {
@@ -2072,24 +2175,13 @@ export class ShelterScene {
       const hr = hs.config.hitRect;
       if (hr) {
         hs.root.hitArea = new Rectangle(hr.dx * SW, hr.dy * SH, hr.w * SW, hr.h * SH);
-        if (hs.hovered) this.drawHoverRing(hs);
       } else if (isBlueprint && hs.blueprint) {
-        const first = this.stationOf(hs)?.tiers[0];
-        const rx = Math.max(16, (first?.collider.rx ?? 0.03) * SW * 1.15);
-        const ry = Math.max(7, (first?.collider.ry ?? 0.02) * SH * 1.35);
-        hs.blueprint.clear();
-        hs.blueprint
-          .ellipse(0, 0, rx, ry)
-          .fill({ color: 0xfff6e0, alpha: 0.16 })
-          .stroke({ color: 0xfff2cc, width: 1.8, alpha: 0.75 });
-        hs.blueprint.rect(-6, -1.2, 12, 2.4).fill({ color: 0xfffcf6, alpha: 0.9 });
-        hs.blueprint.rect(-1.2, -6, 2.4, 12).fill({ color: 0xfffcf6, alpha: 0.9 });
+        const rx = this.drawBlueprint(hs);
         hs.root.hitArea = new Circle(0, 0, Math.max(24, rx));
       } else if (hs.propSprite && hs.config.propScale && hs.propSprite.texture !== Texture.EMPTY) {
         const pH = SH * hs.config.propScale;
         const pScale = pH / (hs.propSprite.texture.height || 100);
-        const signX = hs.config.flipX ? -1 : 1;
-        hs.propSprite.scale.set(pScale * signX, pScale);
+        this.applyHotspotSpriteScale(hs);
 
         const pW = hs.propSprite.texture.width * pScale;
         const hitRadius = Math.max(30, Math.max(pW, pH) * 0.52);

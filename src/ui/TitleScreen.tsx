@@ -94,7 +94,7 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
           textAlign: 'center',
         }}
       >
-        <div className="ows-title-scrim">
+        <div className="ows-title-stack">
           {/* Game title: painted wordmark, with a hidden heading for screen readers */}
           <h1 className="ows-sr-only">One Warm Spot</h1>
           <img

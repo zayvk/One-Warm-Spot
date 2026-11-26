@@ -12,7 +12,7 @@ import { UPGRADES, UPGRADE_MAP } from '../../data/upgrades.ts';
 import type { PlayerStats, ResourceId } from '../../types/game.ts';
 
 const plenty: Record<ResourceId, number> = {
-  timber: 20, scrap: 20, cloth: 20, stone: 20, seeds: 20, water: 20,
+  timber: 20, scrap: 20, cloth: 20, stone: 20, seeds: 20, water: 20, food: 20,
 };
 
 describe('upgrade eligibility', () => {

@@ -7,6 +7,7 @@ export const RESOURCES: Resource[] = [
   { id: 'stone',   name: 'Stone',   emoji: '🪨', startAmount: 2,  maxStack: 60 },
   { id: 'seeds',   name: 'Seeds',   emoji: '🌱', startAmount: 1,  maxStack: 30 },
   { id: 'water',   name: 'Water',   emoji: '💧', startAmount: 5,  maxStack: 40 },
+  { id: 'food',    name: 'Food',    emoji: '🍅', startAmount: 0,  maxStack: 30 },
 ];
 
 /** Quick lookup map */

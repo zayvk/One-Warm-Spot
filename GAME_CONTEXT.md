@@ -74,7 +74,7 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
    2. **Riding Up** — inside the old lift (green-painted walls, wood wainscot, brass rails) with the doors closed; a warm amber brass indicator ticks **1 → 2 → 3 → 4 → R** with tiny relay clicks over a low mechanical hum and a gentle 1–2px tremor.
    3. **Doors Open to Sunlight** — a vintage brass *"ding!"*, the doors slide apart onto the sunlit rooftop, the Terrace ambience swells, an *"Old Apartment Terrace"* caption appears, and the view steps through the doorway into the live shelter, where the traveler walks out of the rooftop stairwell door.
    Every cutscene is skippable at any moment (Skip button, click, `Space` / `Enter` / `Escape`) and respects Reduce Motion (no push-ins, tremor or sliding — calm fades instead).
-4. **Interactive Shelter** — The point-and-click painted scene (see below), with a minimal floating HUD: a **← Title** button with the lantern emblem and shelter name (top-left), the centered **Found Materials Pouch**, a bottom-left **Vitality Medallion** (`Day N` plaque, bronze sky medallion, Stamina & Strength bars), and a tiny bottom-center **Build Bar** while in-scene upgrades remain. If the stage art needs a moment to load, a softly pulsing lantern emblem waits in its place. Progress auto-saves.
+4. **Interactive Shelter** — The point-and-click painted scene (see below), with a minimal floating HUD: a **← Title** button with the lantern emblem and shelter name (top-left), the centered **Found Materials Pouch** (all 7 resources), a bottom-left **Vitality Medallion** (`Day N` plaque, bronze sky medallion, Stamina & Strength bars), and a compact bottom-center **Build Bar** with one next-tier chip per station. If the stage art needs a moment to load, a softly pulsing lantern emblem waits in its place. Progress auto-saves.
 
 ---
 
@@ -85,45 +85,72 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
 - **Traveler:** Real painted **Female / Male** traveler sprites in an understated, faceless **3/4 view** style, with **5 poses** — `idle`, `walk`, `sit`, `sleep`, `search`. Each pose is scaled by anatomical height ratios (so sitting and sleeping read at believable proportions) with pose-adapted soft shadows and smooth crossfades between poses.
 - **Click-to-walk:** Click anywhere on the rooftop floor to walk there. Movement stays inside the walkable area, props block the way with **elliptical obstacle colliders**, and everything is **Y-depth sorted** so the traveler passes naturally in front of or behind props.
 - **Interactive props:**
-  - **Central Fire Pit (3 tiers)** — walk over and light it (flickering flames, embers, warm glow and a looping campfire crackle), and the traveler **sits by the fire**. Click it again to **extinguish** it with a soft hiss. At Dusk and Night its radial glow warms up the rooftop. It grows with the shelter:
+  - **Central Fire Pit (3 tiers)** — walk over and light it (flickering flames, embers, warm glow and a looping campfire crackle), and the traveler **sits by the fire**. **Lighting burns 1 🪵 Timber** of firewood (with too little, a gentle toast says *"Need 1 Timber to light the fire"*). Click it again to **extinguish** it with a soft hiss and save fuel. A lit fire is also needed for some grill recipes. At Dusk and Night its radial glow warms up the rooftop. It grows with the shelter:
     - **Tier 1 · Makeshift Twigs** (start) — a modest, delicate flame, sparse sparks and a soft compact glow.
     - **Tier 2 · Stacked Logs** — a taller, livelier multi-tongue flame (deep amber outside, bright gold core), steadier rising embers, a ~35% wider and brighter glow pool, and a fuller crackle.
     - **Tier 3 · Stone-Ring Hearth** — a rich hearth fire: layered dancing flames over a pulsing coal bed, frequent drifting embers, curling translucent smoke wisps, a lush wide golden glow that transforms the rooftop at Dusk and Night, and the richest crackle.
-  - **Shabby Cloth Lean-to / Timber Shelter (Context-Aware Rest & Sleep)** — tucked behind-left of the fire pit:
+  - **Shelter (3 tiers: Cloth Lean-to → Timber Shelter → Insulated Hut) — Context-Aware Rest & Sleep** — tucked behind-left of the fire pit:
     - During **Day** or **Dusk**, hovering reads **"Rest by shelter"** — clicking sits beside the shelter, restores **+25 Stamina**, and smoothly shifts the sky to the next phase over 1.4s.
-    - During **Night**, hovering reads **"Sleep until morning"** — clicking tucks into the bedroll under the shelter in starry twilight, then transitions into **Day N+1 · Morning** (restoring `Stamina = 100`, gently easing `Strength -10`, and showing a morning toast).
+    - During **Night**, hovering reads **"Sleep until morning"** — clicking tucks into the bedroll under the shelter in starry twilight, then transitions into **Day N+1 · Morning** with a morning toast. A better shelter means a better night: you wake with at least **75% (T1) → 90% (T2) → 100% (T3) Stamina** (+10% with *Warm Patchwork Sheets*, capped at 100). Strength eases `-10` overnight, or just `-5` in the Insulated Hut. Each new morning the farm is ready to harvest and the rain barrel has refilled.
+    - The Timber Shelter's hanging lantern glows at dusk and night; the Insulated Hut glows warmly from its **window and doorway lantern**.
   - **3 searchable box spots, each with distinct art** — broken boxes, a double crate stack, and a single parcel with a leaning plank. Rummage once each (search pose + rummage foley) for Timber, Scrap and Cloth; the broken boxes show a cleared sprite and the others take on a dusty, rummaged look.
   - **6 cleanable weed patches** — 3 weed species (grassy tufts, leafy brush, dandelion clusters), two of each; clearing each (leaf particles + snip foley) yields Seeds and Cloth.
-  - **A fresh rooftop every run:** each new game lays the boxes and weeds out differently — new spots, shuffled art, slight size variation (0.92–1.08×) and random flips. Boxes lean toward the parapet edges and corners; weeds scatter across cracks and wall edges. Nothing ever overlaps the fire pit, shelter, planter/barrel spots, the stairwell path or each other. The layout is remembered for the whole run (refresh / Continue), and **Start Fresh** rolls a new one. *(This generator is also the groundwork for future rooftop regrowth.)*
+  - **A fresh rooftop every run:** each new game lays the boxes and weeds out differently — new spots, shuffled art, slight size variation (0.92–1.08×) and random flips. Boxes lean toward the parapet edges and corners; weeds scatter across cracks and wall edges. Nothing ever overlaps the fire pit, shelter, farm, barrel, cooking grill or sewing kit (at their largest tier), their stand spots, the stairwell path or each other. The layout is remembered for the whole run (refresh / Continue), and **Start Fresh** rolls a new one. *(This generator is also the groundwork for future rooftop regrowth.)*
   - **Stairwell door** — hovering highlights the ajar door (*"Stairwell downstairs (coming soon)"*); clicking walks the traveler over and a gentle toast says the stairs lead down into the quiet building—more to explore soon.
 - **3-Phase Real-Time Day Cycle & Vitality (`Stamina` & `Strength`):**
   - A full day lasts **12 real-time minutes** (`240s` per phase: **Day** Full Sun → **Dusk** Sunset → **Night** Half Moon), paused when outside the shelter or inside Settings. Night holds calmly without harsh pass-outs until the player chooses to sleep.
-  - **Stamina (`0–100`, restedness)** is gently spent by clearing weeds (`-6`), searching boxes (`-10`), and building upgrades (`-12`), and restored by resting or sleeping.
-  - **Strength (`0–100`, nourishment/resilience)** eases gently across phase shifts (`-8`) and overnight (`-10`), non-lethal and zero-stress.
+  - **Stamina (`0–100`, restedness)** is gently spent by clearing weeds (`-6`), searching boxes (`-10`), and building station tiers (`-12`), and restored by resting, sleeping and cooking. *Mended Work Gloves* make weeds and boxes ~30% lighter (`-4` / `-7`); harvesting the farm and collecting rainwater are free.
+  - **Strength (`0–100`, nourishment/resilience)** eases gently across phase shifts (`-8`, halved to `-4` with the *Quilted Cozy Cloak*) and overnight (`-10`, or `-5` in the Insulated Hut), non-lethal and zero-stress. Cooking at the grill is the main way to restore it.
   - Displayed in the bottom-left **Vitality Medallion** — a calm, Witcher 3–inspired antique-bronze bezel framing a recessed sky window: a radiant full sun on warm gold by Day, a big sunset sun dipping over a burnt-amber & rose horizon at Dusk, and a luminous half moon over a starry indigo sky at Night. A slim ring inside the bezel tracks the phase, a small **Day N** plaque sits above it, and smoked-glass bars extend to the right for **Stamina** (sage-emerald) and **Strength** (hearth-amber) with `value/100` readouts. In the scene it's paired with **twinkling night stars**, **drifting warm fireflies**, and brighter fire pit / lantern glow pools at night.
-- **In-scene building (no menu drawers):** Spend found materials directly on the rooftop. A tiny bottom-center **Build Bar** shows a frosted chip for each unbuilt, unlocked upgrade with its material cost; chips you can't afford yet are dimmed. Planter and barrel spots also glow as soft blueprint markers on the floor that can be clicked directly. Building walks the traveler over, plays soft mallet foley and a warm chime, deducts the materials from the pouch, and pops the new prop in:
-  - **🔥 Stack Firepit Logs** (2 🪵) — fire pit Tier 1 → 2, with a wood-stacking knock.
-  - **🧱 Stone-Ring Hearth** (2 🪵 + 1 🔩) — appears once the logs are stacked; fire pit Tier 2 → 3, with stony clacks as the ring is set.
-  - **🛖 Upgrade Shelter** (3 🪵 + 2 🧵) — the cloth lean-to becomes a **cozy timber shelter** with a bedroll and a hanging lantern that glows warmly at dusk, at night and while you sleep.
-  - **🌿 Herb Planter** (2 🪵 + 2 🌱) — a raised planter of herbs and tomatoes by the left parapet, with a leafy sparkle burst.
-  - **🛢️ Rain Barrel** (2 🔩 + 1 🪵) — a rainwater barrel beside the stairwell bulkhead, with gentle water-drop chimes.
-  - Built props become solid scenery (colliders + Y-sorting). The Build Bar vanishes once everything is built. The rooftop's boxes and weeds alone cover every build plus the Tier 2 fire pit; the Day 1 supplies make up the rest for the Stone-Ring Hearth.
-  - These Terrace buildables are separate from the paused 10 macro upgrades: they don't yet raise the Cozy Index or count toward milestone unlocks.
-- **Found Materials Pouch:** A minimal, centered pouch that pulses when something new is found. It currently surfaces only the **4 Terrace-gatherable materials — 🪵 Timber, 🔩 Scrap, 🧵 Cloth, 🌱 Seeds**. **🪨 Stone & 💧 Water are intentionally held back** until in-scene sources for them exist.
-- **Persistence:** Fire state, fire pit tier, the box & weed layout, searched boxes, cleared weeds and built upgrades are remembered between visits; claiming a new shelter or resetting starts the Terrace fresh with a new layout.
+- **Six multi-tier stations, built in the scene (no menu drawers):** Spend found materials directly on the rooftop. The compact bottom-center **Build Bar** shows **at most one chip per station — its next tier** (a small `T2` pill, the name and the material cost). Chips you can't afford yet are dimmed and a station's chip disappears once it's maxed. Unbuilt stations (farm, barrel, grill, sewing kit) also glow as soft floor blueprints you can click to build Tier 1. Building walks the traveler over, plays soft mallet foley and a fitting flourish (wood knocks, stone clacks, water chimes, leafy sparkles, a fabric chime), deducts the materials and pops the new tier's art in. Built stations become solid scenery (colliders + Y-sorting).
+
+  | Station | Tiers (cost to build each) |
+  |---|---|
+  | 🛖 **Shelter** | T1 Cloth Lean-to *(start)* → T2 Timber Shelter `3🪵 2🧵` → T3 Insulated Hut `4🪵 2🔩 2🪨` |
+  | 🔥 **Fire Pit** | T1 Twig Fire Pit *(start)* → T2 Stacked Logs `2🪵` → T3 Stone-Ring Hearth `2🪵 1🔩 2🪨` |
+  | 🌱 **Farm** | T1 Seedling Crate `1🪵 1🌱` → T2 Herb Planter `2🪵 2🌱` → T3 Trellis Garden `3🪵 2🔩 2🌱` |
+  | 💧 **Rainwater Barrel** | T1 Bucket Barrel `1🪵 1🧵` → T2 Rain Barrel `2🪵 2🔩` → T3 Guttered Rain Rig `3🪵 2🔩 2🪨` |
+  | 🍳 **Cooking Grill** | T1 Grill Rack `1🔩 1🪨` → T2 Camp Grill `2🔩 2🪨` → T3 Grill Counter `2🪵 2🪨 1🔩` → T4 Hearth Kitchen `4🪵 2🔩 2🪨` |
+  | 🧵 **Sewing / Knitting Kit** | T1 Needle & Thread `1🧵` → T2 Patch Scraps `2🧵` → T3 Knitting Basket `2🪵 2🧵` → T4 Mending Bench `3🪵 2🧵 1🔩` → T5 Sewing Table `4🪵 3🧵 2🔩` |
+
+  These stations are separate from the paused 10 macro upgrades: they don't yet raise the Cozy Index or count toward milestone unlocks.
+- **The Vitality & Crafting loop:**
+  - **🌱 Farm harvest** — click the built farm: the traveler walks over and gathers with a soft rustle for **+1 / +2 / +3 🍅 Food** by tier (plus **+1 🌱 Seed** from T2). Then it reads *"Growing — ready tomorrow"* until the next morning.
+  - **💧 Rainwater** — click the built barrel for **+1 / +2 / +3 💧 Water** by tier with a splash chime; it refills each morning (*"Filling — ready tomorrow"*).
+  - **🍳 Cooking** — click the built grill to open a small frosted **Cooking** popover. Recipes unlock by grill tier; cooking uses the ingredients, restores Stamina & Strength at once (capped at 100), and fills the air with a gentle sizzle, rising steam and floating feedback:
+
+    | Recipe | Grill | Ingredients | Restores |
+    |---|---|---|---|
+    | 💧 Cool Rainwater | T1 | `1💧` | +10 ⚡ · +5 ❤️ |
+    | 🌰 Toasted Seeds | T1 · needs a lit fire | `1🌱` | +15 ❤️ |
+    | 🍵 Warm Herbal Tea | T2 · needs a lit fire | `1🍅 1💧` | +30 ⚡ · +10 ❤️ |
+    | 🍲 Rooftop Veggie Stew | T3 | `2🍅 1💧` | +15 ⚡ · +45 ❤️ |
+    | 🥘 Hearth Spiced Feast | T4 | `2🍅 1🌱 1💧` | +40 ⚡ · +65 ❤️ |
+
+  - **🧵 Mending** — click the built sewing kit to open a **Mending** popover of permanent cozy perks (each crafted once, with a soft fabric chime):
+    - 🛏️ **Warm Patchwork Sheets** *(T1, `2🧵`)* — +10% Stamina when you sleep.
+    - 🧤 **Mended Work Gloves** *(T3, `2🧵 1🔩`)* — clearing weeds & searching boxes costs ~30% less Stamina.
+    - 🧥 **Quilted Cozy Cloak** *(T5, `4🧵 1🪵`)* — halves Strength drift as the day turns *(and lays the groundwork for future traveler clothing sprites)*.
+  - Popovers explain anything that's missing (*"Needs Grill T3"*, *"Light the fire pit first"*, *"Need 2 🍅 more"*) and close with `Escape` or a click elsewhere.
+- **Found Materials Pouch:** A minimal, centered pouch showing all **7 resources — 🪵 Timber · 🧵 Cloth · 🌱 Seeds · 💧 Water · 🔩 Scrap · 🪨 Stone · 🍅 Food** — compact enough for small windows, each pulsing when it grows.
+- **🧪 Generous test supplies (temporary):** While the stations are being tuned, every freshly claimed shelter starts with a generous pool (`40🪵 15🧵 10🌱 8💧 20🔩 16🪨 6🍅`). Together with the rooftop's boxes and weeds, that's enough to try every station tier, every recipe and every mending perk right away. It's behind a clearly marked `TEST_MODE_GENEROUS_START` switch, and scarcity will be tuned once downstairs scavenging arrives.
+- **Persistence:** Fire state, every station's tier, today's farm/barrel readiness, crafted perks, the box & weed layout, searched boxes and cleared weeds are remembered between visits. Older rooftops migrate gently (earlier one-off builds become Tier 2 of their station). Claiming a new shelter or resetting starts the Terrace fresh with a new layout.
 
 ---
 
-## 6 Core Resources
+## 7 Core Resources
 
-| Resource | Emoji | Cozy Day 1 Amount | Gatherable on Terrace today |
+| Resource | Emoji | Cozy Day 1 Amount* | Where it comes from on the Terrace today |
 |----------|-------|-------------------|-----------------------------|
 | Timber | 🪵 | 4 | ✅ Boxes |
-| Scrap | 🔩 | 3 | ✅ Boxes |
 | Cloth | 🧵 | 2 | ✅ Boxes & weeds |
-| Stone | 🪨 | 2 | — (held back) |
-| Seeds | 🌱 | 1 | ✅ Weeds |
-| Water | 💧 | 5 | — (held back) |
+| Seeds | 🌱 | 1 | ✅ Weeds, Farm T2+ |
+| Water | 💧 | 5 | ✅ Rainwater barrel |
+| Scrap | 🔩 | 3 | ✅ Boxes |
+| Stone | 🪨 | 2 | — (downstairs, later) |
+| Food | 🍅 | 0 | ✅ Farm harvest |
+
+\* Normal Day 1 amounts (Challenge: ~60%, never below 1 of anything stocked; Food always starts at 0). While `TEST_MODE_GENEROUS_START` is on, fresh runs use the generous test pool instead. Saves and backups from before Food existed load with `0 🍅`.
 
 ---
 
@@ -170,19 +197,19 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 - **Brand:** A painted ivy-and-lantern **wordmark** (`public/source/ui/logo-title.webp`) on the Title Screen, and a round **lantern emblem** (`logo-emblem.webp`) used as the About crest, the shelter HUD badge and the loading emblem. Browser tab icon: `favicon.png`; home-screen icon: `apple-touch-icon.png`.
 - **About & copy:** Player-facing and warm — a short story intro, three "How to play" tips, and a quiet `One Warm Spot · v0.1` footer. No technical wording.
 - **Comfort & accessibility:** **Reduce Motion** (Settings) calms camera zoom, elevator shake, particles, fire flicker and UI animations: steady fire glow with no sparks or smoke, still fireflies and stars, no leaf bursts, reward text that fades in place, no pouch bounce, and instant sky/HUD transitions.
-- **Backups:** Export / Load Backup saves a single `.json` with the whole run — day, vitality, materials, milestone stats **and the Terrace rooftop** (fire pit tier, layout, searched boxes, cleared weeds, builds). Older backups still load; the rooftop just starts fresh.
+- **Backups:** Export / Load Backup saves a single `.json` with the whole run — day, vitality, all 7 materials, milestone stats **and the Terrace rooftop** (every station tier, farm/barrel readiness, crafted perks, fire, layout, searched boxes, cleared weeds). Older backups still load: missing Food becomes 0, earlier one-off builds become Tier 2 stations, and a backup without rooftop details starts the Terrace fresh.
 - **Characters:** Understated, faceless 3/4-view travelers in ragged earthy gear, painted to match the backdrops.
-- **Audio:** Menu music tries an optional `public/source/audio/music-menu.mp3`; since that file isn't shipped yet, the **procedural warm-pad chord loop** is what currently plays. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle that grows fuller with each fire pit tier, fire extinguish hiss, box rummage, weed snip, bedroll sleep, rest chime, building mallet taps, log-stacking knocks, hearth stone clacks, rain-barrel water-drop chimes, and the Terrace lift's low hum, door slides, floor-tick relay clicks and brass arrival ding) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
+- **Audio:** Menu music tries an optional `public/source/audio/music-menu.mp3`; since that file isn't shipped yet, the **procedural warm-pad chord loop** is what currently plays. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle that grows fuller with each fire pit tier, fire extinguish hiss, box rummage, weed snip, bedroll sleep, rest chime, building mallet taps, log-stacking knocks, hearth stone clacks, rain-barrel water-drop chimes, farm harvest rustle, grill sizzle & kettle, sewing fabric chime, and the Terrace lift's low hum, door slides, floor-tick relay clicks and brass arrival ding) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
 
 ---
 
 ## 🗺️ Design Roadmap (Next Up)
 
-- **🔥 Wood-Burning Fire Mechanic:** A lit campfire slowly consumes **Timber** over time, turning the extinguish toggle into a meaningful, cozy resource choice (keep warm and bright, or save wood for building).
-- **🚪 Beyond-the-Roof Gathering & Mixed Rooftop Regeneration:** Mix slow, gentle rooftop regeneration (new sprouts/debris over days) with stepping out through the **stairwell door** into simple, cozy mini-puzzles inside the quiet apartment building to gather extra Timber, Scrap, Stone, and Water.
+- **🔥 Wood-Burning Fire Mechanic (next step):** Lighting the fire already burns 1 Timber; next, a lit campfire should slowly consume more **Timber** over time, turning the extinguish toggle into a meaningful, cozy resource choice (keep warm and bright, or save wood for building).
+- **🚪 Beyond-the-Roof Gathering & Mixed Rooftop Regeneration:** Mix slow, gentle rooftop regeneration (new sprouts/debris over days) with stepping out through the **stairwell door** into simple, cozy mini-puzzles inside the quiet apartment building to gather extra Timber, Scrap, Stone, and Water. Once it lands, switch off `TEST_MODE_GENEROUS_START` and tune scarcity.
 - **📦 More Prop Variety:** A dedicated **lit fire-pit sprite**, plus "cleared" variants for the double crate and single parcel.
-- **🛠️ More In-Scene Visual Upgrades:** Build on the Terrace v2 trio (timber shelter, herb planter, rain barrel) with more **anchor spots** — repairing the parapet walls, string lights, and second-tier versions of existing props.
-- **👕 Traveler Clothing Progression:** Start in ragged earthy traveler gear and unlock cleaner, warmer, cozier outfits as the shelter improves.
+- **🛠️ More In-Scene Visual Upgrades:** Beyond the six multi-tier stations — repairing the parapet walls, string lights, and other new **anchor spots**.
+- **👕 Traveler Clothing Progression:** Start in ragged earthy traveler gear and unlock cleaner, warmer, cozier outfits as the shelter improves — the *Quilted Cozy Cloak* perk is the first hook for a Tier 2 outfit sprite.
 - **🌅 Full Time-of-Day Scenes & More Arrival Vignettes:** Dedicated **Morning / Afternoon / Evening / Night** painted backdrops (and time-specific props) instead of tint-only lighting, plus per-shelter intro vignettes for the other 8 shelters (the Terrace lift ride is the template).
 - **🏠 More Interactive Shelters:** Bring the remaining 8 shelters to life with their own scene configs, props, hotspots and buildables.
 - **🌱 Rooftop Regrowth:** Reuse the per-run layout generator to let a few new sprouts and debris gently reappear over the days.
@@ -196,6 +223,7 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 - **New day rhythm**: the real-time Day → Dusk → Night cycle, with resting and sleeping at the shelter advancing the day and milestone unlocks.
 - **3-tier fire pit** (twigs → stacked logs → stone-ring hearth) with fire, glow and crackle that grow each tier.
 - **Randomized box & weed layout** per run.
+- **Core Vitality & Multi-Tier Progression loop:** 🍅 Food as the 7th resource; six multi-tier stations (Shelter, Fire Pit, Farm, Rainwater Barrel, Cooking Grill, Sewing Kit); daily harvest & rainwater; grill cooking that restores Stamina & Strength; mending perks; shelter-tier sleep comfort; firewood cost to light the fire.
 
 ---
 

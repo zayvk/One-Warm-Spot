@@ -53,7 +53,7 @@ export interface Site {
 }
 
 /** Identifier for a resource type */
-export type ResourceId = 'timber' | 'scrap' | 'cloth' | 'stone' | 'seeds' | 'water';
+export type ResourceId = 'timber' | 'scrap' | 'cloth' | 'stone' | 'seeds' | 'water' | 'food';
 
 /** A gatherable / storable resource */
 export interface Resource {

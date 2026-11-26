@@ -817,32 +817,33 @@ button:disabled {
   left: 50%;
   transform: translateX(-50%);
   z-index: 35;
-  padding: 10px 22px;
-  gap: 18px;
+  padding: 9px 18px;
+  gap: 14px;
   pointer-events: auto;
 }
 
 .ows-pouch-item {
-  font-size: 1.1rem;
+  font-size: 1.02rem;
   font-weight: 600;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   color: var(--charcoal);
 }
 
 @media (max-width: 760px) {
   .ows-pouch-bar {
     top: 64px;
-    padding: 8px 16px;
-    gap: 14px;
+    padding: 7px 12px;
+    gap: 9px;
     max-width: calc(100vw - 24px);
   }
 
   .ows-pouch-item {
-    font-size: 1rem;
+    font-size: 0.9rem;
+    gap: 3px;
   }
 }
 
@@ -911,6 +912,171 @@ button:disabled {
 
 .ows-build-chip__short {
   color: var(--terra-600);
+}
+
+.ows-build-chip__tier {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff8ec;
+  background: linear-gradient(180deg, #b98a5c, #8a6240);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 236, 205, 0.4);
+}
+
+/* ───── Station popover (Cooking grill / Mending kit) ───── */
+
+.ows-station-pop {
+  position: absolute;
+  z-index: 40;
+  width: 300px;
+  max-width: calc(100% - 16px);
+  padding: 10px 10px 8px;
+  color: var(--charcoal);
+  background: rgba(255, 250, 242, 0.86);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(232, 205, 181, 0.85);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(61, 56, 50, 0.24), 0 0 18px rgba(255, 216, 154, 0.25);
+  animation: owsModalFadeSoft 200ms ease both;
+}
+
+.ows-station-pop__header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 4px 6px;
+  font-family: var(--font-game-title);
+  font-size: 1.02rem;
+  border-bottom: 1px solid rgba(232, 205, 181, 0.7);
+}
+
+.ows-station-pop__sub {
+  font-family: inherit;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ows-station-pop__close {
+  border: none;
+  background: transparent;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.ows-station-pop__list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ows-station-pop__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 10px;
+}
+
+.ows-station-pop__row:hover {
+  background: rgba(255, 236, 210, 0.45);
+}
+
+.ows-station-pop__row--locked {
+  opacity: 0.55;
+}
+
+.ows-station-pop__icon {
+  font-size: 1.25rem;
+  width: 26px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.ows-station-pop__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.ows-station-pop__name {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.ows-station-pop__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.ows-station-pop__cost {
+  display: inline-flex;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ows-station-pop__gain {
+  color: var(--sage-600);
+  font-weight: 600;
+}
+
+.ows-station-pop__act {
+  flex-shrink: 0;
+  min-width: 50px;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #fff8ec;
+  background: linear-gradient(180deg, #d9925f, #b86d3f);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(122, 70, 36, 0.25);
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.ows-station-pop__act:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.ows-station-pop__act:disabled {
+  cursor: default;
+  color: var(--text-secondary);
+  background: rgba(232, 220, 204, 0.8);
+  box-shadow: none;
+}
+
+.ows-station-pop__error {
+  margin: 6px 4px 0;
+  font-size: 0.75rem;
+  color: var(--terra-600);
+}
+
+[data-reduce-motion='true'] .ows-station-pop {
+  animation: none;
+}
+
+[data-reduce-motion='true'] .ows-station-pop__act:hover:not(:disabled) {
+  transform: none;
 }
 
 [data-reduce-motion='true'] .ows-build-bar {

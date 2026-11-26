@@ -48,12 +48,39 @@ export const MODE_RULES: Record<GameMode, ModeRules> = {
   },
 };
 
-/** Day 1 materials for a mode (Challenge ≈ 60%, never below 1 of anything) */
+/** Day 1 materials for a mode (Challenge ≈ 60%, never below 1 of anything you'd normally start with) */
 export function startingResources(mode: GameMode): Record<ResourceId, number> {
   const k = MODE_RULES[mode].startMultiplier;
   return Object.fromEntries(
-    RESOURCES.map((r) => [r.id, k === 1 ? r.startAmount : Math.max(1, Math.round(r.startAmount * k))]),
+    RESOURCES.map((r) => [
+      r.id,
+      k === 1 || r.startAmount === 0 ? r.startAmount : Math.max(1, Math.round(r.startAmount * k)),
+    ]),
   ) as Record<ResourceId, number>;
+}
+
+/*
+ * ⚠️ TEST MODE — generous starting pool.
+ * While the Terrace stations are being tuned, every fresh run starts with enough
+ * materials (together with the rooftop's boxes & weeds) to build every station tier,
+ * craft every mending perk and cook each recipe right away.
+ * Set to `false` to restore normal Day 1 scarcity (once downstairs scavenging lands).
+ */
+export const TEST_MODE_GENEROUS_START = true;
+
+export const GENEROUS_TEST_POOL: Readonly<Record<ResourceId, number>> = {
+  timber: 40,
+  cloth: 15,
+  seeds: 10,
+  water: 8,
+  scrap: 20,
+  stone: 16,
+  food: 6,
+};
+
+/** Materials a freshly claimed shelter starts with (honours TEST_MODE_GENEROUS_START) */
+export function freshRunResources(mode: GameMode): Record<ResourceId, number> {
+  return TEST_MODE_GENEROUS_START ? { ...GENEROUS_TEST_POOL } : startingResources(mode);
 }
 
 /* ───── Weather ───── */

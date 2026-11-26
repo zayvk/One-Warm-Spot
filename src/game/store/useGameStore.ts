@@ -13,7 +13,7 @@ import type {
 } from '../types/game.ts';
 import { UPGRADE_MAP } from '../data/upgrades.ts';
 import { SITES } from '../data/sites.ts';
-import { MODE_RULES, startingResources, WEATHER_INFO } from '../data/modes.ts';
+import { freshRunResources, MODE_RULES, startingResources, WEATHER_INFO } from '../data/modes.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
 import {
   clearProgress,
@@ -54,7 +54,10 @@ import {
   dayPhaseToTimeOfDay,
   MAX_VITALITY,
   timeOfDayToDayPhase,
+  type SleepComfort,
 } from '../engine/dayCycle.ts';
+import { applyRecipe, phaseStrengthDecay } from '../engine/stations.ts';
+import type { Recipe } from '../data/recipes.ts';
 
 /* ── Helpers ── */
 
@@ -208,7 +211,13 @@ export interface GameState {
   tickDayCycle: (deltaSec: number) => void;
   spendStamina: (amount: number) => void;
   restAtShelter: () => boolean;
-  sleepAtShelter: () => void;
+  /** Sleep into Day N+1; `comfort` comes from the shelter tier & mending perks */
+  sleepAtShelter: (comfort?: SleepComfort) => void;
+  /** Eat a grill recipe: spends ingredients, restores Stamina & Strength */
+  cookRecipe: (recipe: Recipe) => boolean;
+  /** Runtime multiplier on Strength drift per phase (Quilted Cozy Cloak = 0.5) */
+  strengthDriftFactor: number;
+  setStrengthDriftFactor: (factor: number) => void;
   setTimePaused: (paused: boolean) => void;
   lightLantern: () => void;
   resetGame: (opts?: { clearMilestones?: boolean }) => void;
@@ -292,6 +301,7 @@ export const useGameStore = create<GameState>()((set, get) => {
     announcedUnlocks: initialAnnounced,
     notices: [],
     timePaused: false,
+    strengthDriftFactor: 1,
     sceneRevision: 0,
     reduceMotion: getInitialReduceMotion(),
 
@@ -305,7 +315,7 @@ export const useGameStore = create<GameState>()((set, get) => {
         chosenSite: id,
         selectedMode: mode,
         travelerGender: s.travelerGender,
-        resources: startingResources(mode),
+        resources: freshRunResources(mode),
         kitCollected: true,
       });
       get()._save();
@@ -431,7 +441,13 @@ export const useGameStore = create<GameState>()((set, get) => {
     tickDayCycle(deltaSec: number) {
       const s = get();
       if (s.timePaused || !s.chosenSite) return;
-      const res = advancePhaseClock(s.dayPhase, s.phaseElapsedSec, deltaSec, s.strength);
+      const res = advancePhaseClock(
+        s.dayPhase,
+        s.phaseElapsedSec,
+        deltaSec,
+        s.strength,
+        phaseStrengthDecay(s.strengthDriftFactor),
+      );
       if (
         res.dayPhase === s.dayPhase &&
         res.phaseElapsedSec === s.phaseElapsedSec &&
@@ -460,7 +476,7 @@ export const useGameStore = create<GameState>()((set, get) => {
 
     restAtShelter() {
       const s = get();
-      const outcome = applyRest(s.dayPhase, s.stamina, s.strength);
+      const outcome = applyRest(s.dayPhase, s.stamina, s.strength, phaseStrengthDecay(s.strengthDriftFactor));
       if (!outcome) return false;
       set({
         dayPhase: outcome.dayPhase,
@@ -473,9 +489,9 @@ export const useGameStore = create<GameState>()((set, get) => {
       return true;
     },
 
-    sleepAtShelter() {
+    sleepAtShelter(comfort?: SleepComfort) {
       const s = get();
-      const outcome = applySleep(s.day, s.strength);
+      const outcome = applySleep(s.day, s.strength, comfort, s.stamina);
       const weather = rollWeather(s.selectedMode);
       const water = morningWaterBonus(weather, s.unlockedUpgrades);
       set({
@@ -493,7 +509,7 @@ export const useGameStore = create<GameState>()((set, get) => {
       const weatherLine =
         water > 0
           ? `Soft rain overnight — +${water} ${RESOURCE_MAP.water.emoji} collected.`
-          : `${info.label} skies greet the rooftop. Stamina restored.`;
+          : `${info.label} skies greet the rooftop. Stamina ${outcome.stamina}/100.`;
       commitStats(
         { ...s.stats, maxDaysSurvived: Math.max(s.stats.maxDaysSurvived, daysSurvivedOn(outcome.day)) },
         [
@@ -507,6 +523,19 @@ export const useGameStore = create<GameState>()((set, get) => {
         ],
       );
       get()._save();
+    },
+
+    cookRecipe(recipe: Recipe) {
+      const s = get();
+      const outcome = applyRecipe(recipe, s.resources, s.stamina, s.strength);
+      if (!outcome) return false;
+      set({ resources: outcome.resources, stamina: outcome.stamina, strength: outcome.strength });
+      get()._save();
+      return true;
+    },
+
+    setStrengthDriftFactor(factor: number) {
+      if (get().strengthDriftFactor !== factor) set({ strengthDriftFactor: factor });
     },
 
     setTimePaused(paused: boolean) {

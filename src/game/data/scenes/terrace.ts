@@ -1,6 +1,6 @@
 /* ───── Old Apartment Terrace — Interactive Scene Config (v2) ───── */
 
-import type { HotspotConfig, ShelterSceneConfig } from './types.ts';
+import type { HotspotConfig, ShelterSceneConfig, StationConfig } from './types.ts';
 import { SCENE_PROPS } from '../media.ts';
 
 /* ── Randomizable box & weed variants ── */
@@ -149,7 +149,132 @@ const FIREPIT_STAND = { dx: -0.058, dy: 0.015 };
 const SHED_POS = { x: 0.36, y: 0.61 };
 const HERB_PLANTER_POS = { x: 0.24, y: 0.69 };
 const RAIN_BARREL_POS = { x: 0.75, y: 0.59 };
+/** Cooking grill sits back-right of the fire pit */
+const GRILL_POS = { x: 0.62, y: 0.66 };
+/** Sewing / knitting kit tucked right of the shelter, behind the fire */
+const SEWING_POS = { x: 0.47, y: 0.565 };
 const STAIRWELL_POS = { x: 0.86, y: 0.66 };
+
+const PLANTER_STAND = { dx: 0.058, dy: 0.02 };
+const BARREL_STAND = { dx: -0.045, dy: 0.025 };
+const GRILL_STAND = { dx: 0, dy: 0.045 };
+const SEWING_STAND = { dx: 0, dy: 0.045 };
+
+/* ── Multi-tier stations ── */
+
+export const TERRACE_STATIONS: StationConfig[] = [
+  {
+    id: 'shelter',
+    hotspotId: 'sleep-shed',
+    icon: '🛖',
+    baseTier: 1,
+    buildStandOffset: { dx: 0.085, dy: 0.035 },
+    tiers: [
+      {
+        tier: 1,
+        name: 'Cloth Lean-to',
+        sprite: SCENE_PROPS.clothShed,
+        propScale: 0.19,
+        cost: {},
+        collider: { rx: 0.062, ry: 0.03 },
+        standOffset: { dx: -0.03, dy: -0.012 },
+        restOffset: { dx: 0.085, dy: 0.035 },
+        effect: 'lantern',
+      },
+      {
+        tier: 2,
+        name: 'Timber Shelter',
+        sprite: SCENE_PROPS.shedUpgraded,
+        propScale: 0.225,
+        cost: { timber: 3, cloth: 2 },
+        collider: { rx: 0.064, ry: 0.032 },
+        standOffset: { dx: 0.004, dy: -0.024 },
+        restOffset: { dx: 0.085, dy: 0.035 },
+        effect: 'lantern',
+        glows: [{ x: 0.216, y: 0.585, size: 0.16 }],
+      },
+      {
+        tier: 3,
+        name: 'Insulated Hut',
+        sprite: SCENE_PROPS.shelterT3,
+        propScale: 0.24,
+        cost: { timber: 4, scrap: 2, stone: 2 },
+        collider: { rx: 0.068, ry: 0.034 },
+        standOffset: { dx: 0.012, dy: -0.022 },
+        restOffset: { dx: 0.09, dy: 0.035 },
+        effect: 'warm',
+        /* Warm window on the gable wall + the doorway lantern */
+        glows: [
+          { x: 0.3, y: 0.59, size: 0.2 },
+          { x: 0.595, y: 0.73, size: 0.15 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'firepit',
+    hotspotId: 'firepit',
+    icon: '🔥',
+    baseTier: 1,
+    buildStandOffset: FIREPIT_STAND,
+    tiers: [
+      { tier: 1, name: 'Twig Fire Pit', sprite: SCENE_PROPS.firepitT1, propScale: 0.058, cost: {}, collider: { rx: 0.042, ry: 0.026 }, standOffset: FIREPIT_STAND, effect: 'logs' },
+      { tier: 2, name: 'Stacked Logs', sprite: SCENE_PROPS.firepitT2, propScale: 0.088, cost: { timber: 2 }, collider: { rx: 0.042, ry: 0.026 }, standOffset: FIREPIT_STAND, effect: 'logs' },
+      { tier: 3, name: 'Stone-Ring Hearth', sprite: SCENE_PROPS.firepit, propScale: 0.085, cost: { timber: 2, scrap: 1, stone: 2 }, collider: { rx: 0.042, ry: 0.026 }, standOffset: FIREPIT_STAND, effect: 'stones' },
+    ],
+  },
+  {
+    id: 'planter',
+    hotspotId: 'planter',
+    icon: '🌱',
+    baseTier: 0,
+    buildStandOffset: PLANTER_STAND,
+    tiers: [
+      { tier: 1, name: 'Seedling Crate', sprite: SCENE_PROPS.planterT1, propScale: 0.1, cost: { timber: 1, seeds: 1 }, collider: { rx: 0.034, ry: 0.02 }, standOffset: PLANTER_STAND, effect: 'leaves' },
+      { tier: 2, name: 'Herb Planter', sprite: SCENE_PROPS.planter, propScale: 0.14, cost: { timber: 2, seeds: 2 }, collider: { rx: 0.036, ry: 0.022 }, standOffset: PLANTER_STAND, effect: 'leaves' },
+      { tier: 3, name: 'Trellis Garden', sprite: SCENE_PROPS.planterT3, propScale: 0.165, cost: { timber: 3, scrap: 2, seeds: 2 }, collider: { rx: 0.04, ry: 0.024 }, standOffset: { dx: 0.064, dy: 0.02 }, effect: 'leaves' },
+    ],
+  },
+  {
+    id: 'barrel',
+    hotspotId: 'rain-barrel',
+    icon: '💧',
+    baseTier: 0,
+    buildStandOffset: BARREL_STAND,
+    tiers: [
+      { tier: 1, name: 'Bucket Barrel', sprite: SCENE_PROPS.barrelT1, propScale: 0.11, cost: { timber: 1, cloth: 1 }, collider: { rx: 0.022, ry: 0.015 }, standOffset: BARREL_STAND, effect: 'water' },
+      { tier: 2, name: 'Rain Barrel', sprite: SCENE_PROPS.rainBarrel, propScale: 0.13, cost: { timber: 2, scrap: 2 }, collider: { rx: 0.024, ry: 0.016 }, standOffset: BARREL_STAND, effect: 'water' },
+      { tier: 3, name: 'Guttered Rain Rig', sprite: SCENE_PROPS.barrelT3, propScale: 0.16, cost: { timber: 3, scrap: 2, stone: 2 }, collider: { rx: 0.036, ry: 0.022 }, standOffset: { dx: -0.056, dy: 0.03 }, effect: 'water' },
+    ],
+  },
+  {
+    id: 'grill',
+    hotspotId: 'grill',
+    icon: '🍳',
+    baseTier: 0,
+    buildStandOffset: GRILL_STAND,
+    tiers: [
+      { tier: 1, name: 'Grill Rack', sprite: SCENE_PROPS.grillT1, propScale: 0.05, cost: { scrap: 1, stone: 1 }, collider: { rx: 0.03, ry: 0.016 }, standOffset: GRILL_STAND, effect: 'stones' },
+      { tier: 2, name: 'Camp Grill', sprite: SCENE_PROPS.grillT2, propScale: 0.11, cost: { scrap: 2, stone: 2 }, collider: { rx: 0.036, ry: 0.02 }, standOffset: GRILL_STAND, effect: 'stones' },
+      { tier: 3, name: 'Grill Counter', sprite: SCENE_PROPS.grillT3, propScale: 0.13, cost: { timber: 2, stone: 2, scrap: 1 }, collider: { rx: 0.042, ry: 0.024 }, standOffset: GRILL_STAND, effect: 'logs' },
+      { tier: 4, name: 'Hearth Kitchen', sprite: SCENE_PROPS.grillT4, propScale: 0.16, cost: { timber: 4, scrap: 2, stone: 2 }, collider: { rx: 0.05, ry: 0.026 }, standOffset: GRILL_STAND, effect: 'warm' },
+    ],
+  },
+  {
+    id: 'sewing',
+    hotspotId: 'sewing',
+    icon: '🧵',
+    baseTier: 0,
+    buildStandOffset: SEWING_STAND,
+    tiers: [
+      { tier: 1, name: 'Needle & Thread', sprite: SCENE_PROPS.sewT1, propScale: 0.045, cost: { cloth: 1 }, collider: { rx: 0.022, ry: 0.012 }, standOffset: SEWING_STAND, effect: 'fabric' },
+      { tier: 2, name: 'Patch Scraps', sprite: SCENE_PROPS.sewT2, propScale: 0.045, cost: { cloth: 2 }, collider: { rx: 0.026, ry: 0.012 }, standOffset: SEWING_STAND, effect: 'fabric' },
+      { tier: 3, name: 'Knitting Basket', sprite: SCENE_PROPS.sewT3, propScale: 0.1, cost: { timber: 2, cloth: 2 }, collider: { rx: 0.028, ry: 0.016 }, standOffset: SEWING_STAND, effect: 'fabric' },
+      { tier: 4, name: 'Mending Bench', sprite: SCENE_PROPS.sewT4, propScale: 0.125, cost: { timber: 3, cloth: 2, scrap: 1 }, collider: { rx: 0.036, ry: 0.02 }, standOffset: SEWING_STAND, effect: 'fabric' },
+      { tier: 5, name: 'Sewing Table', sprite: SCENE_PROPS.sewT5, propScale: 0.145, cost: { timber: 4, cloth: 3, scrap: 2 }, collider: { rx: 0.046, ry: 0.024 }, standOffset: SEWING_STAND, effect: 'fabric' },
+    ],
+  },
+];
 
 export const terraceScene: ShelterSceneConfig = {
   backdrop: '/source/scenes/terrace-stage.webp',
@@ -166,11 +291,12 @@ export const terraceScene: ShelterSceneConfig = {
   entryPoint: { x: 0.84, y: 0.69 },
   idlePoint: { x: 0.72, y: 0.71 },
 
+  /* Station hotspots start from their base tier; the scene swaps art, collider & stand spot per tier */
   hotspots: [
-    /* ── Central Fire Pit (Tier 1 makeshift twigs; upgraded in-scene) ── */
     {
       id: 'firepit',
       type: 'firepit',
+      station: 'firepit',
       position: FIREPIT_POS,
       propSprite: SCENE_PROPS.firepitT1,
       propScale: 0.058,
@@ -178,11 +304,10 @@ export const terraceScene: ShelterSceneConfig = {
       collider: { rx: 0.042, ry: 0.026 },
       standOffset: FIREPIT_STAND,
     },
-
-    /* ── Shabby cloth lean-to, tucked behind-left of the fire ── */
     {
       id: 'sleep-shed',
       type: 'sleep',
+      station: 'shelter',
       position: SHED_POS,
       propSprite: SCENE_PROPS.clothShed,
       propScale: 0.19,
@@ -191,6 +316,10 @@ export const terraceScene: ShelterSceneConfig = {
       standOffset: { dx: -0.03, dy: -0.012 },
       restOffset: { dx: 0.085, dy: 0.035 },
     },
+    { id: 'planter', type: 'planter', station: 'planter', position: HERB_PLANTER_POS, propSprite: '', label: 'Farm planter', standOffset: PLANTER_STAND },
+    { id: 'rain-barrel', type: 'barrel', station: 'barrel', position: RAIN_BARREL_POS, propSprite: '', label: 'Rainwater barrel', standOffset: BARREL_STAND },
+    { id: 'grill', type: 'grill', station: 'grill', position: GRILL_POS, propSprite: '', label: 'Cooking grill', standOffset: GRILL_STAND },
+    { id: 'sewing', type: 'sewing', station: 'sewing', position: SEWING_POS, propSprite: '', label: 'Sewing kit', standOffset: SEWING_STAND },
 
     /* ── 3 searchable boxes + 6 weed patches (positions randomized per run) ── */
     ...TERRACE_BOX_IDS.map((id) => terraceSpawnHotspot(id, DEFAULT_TERRACE_SPAWNS[id])),
@@ -209,81 +338,7 @@ export const terraceScene: ShelterSceneConfig = {
     },
   ],
 
-  /* ── In-scene visual upgrades (spend found materials) ── */
-  buildables: [
-    {
-      id: 'firepit-t2',
-      name: 'Stack Firepit Logs',
-      icon: '🔥',
-      cost: { timber: 2 },
-      position: FIREPIT_POS,
-      propSprite: SCENE_PROPS.firepitT2,
-      propScale: 0.088,
-      upgradesHotspot: 'firepit',
-      hotspotOverrides: { propScale: 0.088 },
-      tier: 2,
-      standOffset: FIREPIT_STAND,
-      effect: 'logs',
-    },
-    {
-      id: 'firepit-t3',
-      name: 'Stone-Ring Hearth',
-      icon: '🧱',
-      cost: { timber: 2, scrap: 1 },
-      position: FIREPIT_POS,
-      propSprite: SCENE_PROPS.firepit,
-      propScale: 0.085,
-      upgradesHotspot: 'firepit',
-      hotspotOverrides: { propScale: 0.085 },
-      requires: 'firepit-t2',
-      tier: 3,
-      standOffset: FIREPIT_STAND,
-      effect: 'stones',
-    },
-    {
-      id: 'shed-upgrade',
-      name: 'Upgrade Shelter',
-      icon: '🛖',
-      cost: { timber: 3, cloth: 2 },
-      position: SHED_POS,
-      propSprite: SCENE_PROPS.shedUpgraded,
-      propScale: 0.225,
-      upgradesHotspot: 'sleep-shed',
-      hotspotOverrides: {
-        propScale: 0.225,
-        collider: { rx: 0.064, ry: 0.032 },
-        standOffset: { dx: 0.004, dy: -0.024 },
-        restOffset: { dx: 0.085, dy: 0.035 },
-      },
-      standOffset: { dx: 0.085, dy: 0.035 },
-      effect: 'lantern',
-      lanternAnchor: { x: 0.216, y: 0.585 },
-    },
-    {
-      id: 'herb-planter',
-      name: 'Herb Planter',
-      icon: '🌿',
-      cost: { timber: 2, seeds: 2 },
-      position: HERB_PLANTER_POS,
-      propSprite: SCENE_PROPS.planter,
-      propScale: 0.14,
-      collider: { rx: 0.036, ry: 0.022 },
-      standOffset: { dx: 0.058, dy: 0.02 },
-      effect: 'leaves',
-    },
-    {
-      id: 'rain-barrel',
-      name: 'Rain Barrel',
-      icon: '🛢️',
-      cost: { scrap: 2, timber: 1 },
-      position: RAIN_BARREL_POS,
-      propSprite: SCENE_PROPS.rainBarrel,
-      propScale: 0.13,
-      collider: { rx: 0.024, ry: 0.016 },
-      standOffset: { dx: -0.045, dy: 0.025 },
-      effect: 'water',
-    },
-  ],
+  stations: TERRACE_STATIONS,
 };
 
 /* ── Spawn rules for randomized box & weed placement ── */
@@ -295,6 +350,10 @@ export interface SpawnCircle {
   r: number;
 }
 
+function standSpot(pos: { x: number; y: number }, stand: { dx: number; dy: number }, r: number): SpawnCircle {
+  return { x: pos.x + stand.dx, y: pos.y + stand.dy, r };
+}
+
 export const TERRACE_SPAWN_RULES = {
   /** Stage art aspect (1376×768) — x distances are scaled by this */
   aspect: 1376 / 768,
@@ -302,16 +361,20 @@ export const TERRACE_SPAWN_RULES = {
   bounds: { xMin: 0.16, xMax: 0.86, yMin: 0.555, yMax: 0.86 },
   /** Extra no-spawn rects (front-left low brick wall) */
   noSpawn: [{ xMin: 0, xMax: 0.29, yMin: 0.83, yMax: 1 }],
-  /** Fixed structures, their stand spots and the entry path stay clear */
+  /** Every station at its largest tier, their stand spots and the entry path stay clear */
   keepClear: [
     { x: FIREPIT_POS.x, y: FIREPIT_POS.y, r: 0.085 },
-    { x: FIREPIT_POS.x + FIREPIT_STAND.dx, y: FIREPIT_POS.y + FIREPIT_STAND.dy, r: 0.04 },
-    { x: SHED_POS.x, y: SHED_POS.y - 0.01, r: 0.12 },
+    standSpot(FIREPIT_POS, FIREPIT_STAND, 0.04),
+    { x: SHED_POS.x, y: SHED_POS.y - 0.01, r: 0.125 },
     { x: 0.445, y: 0.645, r: 0.04 },
-    { x: HERB_PLANTER_POS.x, y: HERB_PLANTER_POS.y, r: 0.08 },
-    { x: 0.298, y: 0.71, r: 0.035 },
-    { x: RAIN_BARREL_POS.x, y: RAIN_BARREL_POS.y, r: 0.065 },
-    { x: 0.705, y: 0.615, r: 0.035 },
+    { x: HERB_PLANTER_POS.x, y: HERB_PLANTER_POS.y, r: 0.085 },
+    standSpot(HERB_PLANTER_POS, PLANTER_STAND, 0.035),
+    { x: RAIN_BARREL_POS.x, y: RAIN_BARREL_POS.y, r: 0.08 },
+    standSpot(RAIN_BARREL_POS, BARREL_STAND, 0.035),
+    { x: GRILL_POS.x, y: GRILL_POS.y - 0.02, r: 0.1 },
+    standSpot(GRILL_POS, GRILL_STAND, 0.035),
+    { x: SEWING_POS.x, y: SEWING_POS.y - 0.01, r: 0.085 },
+    standSpot(SEWING_POS, SEWING_STAND, 0.035),
     { x: 0.84, y: 0.69, r: 0.07 },
     { x: 0.78, y: 0.7, r: 0.06 },
     { x: 0.72, y: 0.71, r: 0.055 },

@@ -1361,6 +1361,44 @@ export function playBuild(): void {
   });
 }
 
+/** Soft leafy rustle + a little pluck as the planter is harvested */
+export function playHarvest(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  puff(c, target, t, 0.1, 0.22, 900, 4200, 1500);
+  puff(c, target, t + 0.16, 0.07, 0.2, 800, 3600, 1300);
+  tone(c, target, t + 0.24, { freq: 660 * pitchVar(), vol: 0.05, decay: 0.4, attack: 0.004 });
+  tone(c, target, t + 0.36, { freq: 880 * pitchVar(), vol: 0.04, decay: 0.45, attack: 0.004 });
+}
+
+/** Gentle sizzle and a soft kettle whistle while cooking at the grill */
+export function playCook(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  // Sizzle: a few crackly high-passed noise swells
+  puff(c, target, t, 0.07, 0.6, 2600, 7200, 4200);
+  puff(c, target, t + 0.25, 0.05, 0.5, 2400, 6800, 3800);
+  // Kettle sigh rising softly
+  tone(c, target, t + 0.4, { freq: 1180 * pitchVar(), glideTo: 1420, glideTime: 0.5, vol: 0.022, decay: 0.7, attack: 0.18 });
+  tone(c, target, t + 0.62, { freq: 523.25, vol: 0.045, decay: 0.9, attack: 0.03 });
+}
+
+/** Fabric swish + soft thimble chimes when mending at the sewing kit */
+export function playSew(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  puff(c, target, t, 0.08, 0.3, 300, 1800, 700);
+  [0.1, 0.26, 0.42].forEach((off, i) => {
+    tone(c, target, t + off, { freq: [1046.5, 1318.5, 1568][i] * pitchVar(), vol: 0.035, decay: 0.35, attack: 0.003 });
+  });
+}
+
 /** Gentle water-drop plinks into the new rain barrel */
 export function playWaterChime(): void {
   if (muted || !unlocked || sfxVolume <= 0) return;

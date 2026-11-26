@@ -10,7 +10,7 @@ const save: SaveState = {
   chosenSite: 'terrace',
   selectedMode: 'cozy',
   travelerGender: 'female',
-  resources: { timber: 5, scrap: 2, cloth: 3, stone: 0, seeds: 1, water: 4 },
+  resources: { timber: 5, scrap: 2, cloth: 3, stone: 0, seeds: 1, water: 4, food: 2 },
   unlockedUpgrades: [],
   kitCollected: true,
   stats: { maxDaysSurvived: 2, totalUpgradesBuilt: 0, totalExpansionsBuilt: 0 },
@@ -22,10 +22,14 @@ describe('backup files', () => {
     const terrace = {
       ...freshTerraceState(99),
       fireLit: true,
-      firepitTier: 2 as const,
+      firepitTier: 2,
       searchedBoxes: ['boxes-2'],
       clearedWeeds: ['weeds-1', 'weeds-5'],
-      builtProps: ['rain-barrel'],
+      grillTier: 3,
+      sewingTier: 1,
+      barrelTier: 2,
+      barrelReady: false,
+      craftedPerks: ['warm-sheets'],
     };
     const result = parseBackupText(JSON.stringify(buildBackup(save, terrace)));
     expect(result.ok).toBe(true);
@@ -33,6 +37,20 @@ describe('backup files', () => {
     expect(result.terrace).toEqual(terrace);
     expect(result.save).toMatchObject({ day: 3, chosenSite: 'terrace', resources: save.resources, stats: save.stats });
     expect(result.warnings).toEqual([]);
+  });
+
+  it('loads older backups saved before Food and the multi-tier stations existed', () => {
+    const { food: _food, ...oldResources } = save.resources;
+    const old = {
+      ...save,
+      resources: oldResources,
+      terraceState: { fireLit: false, searchedBoxes: [], clearedWeeds: [], builtProps: ['rain-barrel'], firepitTier: 2, spawns: null },
+    };
+    const result = parseBackupText(JSON.stringify(old));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.save.resources.food).toBe(0);
+    expect(result.terrace).toMatchObject({ barrelTier: 2, barrelReady: true, firepitTier: 2, shelterTier: 1, grillTier: 0 });
   });
 
   it('still loads older backups without rooftop details, starting the Terrace fresh', () => {
@@ -45,6 +63,9 @@ describe('backup files', () => {
 
   it.each([
     ['an unknown fire pit tier', { firepitTier: 5 }],
+    ['an out-of-range grill tier', { grillTier: 9 }],
+    ['a non-boolean harvest flag', { planterReady: 'soon' }],
+    ['a damaged perk list', { craftedPerks: [1] }],
     ['a non-boolean fire flag', { fireLit: 'yes' }],
     ['a damaged box list', { searchedBoxes: [1, 2] }],
     ['a broken layout', { spawns: { 'boxes-1': { x: 4 } } }],

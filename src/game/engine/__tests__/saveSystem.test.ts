@@ -93,6 +93,11 @@ describe('save migration', () => {
     expect(save.strength).toBe(82);
   });
 
+  it('gives saves from before Food existed an empty food basket', () => {
+    expect(expectOk(v2Save).save.resources).toEqual({ ...resources, food: 0 });
+    expect(expectOk({ ...v3Save, resources: { ...resources, food: 4 } }).save.resources.food).toBe(4);
+  });
+
   it('is stable when re-migrating a current save', () => {
     const { save } = expectOk({
       ...v3Save,
@@ -144,6 +149,7 @@ describe('strict save validation', () => {
     ['unknown day phase', json({ dayPhase: 'midnight' }), /day phase/],
     ['a negative material', json({ resources: { ...resources, scrap: -1 } }), /“scrap”/],
     ['a fractional material', json({ resources: { ...resources, water: 1.5 } }), /“water”/],
+    ['negative food', json({ resources: { ...resources, food: -3 } }), /“food”/],
     ['a missing material', json({ resources: { timber: 1 } }), /whole numbers/],
     ['a damaged upgrade list', json({ unlockedUpgrades: [1, 2] }), /upgrade list/],
     ['a damaged relic list', json({ discoveredRelics: 'postcard' }), /relic list/],

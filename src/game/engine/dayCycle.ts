@@ -63,6 +63,7 @@ export function advancePhaseClock(
   phaseElapsedSec: number,
   deltaSec: number,
   strength: number,
+  strengthDecay: number = PHASE_STRENGTH_DECAY,
 ): PhaseTickResult {
   const step = Math.max(0, Number.isFinite(deltaSec) ? deltaSec : 0);
   let phase: DayPhase = dayPhase;
@@ -75,7 +76,7 @@ export function advancePhaseClock(
     if (!next) break;
     elapsed -= PHASE_DURATION_SEC;
     phase = next;
-    nextStrength = clampVitality(nextStrength - PHASE_STRENGTH_DECAY);
+    nextStrength = clampVitality(nextStrength - strengthDecay);
     phaseChanged = true;
   }
 
@@ -106,6 +107,7 @@ export function applyRest(
   dayPhase: DayPhase,
   stamina: number,
   strength: number,
+  strengthDecay: number = PHASE_STRENGTH_DECAY,
 ): RestOutcome | null {
   const next = nextDayPhase(dayPhase);
   if (!next) return null;
@@ -113,7 +115,7 @@ export function applyRest(
     dayPhase: next,
     phaseElapsedSec: 0,
     stamina: clampVitality(stamina + REST_STAMINA_GAIN),
-    strength: clampVitality(strength - PHASE_STRENGTH_DECAY),
+    strength: clampVitality(strength - strengthDecay),
   };
 }
 
@@ -125,16 +127,30 @@ export interface SleepOutcome {
   strength: number;
 }
 
+/** How well the shelter lets you sleep (see `sleepComfort` in stations.ts) */
+export interface SleepComfort {
+  /** Stamina you wake up with at least (0–100) */
+  staminaTarget: number;
+  /** Strength eased overnight */
+  strengthLoss: number;
+}
+
 /**
- * Sleep through the night into Day N+1 · Day:
- * restores stamina to 100 and reduces strength by 10.
+ * Sleep through the night into Day N+1 · Day. By default stamina refills to
+ * 100 and strength eases by 10; a humbler shelter refills less, and sleeping
+ * never lowers stamina you already have.
  */
-export function applySleep(day: number, strength: number): SleepOutcome {
+export function applySleep(
+  day: number,
+  strength: number,
+  comfort: SleepComfort = { staminaTarget: MAX_VITALITY, strengthLoss: SLEEP_STRENGTH_DECAY },
+  stamina = 0,
+): SleepOutcome {
   return {
     day: Math.max(1, Math.floor(day)) + 1,
     dayPhase: 'day',
     phaseElapsedSec: 0,
-    stamina: MAX_VITALITY,
-    strength: clampVitality(strength - SLEEP_STRENGTH_DECAY),
+    stamina: clampVitality(Math.max(stamina, comfort.staminaTarget)),
+    strength: clampVitality(strength - comfort.strengthLoss),
   };
 }

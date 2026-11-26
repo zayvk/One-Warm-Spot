@@ -45,7 +45,11 @@ const VALID_RESOURCE_IDS: readonly ResourceId[] = [
   'stone',
   'seeds',
   'water',
+  'food',
 ];
+
+/** Materials added after saves already existed — absent in older saves, defaulting to 0 */
+const LATER_RESOURCE_IDS: ReadonlySet<ResourceId> = new Set<ResourceId>(['food']);
 
 const VALID_MODES: ReadonlySet<string> = new Set<GameMode>(['cozy', 'challenge']);
 const VALID_GENDERS: ReadonlySet<string> = new Set<TravelerGender>(['female', 'male']);
@@ -137,6 +141,7 @@ export function findSaveProblem(data: unknown): string | null {
   }
   const res = obj.resources as Record<string, unknown>;
   for (const key of VALID_RESOURCE_IDS) {
+    if (res[key] === undefined && LATER_RESOURCE_IDS.has(key)) continue;
     if (!isWholeNumber(res[key])) {
       return `Material amounts must be whole numbers of 0 or more (check “${key}”).`;
     }
@@ -196,7 +201,7 @@ export function migrateSave(save: SaveState, warnings: string[] = []): SaveState
   const resources = Object.fromEntries(
     VALID_RESOURCE_IDS.map((id) => {
       const cap = RESOURCE_MAP[id].maxStack;
-      const amount = save.resources[id];
+      const amount = save.resources[id] ?? 0;
       if (amount > cap) trimmed = true;
       return [id, Math.min(cap, amount)];
     }),

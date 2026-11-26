@@ -13,22 +13,35 @@ import {
 } from 'pixi.js';
 import type { DayPhase, ResourceId, SiteId, TimeOfDay, TravelerGender } from '../types/game.ts';
 import type {
-  BuildableConfig,
   HotspotConfig,
   SceneObstacle,
   ShelterSceneConfig,
+  StationConfig,
+  StationId,
+  StationTierConfig,
 } from '../data/scenes/types.ts';
 import { BG_SHELTERS, travelerSpriteSrc, SCENE_STAGES } from '../data/media.ts';
 import type { TravelerPose } from '../data/media.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
 import { getSceneConfig } from '../data/scenes/index.ts';
 import { withTerraceSpawns } from '../data/scenes/terrace.ts';
+import { MENDING_PERKS, RECIPES, type Recipe } from '../data/recipes.ts';
 import {
   loadTerraceState,
   saveTerraceState,
-  type FirepitTier,
+  stationTiersOf,
+  STATION_TIER_KEY,
   type TerraceState,
 } from '../engine/terraceState.ts';
+import {
+  barrelCollect,
+  nextStationTier,
+  planterHarvest,
+  sleepComfort,
+  stationTierConfig,
+  type StationTiers,
+} from '../engine/stations.ts';
+import type { SleepComfort } from '../engine/dayCycle.ts';
 import {
   playFireLight,
   playFireDouse,
@@ -40,7 +53,10 @@ import {
   playFootstep,
   playBuild,
   playClaim,
+  playCook,
+  playHarvest,
   playLogStack,
+  playSew,
   playStoneSet,
   playWaterChime,
 } from '../audio/soundEngine.ts';
@@ -60,27 +76,45 @@ export interface ShelterSceneState {
   gender: TravelerGender;
 }
 
+/** Where found materials came from (gathering costs Stamina; daily station yields don't) */
+export type RewardSource = 'weeds' | 'searchable' | 'harvest';
+
 /** Callback when a hotspot interaction awards resources */
-export type RewardCallback = (reward: Record<string, number>, source?: 'weeds' | 'searchable') => void;
+export type RewardCallback = (reward: Record<string, number>, source?: RewardSource) => void;
 
 /** Callback when the traveler rests by the shelter during day/dusk */
 export type RestCallback = () => void;
 
-/** Callback when the traveler sleeps until morning during night */
-export type SleepCallback = () => void;
+/** Callback when the traveler sleeps until morning during night (comfort from shelter tier & perks) */
+export type SleepCallback = (comfort: SleepComfort) => void;
 
-/** Pays for an in-scene build; returns false if the materials ran short */
+/** Pays for an in-scene build (materials + build stamina); returns false if the materials ran short */
 export type BuildCallback = (cost: Partial<Record<ResourceId, number>>) => boolean;
 
-/** In-scene build progress, mirrored to the React build bar */
-export interface SceneBuildState {
-  built: string[];
-  pending: string | null;
-}
-export type BuildStateCallback = (state: SceneBuildState) => void;
+/** Spends materials only (firewood, mending); returns false if short */
+export type SpendCallback = (cost: Partial<Record<ResourceId, number>>) => boolean;
 
-/** Gentle toast request (e.g. the stairwell door) */
-export type NoticeCallback = (message: string) => void;
+/** Eats a grill recipe; returns false if the ingredients ran short */
+export type CookCallback = (recipe: Recipe) => boolean;
+
+/** Station progress & daily readiness, mirrored to the React Build Bar and station popovers */
+export interface SceneStationState {
+  tiers: StationTiers;
+  pending: StationId | null;
+  fireLit: boolean;
+  perks: string[];
+  planterReady: boolean;
+  barrelReady: boolean;
+}
+export type StationStateCallback = (state: SceneStationState) => void;
+
+/** Open the Cooking / Mending popover anchored above a station (screen pixels) */
+export type StationOpenCallback = (station: 'grill' | 'sewing', anchor: { x: number; y: number }) => void;
+
+export type StationActionResult = { ok: true } | { ok: false; message: string };
+
+/** Gentle toast request (stairwell door, firewood hints) */
+export type NoticeCallback = (message: string, icon?: string) => void;
 
 /* ═══════════════════════════════════════════
    Lighting presets
@@ -211,6 +245,8 @@ interface FireProfile {
   crackle: number;
 }
 
+type FirepitTier = 1 | 2 | 3;
+
 const FIRE_TIERS: Record<FirepitTier, FireProfile> = {
   1: { flame: 1, tongues: 0, emberChance: 0.16, glowScale: 1, glowBoost: 1, nightGlow: 0.1, glowTint: 0xff8030, coals: false, smokeChance: 0, crackle: 0.72 },
   2: { flame: 1.4, tongues: 2, emberChance: 0.32, glowScale: 1.35, glowBoost: 1.18, nightGlow: 0.12, glowTint: 0xff8a36, coals: false, smokeChance: 0, crackle: 0.86 },
@@ -304,18 +340,10 @@ interface HotspotNode {
   labelPill: Graphics;
   hovered: boolean;
   interacted: boolean;
-}
-
-/** A placeable in-scene upgrade: floor blueprint until built, then a real prop */
-interface BuildNode {
-  config: BuildableConfig;
-  root: Container;
-  blueprint: Graphics;
-  sprite: Sprite;
-  label: Text;
-  labelPill: Graphics;
-  hovered: boolean;
-  built: boolean;
+  /** Station hotspots: floor blueprint shown while the station is still unbuilt (tier 0) */
+  blueprint: Graphics | null;
+  /** Station hotspots: warm window / lantern glows for the current tier */
+  glows: { sprite: Sprite; anchor: { x: number; y: number; size: number } }[];
 }
 
 interface SceneParticle {
@@ -374,12 +402,13 @@ export class ShelterScene {
   private hotspots: HotspotNode[] = [];
   private sceneConfig: ShelterSceneConfig | null = null;
 
-  /* In-scene builds */
-  private buildNodes: BuildNode[] = [];
-  private pendingBuildId: string | null = null;
-  private shedLantern: Sprite | null = null;
+  /* Multi-tier stations */
+  private pendingStation: StationId | null = null;
   private onBuild: BuildCallback | null = null;
-  private onBuildState: BuildStateCallback | null = null;
+  private onSpend: SpendCallback | null = null;
+  private onCook: CookCallback | null = null;
+  private onStationState: StationStateCallback | null = null;
+  private onStationOpen: StationOpenCallback | null = null;
   private onNotice: NoticeCallback | null = null;
   private onReady: (() => void) | null = null;
 
@@ -495,10 +524,8 @@ export class ShelterScene {
     this.preloadTravelerPoses(initial.gender);
     this.buildNightEffects();
     this.buildHotspots();
-    this.buildBuildables();
     this.loadTraveler(initial.gender, 'idle');
     this.restoreTerraceState();
-    this.syncSleepHotspotLabel();
     this.layout();
     this.applyLighting();
     /* Stage stays veiled until the backdrop is ready; the reveal then starts the entry walk */
@@ -517,16 +544,15 @@ export class ShelterScene {
       this.sceneConfig = this.resolveSceneConfig(next.siteId);
       this.loadBackground(next.siteId);
       this.buildHotspots();
-      this.buildBuildables();
       this.restoreTerraceState();
-      this.emitBuildState();
+      this.emitStationState();
     }
     if (next.gender !== prev.gender) {
       this.preloadTravelerPoses(next.gender);
       this.loadTraveler(next.gender, this.currentPose);
     }
     if (next.dayPhase !== prev.dayPhase || next.siteId !== prev.siteId) {
-      this.syncSleepHotspotLabel();
+      this.refreshStationLabels();
     }
     const desired = this.sleepMode ? PHASE_LIGHTING.night : PHASE_LIGHTING[next.dayPhase];
     if (desired !== this.target || next.reduceMotion !== prev.reduceMotion) {
@@ -564,9 +590,21 @@ export class ShelterScene {
     this.onBuild = cb;
   }
 
-  setBuildStateCallback(cb: BuildStateCallback): void {
-    this.onBuildState = cb;
-    this.emitBuildState();
+  setSpendCallback(cb: SpendCallback): void {
+    this.onSpend = cb;
+  }
+
+  setCookCallback(cb: CookCallback): void {
+    this.onCook = cb;
+  }
+
+  setStationOpenCallback(cb: StationOpenCallback): void {
+    this.onStationOpen = cb;
+  }
+
+  setStationStateCallback(cb: StationStateCallback): void {
+    this.onStationState = cb;
+    this.emitStationState();
   }
 
   setNoticeCallback(cb: NoticeCallback): void {
@@ -580,32 +618,32 @@ export class ShelterScene {
   }
 
   /**
-   * Walk over and build an in-scene upgrade. Returns false if the scene is busy
-   * or the upgrade is unknown/already built/still locked; materials are paid on arrival.
+   * Walk over and build a station's next tier. Returns false if the scene is busy
+   * or the station is unknown/maxed; materials are paid on arrival.
    */
-  requestBuild(id: string): boolean {
+  requestBuild(stationId: string): boolean {
     if (this.disposed || this.interactionLock || !this.entryDone) return false;
-    const cfg = this.sceneConfig?.buildables?.find((b) => b.id === id);
-    if (!cfg || !this.isBuildableAvailable(cfg)) return false;
+    const station = this.sceneConfig?.stations?.find((s) => s.id === stationId);
+    const hs = station && this.stationHotspot(station);
+    if (!station || !hs) return false;
+    const next = nextStationTier(station, this.tierOf(station.id));
+    if (!next) return false;
 
     if (this.sleepMode || this.currentPose === 'sleep') this.wakeUp();
-    for (const hs of this.hotspots) if (hs.hovered) this.onHotspotHover(hs, false);
-    for (const bn of this.buildNodes) if (bn.hovered) this.onBuildHover(bn, false);
+    for (const h of this.hotspots) if (h.hovered) this.onHotspotHover(h, false);
 
     this.interactionLock = true;
-    this.pendingBuildId = id;
-    this.emitBuildState();
+    this.pendingStation = station.id;
+    this.emitStationState();
 
-    const stand = this.clampFloorTarget(
-      cfg.position.x + (cfg.standOffset?.dx ?? 0),
-      cfg.position.y + (cfg.standOffset?.dy ?? 0.04),
-    );
+    const pos = hs.config.position;
+    const stand = this.clampFloorTarget(pos.x + station.buildStandOffset.dx, pos.y + station.buildStandOffset.dy);
     const arrive = () => {
-      if (Math.abs(cfg.position.x - this.targetX) > 0.005) {
-        this.travelerFlipped = cfg.position.x < this.targetX;
+      if (Math.abs(pos.x - this.targetX) > 0.005) {
+        this.travelerFlipped = pos.x < this.targetX;
         this.layoutTraveler();
       }
-      this.performBuild(cfg);
+      this.performBuild(station, hs, next);
     };
     if (Math.hypot(stand.x - this.targetX, stand.y - this.targetY) < 0.015) {
       arrive();
@@ -613,6 +651,48 @@ export class ShelterScene {
       this.walkTo(stand.x, stand.y, arrive);
     }
     return true;
+  }
+
+  /** Cook a grill recipe (called from the Cooking popover while standing at the grill) */
+  cook(recipeId: string): StationActionResult {
+    const recipe = RECIPES.find((r) => r.id === recipeId);
+    if (!recipe || this.disposed) return { ok: false, message: 'Unknown recipe' };
+    if (this.terrace.grillTier < recipe.minTier) return { ok: false, message: `Needs Grill T${recipe.minTier}` };
+    if (recipe.needsFire && !this.fireLit) return { ok: false, message: 'Light the fire pit first' };
+    if (!(this.onCook?.(recipe) ?? false)) return { ok: false, message: 'Not enough ingredients' };
+
+    playCook();
+    const hs = this.hotspots.find((h) => h.config.type === 'grill');
+    if (hs) {
+      const lift = this.stationTop(hs, 0.85);
+      this.spawnSteam(lift);
+      const gains = [recipe.stamina ? `+${recipe.stamina} ⚡` : '', recipe.strength ? `+${recipe.strength} ❤️` : '']
+        .filter(Boolean)
+        .join('  ');
+      this.showFloatingText(lift, `${recipe.icon} ${gains}`);
+    }
+    return { ok: true };
+  }
+
+  /** Craft a permanent mending perk (called from the Mending popover) */
+  craftPerk(perkId: string): StationActionResult {
+    const perk = MENDING_PERKS.find((p) => p.id === perkId);
+    if (!perk || this.disposed) return { ok: false, message: 'Unknown craft' };
+    if (this.terrace.craftedPerks.includes(perk.id)) return { ok: false, message: 'Already crafted' };
+    if (this.terrace.sewingTier < perk.minTier) return { ok: false, message: `Needs Sewing Kit T${perk.minTier}` };
+    if (!(this.onSpend?.(perk.cost) ?? false)) return { ok: false, message: 'Not enough materials' };
+
+    this.terrace.craftedPerks.push(perk.id);
+    saveTerraceState(this.terrace);
+    playSew();
+    const hs = this.hotspots.find((h) => h.config.type === 'sewing');
+    if (hs) {
+      const lift = this.stationTop(hs, 0.8);
+      this.spawnSparkles(lift, [0xf3c7a8, 0xfff1dc, 0xd99a7a]);
+      this.showFloatingText(lift, `${perk.icon} ${perk.name}`);
+    }
+    this.emitStationState();
+    return { ok: true };
   }
 
   resize(width: number, height: number): void {
@@ -636,7 +716,6 @@ export class ShelterScene {
     this.app.ticker.remove(this.update, this);
     this.floorHit.off('pointerdown', this.handleFloorPointerDown, this);
     this.hotspots = [];
-    this.buildNodes = [];
     this.particles = [];
     this.app.destroy({ removeView: true }, { children: true, texture: false, textureSource: false });
     this.radial.destroy(true);
@@ -826,6 +905,7 @@ export class ShelterScene {
 
   private buildHotspots(): void {
     for (const hs of this.hotspots) {
+      for (const g of hs.glows) g.sprite.destroy();
       hs.root.destroy({ children: true });
     }
     this.labelLayer.removeChildren();
@@ -845,8 +925,17 @@ export class ShelterScene {
       hoverRing.eventMode = 'none';
       root.addChild(hoverRing);
 
+      /* Stations get a floor blueprint (shown while unbuilt) beneath their sprite */
+      let blueprint: Graphics | null = null;
+      if (cfg.station) {
+        blueprint = new Graphics();
+        blueprint.eventMode = 'none';
+        blueprint.visible = false;
+        root.addChild(blueprint);
+      }
+
       let propSprite: Sprite | null = null;
-      if (cfg.propSprite) {
+      if (cfg.propSprite || cfg.station) {
         propSprite = Sprite.from(Texture.EMPTY);
         propSprite.anchor.set(0.5, 1);
         propSprite.eventMode = 'none';
@@ -865,6 +954,8 @@ export class ShelterScene {
         labelPill,
         hovered: false,
         interacted: false,
+        blueprint,
+        glows: [],
       };
       if (cfg.propSprite) this.setHotspotSprite(node, cfg.propSprite);
 
@@ -912,11 +1003,39 @@ export class ShelterScene {
       .catch(() => { /* keep current art */ });
   }
 
-  private syncSleepHotspotLabel(): void {
-    const hs = this.hotspots.find((h) => h.config.type === 'sleep');
-    if (!hs) return;
-    const text = this.state.dayPhase === 'night' ? 'Sleep until morning' : 'Rest by shelter';
-    this.setHotspotLabel(hs, text);
+  /** Context-aware hover text for every station (tier, phase, fire & daily readiness) */
+  private refreshStationLabels(): void {
+    for (const hs of this.hotspots) {
+      const station = this.stationOf(hs);
+      if (station) this.setHotspotLabel(hs, this.stationLabel(station, hs));
+    }
+  }
+
+  private stationLabel(station: StationConfig, hs: HotspotNode): string {
+    const tier = this.tierOf(station.id);
+    const cfg = stationTierConfig(station, tier);
+    if (!cfg) {
+      const first = nextStationTier(station, 0);
+      return first ? `Build ${first.name} · ${formatMaterials(first.cost)}` : hs.config.label;
+    }
+    switch (station.id) {
+      case 'shelter':
+        return this.state.dayPhase === 'night' ? 'Sleep until morning' : 'Rest by shelter';
+      case 'firepit':
+        return this.fireLit ? 'Extinguish fire' : 'Light fire pit · 1 🪵';
+      case 'planter':
+        return this.terrace.planterReady
+          ? `Harvest ${cfg.name} · ${formatMaterials(planterHarvest(tier), '+')}`
+          : 'Growing — ready tomorrow';
+      case 'barrel':
+        return this.terrace.barrelReady
+          ? `Collect rainwater · ${formatMaterials(barrelCollect(tier), '+')}`
+          : 'Filling — ready tomorrow';
+      case 'grill':
+        return `Cook at the ${cfg.name}`;
+      case 'sewing':
+        return `Mend at the ${cfg.name}`;
+    }
   }
 
   private buildNightEffects(): void {
@@ -961,7 +1080,7 @@ export class ShelterScene {
 
   private isHotspotInteractive(node: HotspotNode): boolean {
     const t = node.config.type;
-    return !node.interacted || t === 'sleep' || t === 'firepit' || t === 'door';
+    return !node.interacted || !!node.config.station || t === 'sleep' || t === 'firepit' || t === 'door';
   }
 
   private setHotspotLabel(node: HotspotNode, text: string): void {
@@ -1040,6 +1159,21 @@ export class ShelterScene {
     if (this.interactionLock || !this.entryDone) return;
     if (!this.isHotspotInteractive(node)) return;
 
+    /* Unbuilt stations: clicking the blueprint builds Tier 1 */
+    const station = this.stationOf(node);
+    if (station && this.tierOf(station.id) === 0) {
+      this.requestBuild(station.id);
+      return;
+    }
+    /* Already harvested / collected today: a calm note instead of a walk */
+    if (
+      (node.config.type === 'planter' && !this.terrace.planterReady) ||
+      (node.config.type === 'barrel' && !this.terrace.barrelReady)
+    ) {
+      this.showFloatingText(this.stationTop(node, 0.6), node.config.type === 'planter' ? 'Growing — ready tomorrow' : 'Filling — ready tomorrow');
+      return;
+    }
+
     if (this.sleepMode && node.config.type !== 'sleep') {
       this.wakeUp();
     }
@@ -1099,7 +1233,63 @@ export class ShelterScene {
       case 'door':
         this.interactDoor(node);
         break;
+      case 'planter':
+        this.interactHarvest(node);
+        break;
+      case 'barrel':
+        this.interactCollect(node);
+        break;
+      case 'grill':
+      case 'sewing':
+        this.interactOpenStation(node);
+        break;
     }
+  }
+
+  /* ── Daily station yields & station popovers ── */
+
+  private interactHarvest(node: HotspotNode): void {
+    this.setPose('search');
+    playHarvest();
+    this.after(800, () => {
+      const gains = planterHarvest(this.terrace.planterTier);
+      this.terrace.planterReady = false;
+      saveTerraceState(this.terrace);
+      this.onReward?.(gains, 'harvest');
+      this.spawnLeafParticles(node.config.position);
+      this.showFloatingText(this.stationTop(node, 0.55), formatMaterials(gains, '+'));
+      this.refreshStationLabels();
+      this.emitStationState();
+      this.setPose('idle');
+      this.interactionLock = false;
+    });
+  }
+
+  private interactCollect(node: HotspotNode): void {
+    this.setPose('search');
+    playWaterChime();
+    this.after(800, () => {
+      const gains = barrelCollect(this.terrace.barrelTier);
+      this.terrace.barrelReady = false;
+      saveTerraceState(this.terrace);
+      this.onReward?.(gains, 'harvest');
+      const lift = this.stationTop(node, 0.55);
+      this.spawnSparkles(lift, [0x9fd3f0, 0xc8e8fa, 0xffffff]);
+      this.showFloatingText(lift, formatMaterials(gains, '+'));
+      this.refreshStationLabels();
+      this.emitStationState();
+      this.setPose('idle');
+      this.interactionLock = false;
+    });
+  }
+
+  /** Grill & sewing kit open their cozy popover once the traveler arrives */
+  private interactOpenStation(node: HotspotNode): void {
+    this.setPose('idle');
+    this.interactionLock = false;
+    const top = this.stationTop(node, 1);
+    const anchor = this.toPx(top.x, top.y);
+    this.onStationOpen?.(node.config.type === 'grill' ? 'grill' : 'sewing', anchor);
   }
 
   private disableHotspotInteraction(node: HotspotNode): void {
@@ -1115,6 +1305,15 @@ export class ShelterScene {
 
   private interactFirepit(node: HotspotNode): void {
     if (!this.fireLit) {
+      /* Lighting the fire burns a piece of firewood */
+      if (!(this.onSpend?.({ timber: 1 }) ?? true)) {
+        this.onNotice?.('Need 1 Timber to light the fire', '🪵');
+        this.setPose('idle');
+        this.after(250, () => {
+          this.interactionLock = false;
+        });
+        return;
+      }
       playFireLight();
       this.fireLit = true;
       this.terrace.fireLit = true;
@@ -1124,7 +1323,9 @@ export class ShelterScene {
       this.ensureFireEffects(node);
       if (this.fireFlames) this.fireFlames.alpha = 1;
       if (this.fireGlow) this.fireGlow.visible = true;
-      this.setHotspotLabel(node, 'Extinguish fire');
+      this.refreshStationLabels();
+      this.emitStationState();
+      this.showFloatingText(this.stationTop(node, 0.6), '−1 🪵');
       this.layout();
 
       this.after(600, () => {
@@ -1134,13 +1335,14 @@ export class ShelterScene {
       return;
     }
 
-    /* Extinguish lit fire pit */
+    /* Extinguish lit fire pit (saves fuel) */
     playFireDouse();
     setCampfireAudio(false);
     this.fireLit = false;
     this.terrace.fireLit = false;
     saveTerraceState(this.terrace);
-    this.setHotspotLabel(node, 'Light fire pit');
+    this.refreshStationLabels();
+    this.emitStationState();
     this.setPose('idle');
 
     const flames = this.fireFlames;
@@ -1293,7 +1495,13 @@ export class ShelterScene {
 
     /* Hold briefly in starry twilight, then roll into Day N+1 morning */
     this.after(1600, () => {
-      this.onSleep?.();
+      this.onSleep?.(sleepComfort(this.terrace.shelterTier, this.terrace.craftedPerks));
+      /* A new morning: the farm has grown and the barrel has filled */
+      this.terrace.planterReady = this.terrace.planterTier >= 1;
+      this.terrace.barrelReady = this.terrace.barrelTier >= 1;
+      saveTerraceState(this.terrace);
+      this.refreshStationLabels();
+      this.emitStationState();
       this.sleepMode = false;
       this.sleepZ = null;
       this.startLightingTween(PHASE_LIGHTING.day);
@@ -1320,13 +1528,13 @@ export class ShelterScene {
     this.travelerFlipped = false;
     this.layoutTraveler();
     this.setPose('idle');
-    if (node.config.message) this.onNotice?.(node.config.message);
+    if (node.config.message) this.onNotice?.(node.config.message, '🚪');
     this.after(400, () => {
       this.interactionLock = false;
     });
   }
 
-  /* ── In-Scene Builds ── */
+  /* ── Multi-tier Stations ── */
 
   /** Base config for a site, with the Terrace's per-run box & weed layout applied */
   private resolveSceneConfig(siteId: SiteId | null): ShelterSceneConfig | null {
@@ -1337,177 +1545,135 @@ export class ShelterScene {
     return base;
   }
 
-  /** Tiered fire pit builds are tracked by `firepitTier`; everything else by `builtProps` */
-  private isBuildableBuilt(cfg: BuildableConfig): boolean {
-    if (cfg.tier && cfg.upgradesHotspot === 'firepit') return this.terrace.firepitTier >= cfg.tier;
-    return this.terrace.builtProps.includes(cfg.id);
+  private stationOf(hs: HotspotNode): StationConfig | undefined {
+    return hs.config.station ? this.sceneConfig?.stations?.find((s) => s.id === hs.config.station) : undefined;
   }
 
-  private isBuildableAvailable(cfg: BuildableConfig): boolean {
-    if (this.isBuildableBuilt(cfg)) return false;
-    if (!cfg.requires) return true;
-    const prereq = this.sceneConfig?.buildables?.find((b) => b.id === cfg.requires);
-    return !!prereq && this.isBuildableBuilt(prereq);
+  private stationHotspot(station: StationConfig): HotspotNode | undefined {
+    return this.hotspots.find((h) => h.config.id === station.hotspotId);
   }
 
-  private markBuilt(cfg: BuildableConfig): void {
-    if (cfg.tier && cfg.upgradesHotspot === 'firepit') {
-      this.terrace.firepitTier = Math.max(this.terrace.firepitTier, cfg.tier) as FirepitTier;
-    } else if (!this.terrace.builtProps.includes(cfg.id)) {
-      this.terrace.builtProps.push(cfg.id);
-    }
-    saveTerraceState(this.terrace);
+  private tierOf(id: StationId): number {
+    return this.terrace[STATION_TIER_KEY[id]] as number;
   }
 
-  private emitBuildState(): void {
-    const built = (this.sceneConfig?.buildables ?? []).filter((b) => this.isBuildableBuilt(b)).map((b) => b.id);
-    this.onBuildState?.({ built, pending: this.pendingBuildId });
+  /** Normalized point above a station's sprite (fraction 0–1 of its height) */
+  private stationTop(hs: HotspotNode, fraction: number): { x: number; y: number } {
+    const scale = hs.config.propScale ?? 0.05;
+    return { x: hs.config.position.x, y: hs.config.position.y - scale * fraction };
   }
 
-  private buildBuildables(): void {
-    for (const bn of this.buildNodes) {
-      bn.root.destroy({ children: true });
-      bn.label.destroy();
-      bn.labelPill.destroy();
-    }
-    this.buildNodes = [];
-    this.pendingBuildId = null;
-    if (this.shedLantern) {
-      this.shedLantern.destroy();
-      this.shedLantern = null;
-    }
+  private emitStationState(): void {
+    this.onStationState?.({
+      tiers: stationTiersOf(this.terrace),
+      pending: this.pendingStation,
+      fireLit: this.fireLit,
+      perks: [...this.terrace.craftedPerks],
+      planterReady: this.terrace.planterReady,
+      barrelReady: this.terrace.barrelReady,
+    });
+  }
 
-    for (const cfg of this.sceneConfig?.buildables ?? []) {
-      if (cfg.upgradesHotspot) continue;
+  /**
+   * Show a station at its current tier: sprite, collider, stand spot & glows
+   * (or a floor blueprint while unbuilt). `animate` pops freshly built art in.
+   */
+  private applyStationTier(hs: HotspotNode, station: StationConfig, animate: boolean): void {
+    const cfg = stationTierConfig(station, this.tierOf(station.id));
+    for (const g of hs.glows) g.sprite.destroy();
+    hs.glows = [];
 
-      const root = new Container();
-      root.eventMode = 'static';
-      root.cursor = 'pointer';
-      const blueprint = new Graphics();
-      blueprint.eventMode = 'none';
-      const sprite = Sprite.from(Texture.EMPTY);
-      sprite.anchor.set(0.5, 1);
-      sprite.eventMode = 'none';
-      sprite.visible = false;
-      root.addChild(blueprint, sprite);
-
-      const { label, pill: labelPill } = this.createLabel(
-        `Build ${cfg.name}  ·  ${formatMaterials(cfg.cost)}`,
-      );
-      const node: BuildNode = { config: cfg, root, blueprint, sprite, label, labelPill, hovered: false, built: false };
-
-      root.on('pointerenter', () => this.onBuildHover(node, true));
-      root.on('pointerleave', () => this.onBuildHover(node, false));
-      root.on('pointerdown', (e: { stopPropagation: () => void }) => {
-        e.stopPropagation();
-        this.requestBuild(cfg.id);
+    if (!cfg) {
+      hs.config = { ...hs.config, propSprite: '', propScale: undefined, collider: undefined, standOffset: station.buildStandOffset };
+      hs.spriteSrc = '';
+      if (hs.propSprite) hs.propSprite.visible = false;
+      if (hs.blueprint) hs.blueprint.visible = true;
+    } else {
+      hs.config = {
+        ...hs.config,
+        propSprite: cfg.sprite,
+        propScale: cfg.propScale,
+        collider: cfg.collider,
+        standOffset: cfg.standOffset ?? hs.config.standOffset,
+        restOffset: cfg.restOffset ?? hs.config.restOffset,
+      };
+      if (hs.blueprint) hs.blueprint.visible = false;
+      if (hs.propSprite) hs.propSprite.visible = true;
+      this.setHotspotSprite(hs, cfg.sprite, () => {
+        if (animate) this.popIn(hs.root);
       });
-
-      /* Preload so the finished prop can pop in instantly */
-      Assets.load<Texture>(cfg.propSprite)
-        .then((tex) => {
-          if (this.disposed || !tex || sprite.destroyed) return;
-          sprite.texture = tex;
-          this.layout();
-        })
-        .catch(() => { /* keep blueprint */ });
-
-      this.worldLayer.addChild(root);
-      this.buildNodes.push(node);
+      for (const anchor of cfg.glows ?? []) {
+        const sprite = new Sprite(this.radial);
+        sprite.anchor.set(0.5);
+        sprite.blendMode = 'add';
+        sprite.tint = 0xffb860;
+        sprite.alpha = 0;
+        sprite.eventMode = 'none';
+        this.fxLayer.addChild(sprite);
+        hs.glows.push({ sprite, anchor });
+      }
     }
+
+    /* A bigger fire pit crackles fuller right away if it's already lit */
+    if (station.id === 'firepit' && this.fireLit) {
+      setCampfireAudio(true, this.fireProfile().crackle);
+    }
+    this.layout();
   }
 
-  private onBuildHover(node: BuildNode, enter: boolean): void {
-    const show = enter && !node.built && !this.interactionLock;
-    node.hovered = show;
-    node.label.visible = show;
-    node.labelPill.visible = show;
-    if (show) {
-      const p = this.toPx(node.config.position.x, node.config.position.y);
-      this.placeLabel(node.label, node.labelPill, p.x, p.y - 26);
-    }
-  }
-
-  private performBuild(cfg: BuildableConfig): void {
+  private performBuild(station: StationConfig, hs: HotspotNode, next: StationTierConfig): void {
     this.setPose('search');
     playBuild();
 
     this.after(950, () => {
-      const paid = this.onBuild?.(cfg.cost) ?? false;
-      const lift = { x: cfg.position.x, y: cfg.position.y - cfg.propScale * 0.55 };
+      const paid = this.onBuild?.(next.cost) ?? false;
+      const lift = { x: hs.config.position.x, y: hs.config.position.y - next.propScale * 0.55 };
       if (paid) {
-        this.markBuilt(cfg);
-        this.applyBuilt(cfg, true);
+        (this.terrace[STATION_TIER_KEY[station.id]] as number) = next.tier;
+        /* A brand-new farm or barrel starts ready to use */
+        if (next.tier === 1 && station.id === 'planter') this.terrace.planterReady = true;
+        if (next.tier === 1 && station.id === 'barrel') this.terrace.barrelReady = true;
+        saveTerraceState(this.terrace);
+        this.applyStationTier(hs, station, true);
+        this.refreshStationLabels();
         playClaim();
-        this.showFloatingText(lift, formatMaterials(cfg.cost, '−'));
-        if (cfg.effect === 'leaves') {
-          this.spawnLeafParticles(cfg.position);
-          this.spawnSparkles(lift, [0xfff1b0, 0xd8f0a8, 0xffffff]);
-        } else if (cfg.effect === 'water') {
-          playWaterChime();
-          this.spawnSparkles(lift, [0x9fd3f0, 0xc8e8fa, 0xffffff]);
-        } else if (cfg.effect === 'logs') {
-          playLogStack();
-          this.spawnSparkles(lift, [0xffb35c, 0xffd38a, 0xc98a52]);
-        } else if (cfg.effect === 'stones') {
-          playStoneSet();
-          this.spawnSparkles(lift, [0xffc56a, 0xfff0c8, 0xd9cfc2]);
-        } else {
-          this.spawnSparkles(lift, [0xffd89a, 0xfff1c8, 0xffb860]);
-        }
+        this.showFloatingText(lift, formatMaterials(next.cost, '−'));
+        this.playBuildFlourish(next, hs, lift);
       } else {
         this.showFloatingText(lift, 'Need more materials');
       }
-      this.pendingBuildId = null;
+      this.pendingStation = null;
       this.setPose('idle');
       this.interactionLock = false;
-      this.emitBuildState();
+      this.emitStationState();
     });
   }
 
-  /** Show a built upgrade — `animate` pops it in, otherwise it appears as restored */
-  private applyBuilt(cfg: BuildableConfig, animate: boolean): void {
-    if (cfg.upgradesHotspot) {
-      const hs = this.hotspots.find((h) => h.config.id === cfg.upgradesHotspot);
-      if (!hs) return;
-      hs.config = { ...hs.config, ...cfg.hotspotOverrides, propSprite: cfg.propSprite };
-      this.syncSleepHotspotLabel();
-      this.setHotspotSprite(hs, cfg.propSprite, () => {
-        if (animate) this.popIn(hs.root);
-      });
-      if (cfg.lanternAnchor) this.ensureShedLantern();
-      /* A bigger fire pit crackles fuller right away if it's already lit */
-      if (cfg.upgradesHotspot === 'firepit' && this.fireLit) {
-        setCampfireAudio(true, this.fireProfile().crackle);
-      }
-      return;
+  private playBuildFlourish(cfg: StationTierConfig, hs: HotspotNode, lift: { x: number; y: number }): void {
+    switch (cfg.effect) {
+      case 'leaves':
+        this.spawnLeafParticles(hs.config.position);
+        this.spawnSparkles(lift, [0xfff1b0, 0xd8f0a8, 0xffffff]);
+        break;
+      case 'water':
+        playWaterChime();
+        this.spawnSparkles(lift, [0x9fd3f0, 0xc8e8fa, 0xffffff]);
+        break;
+      case 'logs':
+        playLogStack();
+        this.spawnSparkles(lift, [0xffb35c, 0xffd38a, 0xc98a52]);
+        break;
+      case 'stones':
+        playStoneSet();
+        this.spawnSparkles(lift, [0xffc56a, 0xfff0c8, 0xd9cfc2]);
+        break;
+      case 'fabric':
+        playSew();
+        this.spawnSparkles(lift, [0xf3c7a8, 0xfff1dc, 0xd99a7a]);
+        break;
+      default:
+        this.spawnSparkles(lift, [0xffd89a, 0xfff1c8, 0xffb860]);
     }
-
-    const bn = this.buildNodes.find((b) => b.config.id === cfg.id);
-    if (!bn) return;
-    bn.built = true;
-    bn.hovered = false;
-    bn.label.visible = false;
-    bn.labelPill.visible = false;
-    bn.blueprint.visible = false;
-    bn.sprite.visible = true;
-    bn.root.eventMode = 'none';
-    bn.root.cursor = 'default';
-    this.layout();
-    if (animate) this.popIn(bn.root);
-  }
-
-  private ensureShedLantern(): void {
-    if (this.shedLantern) return;
-    const glow = new Sprite(this.radial);
-    glow.anchor.set(0.5);
-    glow.blendMode = 'add';
-    glow.tint = 0xffb860;
-    glow.alpha = 0;
-    glow.eventMode = 'none';
-    this.fxLayer.addChild(glow);
-    this.shedLantern = glow;
-    this.layout();
   }
 
   /** Gentle overshoot scale-in for freshly built props */
@@ -1537,6 +1703,27 @@ export class ShelterScene {
     requestAnimationFrame(step);
   }
 
+  /** Soft rising steam wisps above the grill after cooking */
+  private spawnSteam(pos: { x: number; y: number }): void {
+    if (this.state.reduceMotion) return;
+    const base = this.toPx(pos.x, pos.y);
+    for (let i = 0; i < 6; i++) {
+      const wisp = new Graphics();
+      wisp.circle(0, 0, 4 + Math.random() * 3).fill({ color: 0xf6f2ec });
+      wisp.position.set(base.x + (Math.random() - 0.5) * 18, base.y + Math.random() * 6);
+      this.fxLayer.addChild(wisp);
+      this.particles.push({
+        sprite: wisp,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -(0.35 + Math.random() * 0.3),
+        gravity: -0.002,
+        life: -i * 90,
+        maxLife: 1500 + Math.random() * 600,
+        smoke: { peakAlpha: 0.3, grow: 1.8 },
+      });
+    }
+  }
+
   /* ── Collision Clamping ── */
 
   private isColliderActive(hs: HotspotNode): boolean {
@@ -1563,9 +1750,6 @@ export class ShelterScene {
     for (const hs of this.hotspots) {
       if (hs === ignore || !this.isColliderActive(hs)) continue;
       ellipses.push({ ...hs.config.position, ...hs.config.collider! });
-    }
-    for (const bn of this.buildNodes) {
-      if (bn.built && bn.config.collider) ellipses.push({ ...bn.config.position, ...bn.config.collider });
     }
     for (const ob of this.sceneConfig?.obstacles ?? []) {
       if (ob.shape === 'ellipse') ellipses.push(ob);
@@ -1779,10 +1963,7 @@ export class ShelterScene {
       this.fireLit = true;
       setCampfireAudio(true, this.fireProfile().crackle);
       const fp = this.hotspots.find((h) => h.config.id === 'firepit');
-      if (fp) {
-        this.ensureFireEffects(fp);
-        this.setHotspotLabel(fp, 'Extinguish fire');
-      }
+      if (fp) this.ensureFireEffects(fp);
     }
 
     for (const boxId of ts.searchedBoxes) {
@@ -1801,10 +1982,12 @@ export class ShelterScene {
       }
     }
 
-    /* Built upgrades in config order, so fire pit Tier 2 is applied before Tier 3 */
-    for (const cfg of this.sceneConfig?.buildables ?? []) {
-      if (this.isBuildableBuilt(cfg)) this.applyBuilt(cfg, false);
+    /* Every station at its saved tier (or as a blueprint while unbuilt) */
+    for (const station of this.sceneConfig?.stations ?? []) {
+      const hs = this.stationHotspot(station);
+      if (hs) this.applyStationTier(hs, station, false);
     }
+    this.refreshStationLabels();
   }
 
   /* ── Layout ── */
@@ -1838,13 +2021,26 @@ export class ShelterScene {
     for (const hs of this.hotspots) {
       const { x: px, y: py } = this.toPx(hs.config.position.x, hs.config.position.y);
       hs.root.position.set(px, py);
-      /* Sprite-less spots (e.g. the stairwell door) sit flat beneath everything */
-      hs.root.zIndex = hs.propSprite ? Math.round(py) : 0;
+      /* Sprite-less spots (stairwell door) sit flat beneath everything; unbuilt station blueprints are floor decals */
+      const isBlueprint = !!hs.blueprint?.visible;
+      hs.root.zIndex = isBlueprint ? 1 : hs.propSprite ? Math.round(py) : 0;
 
       const hr = hs.config.hitRect;
       if (hr) {
         hs.root.hitArea = new Rectangle(hr.dx * SW, hr.dy * SH, hr.w * SW, hr.h * SH);
         if (hs.hovered) this.drawHoverRing(hs);
+      } else if (isBlueprint && hs.blueprint) {
+        const first = this.stationOf(hs)?.tiers[0];
+        const rx = Math.max(16, (first?.collider.rx ?? 0.03) * SW * 1.15);
+        const ry = Math.max(7, (first?.collider.ry ?? 0.02) * SH * 1.35);
+        hs.blueprint.clear();
+        hs.blueprint
+          .ellipse(0, 0, rx, ry)
+          .fill({ color: 0xfff6e0, alpha: 0.16 })
+          .stroke({ color: 0xfff2cc, width: 1.8, alpha: 0.75 });
+        hs.blueprint.rect(-6, -1.2, 12, 2.4).fill({ color: 0xfffcf6, alpha: 0.9 });
+        hs.blueprint.rect(-1.2, -6, 2.4, 12).fill({ color: 0xfffcf6, alpha: 0.9 });
+        hs.root.hitArea = new Circle(0, 0, Math.max(24, rx));
       } else if (hs.propSprite && hs.config.propScale && hs.propSprite.texture !== Texture.EMPTY) {
         const pH = SH * hs.config.propScale;
         const pScale = pH / (hs.propSprite.texture.height || 100);
@@ -1855,36 +2051,9 @@ export class ShelterScene {
         const hitRadius = Math.max(30, Math.max(pW, pH) * 0.52);
         hs.root.hitArea = new Circle(0, -pH * 0.48, hitRadius);
       }
+      if (hs.glows.length) this.layoutStationGlows(hs);
       if (hs.hovered) this.layoutHotspotLabel(hs);
     }
-
-    for (const bn of this.buildNodes) {
-      const cfg = bn.config;
-      const { x: px, y: py } = this.toPx(cfg.position.x, cfg.position.y);
-      bn.root.position.set(px, py);
-      /* Blueprints are floor decals; built props join the Y-sort */
-      bn.root.zIndex = bn.built ? Math.round(py) : 1;
-
-      const rx = Math.max(16, (cfg.collider?.rx ?? 0.03) * SW * 1.15);
-      const ry = Math.max(7, (cfg.collider?.ry ?? 0.02) * SH * 1.35);
-      bn.blueprint.clear();
-      bn.blueprint
-        .ellipse(0, 0, rx, ry)
-        .fill({ color: 0xfff6e0, alpha: 0.16 })
-        .stroke({ color: 0xfff2cc, width: 1.8, alpha: 0.75 });
-      bn.blueprint.rect(-6, -1.2, 12, 2.4).fill({ color: 0xfffcf6, alpha: 0.9 });
-      bn.blueprint.rect(-1.2, -6, 2.4, 12).fill({ color: 0xfffcf6, alpha: 0.9 });
-      bn.root.hitArea = new Circle(0, 0, Math.max(24, rx));
-
-      if (bn.sprite.texture !== Texture.EMPTY) {
-        const pH = SH * cfg.propScale;
-        const pScale = pH / (bn.sprite.texture.height || 100);
-        bn.sprite.scale.set(pScale * (cfg.flipX ? -1 : 1), pScale);
-      }
-      if (bn.hovered) this.onBuildHover(bn, true);
-    }
-
-    if (this.shedLantern) this.layoutShedLantern(this.shedLantern);
 
     if (this.fireGlow && this.sceneConfig) {
       const fp = this.sceneConfig.hotspots.find((h) => h.id === 'firepit');
@@ -1908,28 +2077,22 @@ export class ShelterScene {
     return 0.03 + (Math.min(100, this.state.cozyIndex) / 100) * 0.22;
   }
 
-  /** Pin the glow onto the lantern painted in the upgraded shelter sprite */
-  private layoutShedLantern(glow: Sprite): void {
-    const cfg = this.sceneConfig?.buildables?.find((b) => b.lanternAnchor && b.upgradesHotspot);
-    const hs = cfg && this.hotspots.find((h) => h.config.id === cfg.upgradesHotspot);
-    const tex = hs?.propSprite?.texture;
-    if (!cfg?.lanternAnchor || !hs || !tex || tex === Texture.EMPTY || hs.spriteSrc !== cfg.propSprite) {
-      glow.visible = false;
-      return;
+  /** Place each station glow on the window/lantern painted in its current tier sprite */
+  private layoutStationGlows(hs: HotspotNode): void {
+    const tex = hs.propSprite?.texture;
+    const ready = !!tex && tex !== Texture.EMPTY && hs.spriteSrc === hs.config.propSprite;
+    for (const g of hs.glows) {
+      g.sprite.visible = ready;
+      if (!ready || !tex) continue;
+      const SH = this.stage.height;
+      const pH = SH * (hs.config.propScale ?? 0.1);
+      const pW = tex.width * (pH / (tex.height || 1));
+      const sign = hs.config.flipX ? -1 : 1;
+      const base = this.toPx(hs.config.position.x, hs.config.position.y);
+      g.sprite.position.set(base.x + (g.anchor.x - 0.5) * pW * sign, base.y - (1 - g.anchor.y) * pH);
+      g.sprite.width = SH * g.anchor.size;
+      g.sprite.height = SH * g.anchor.size;
     }
-    const SH = this.stage.height;
-    const pH = SH * (hs.config.propScale ?? cfg.propScale);
-    const pW = tex.width * (pH / (tex.height || 1));
-    const sign = hs.config.flipX ? -1 : 1;
-    const base = this.toPx(hs.config.position.x, hs.config.position.y);
-    glow.visible = true;
-    glow.position.set(
-      base.x + (cfg.lanternAnchor.x - 0.5) * pW * sign,
-      base.y - (1 - cfg.lanternAnchor.y) * pH,
-    );
-    const size = SH * 0.16;
-    glow.width = size;
-    glow.height = size;
   }
 
   /* ── Frame update ── */
@@ -1972,20 +2135,21 @@ export class ShelterScene {
       this.travelerNode.alpha = this.state.reduceMotion ? 1 : Math.min(1, this.travelerNode.alpha + dt / 520);
     }
 
-    for (const bn of this.buildNodes) {
-      if (bn.built) continue;
-      bn.blueprint.alpha = bn.hovered
+    for (const hs of this.hotspots) {
+      if (!hs.blueprint?.visible) continue;
+      hs.blueprint.alpha = hs.hovered
         ? 1
         : this.state.reduceMotion
           ? 0.8
           : 0.62 + 0.25 * Math.sin(this.elapsed * 2.2);
     }
 
-    if (this.shedLantern) {
-      const flicker = this.state.reduceMotion
-        ? 1
-        : 0.88 + 0.08 * Math.sin(this.elapsed * 5.3) + 0.04 * Math.sin(this.elapsed * 11.1);
-      this.shedLantern.alpha = 0.78 * this.current.lantern * flicker;
+    /* Station window & lantern glows warm up at dusk and night */
+    const flicker = this.state.reduceMotion
+      ? 1
+      : 0.88 + 0.08 * Math.sin(this.elapsed * 5.3) + 0.04 * Math.sin(this.elapsed * 11.1);
+    for (const hs of this.hotspots) {
+      for (const g of hs.glows) g.sprite.alpha = 0.78 * this.current.lantern * flicker;
     }
 
     /* Night stars & rooftop fireflies */
@@ -2086,7 +2250,8 @@ export class ShelterScene {
   }
 
   private fireTier(): FirepitTier {
-    return this.state.siteId === 'terrace' ? this.terrace.firepitTier : 3;
+    if (this.state.siteId !== 'terrace') return 3;
+    return Math.max(1, Math.min(3, this.terrace.firepitTier)) as FirepitTier;
   }
 
   private fireProfile(): FireProfile {
@@ -2214,7 +2379,7 @@ export class ShelterScene {
       p.sprite.y += p.vy * step;
       const ratio = p.life / p.maxLife;
         if (p.smoke) {
-          p.sprite.alpha = p.smoke.peakAlpha * Math.sin(Math.PI * Math.min(1, ratio));
+          p.sprite.alpha = Math.max(0, p.smoke.peakAlpha * Math.sin(Math.PI * Math.min(1, ratio)));
           p.sprite.scale.set(1 + ratio * p.smoke.grow);
         } else {
           p.sprite.alpha = Math.max(0, 1 - ratio);

@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ShelterCanvas, { type ShelterCanvasHandle } from '../game/renderer/ShelterCanvas.tsx';
-import type { SceneBuildState } from '../game/renderer/shelterScene.ts';
+import type { SceneStationState } from '../game/renderer/shelterScene.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { SITES } from '../game/data/sites.ts';
-import { RESOURCES } from '../game/data/resources.ts';
+import { RESOURCE_MAP } from '../game/data/resources.ts';
 import { UI_ASSETS } from '../game/data/media.ts';
 import { getSceneConfig } from '../game/data/scenes/index.ts';
+import { stationTierConfig } from '../game/engine/stations.ts';
 import { playClick, playHover, startSiteAmbience } from '../game/audio/soundEngine.ts';
 import type { ResourceId } from '../game/types/game.ts';
 import BuildBar from './BuildBar.tsx';
+import StationPopover, { type PopoverStation } from './StationPopover.tsx';
 import VitalityDialHud from './VitalityDialHud.tsx';
 
 export interface ShelterScreenProps {
@@ -18,7 +20,7 @@ export interface ShelterScreenProps {
 /** Soft loudness for the in-shelter ambience bed */
 const SHELTER_AMBIENCE_LEVEL = 0.55;
 
-const POUCH_IDS: ResourceId[] = ['timber', 'scrap', 'cloth', 'seeds'];
+const POUCH_IDS: ResourceId[] = ['timber', 'cloth', 'seeds', 'water', 'scrap', 'stone', 'food'];
 
 export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
   const chosenSite = useGameStore((s) => s.chosenSite);
@@ -27,9 +29,14 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
   const prevResourcesRef = useRef(resources);
   const [pulsing, setPulsing] = useState<Partial<Record<ResourceId, boolean>>>({});
   const canvasRef = useRef<ShelterCanvasHandle>(null);
-  /* Null until the scene reports its restored build state, so chips never flash */
-  const [buildState, setBuildState] = useState<SceneBuildState | null>(null);
-  const buildables = getSceneConfig(chosenSite)?.buildables ?? [];
+  /* Null until the scene reports its restored station state, so chips never flash */
+  const [stationState, setStationState] = useState<SceneStationState | null>(null);
+  const [popover, setPopover] = useState<{ station: PopoverStation; anchor: { x: number; y: number } } | null>(null);
+  const stations = getSceneConfig(chosenSite)?.stations ?? [];
+  const closePopover = useCallback(() => setPopover(null), []);
+  const openPopover = useCallback((station: PopoverStation, anchor: { x: number; y: number }) => {
+    setPopover({ station, anchor });
+  }, []);
 
   /* Soft shelter soundscape while on this screen */
   useEffect(() => {
@@ -79,7 +86,12 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
   }, [resources]);
 
   const siteName = SITES.find((s) => s.id === chosenSite)?.name ?? 'your shelter';
-  const pouchResources = RESOURCES.filter((r) => POUCH_IDS.includes(r.id));
+  const pouchResources = POUCH_IDS.map((id) => RESOURCE_MAP[id]).filter((r) => r !== undefined);
+  const popoverStation = popover ? stations.find((s) => s.id === popover.station) : undefined;
+  const popoverTitle =
+    popoverStation && stationState
+      ? (stationTierConfig(popoverStation, stationState.tiers[popoverStation.id])?.name ?? '')
+      : '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -152,18 +164,34 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
 
       {/* Interactive PixiJS canvas (full viewport) */}
       <main style={{ position: 'relative', flex: 1, minHeight: 0, background: '#F5EFE4' }}>
-        <ShelterCanvas ref={canvasRef} onBuildStateChange={setBuildState} />
+        <ShelterCanvas ref={canvasRef} onStationStateChange={setStationState} onStationOpen={openPopover} />
+        {popover && stationState && (
+          <StationPopover
+            key={`${popover.station}-${popover.anchor.x}-${popover.anchor.y}`}
+            station={popover.station}
+            anchor={popover.anchor}
+            title={popoverTitle}
+            stationState={stationState}
+            resources={resources}
+            onCook={(id) => canvasRef.current?.cook(id) ?? { ok: false, message: 'Not ready yet' }}
+            onCraft={(id) => canvasRef.current?.craftPerk(id) ?? { ok: false, message: 'Not ready yet' }}
+            onClose={closePopover}
+          />
+        )}
       </main>
 
       <VitalityDialHud />
 
-      {buildState && buildables.length > 0 && (
+      {stationState && stations.length > 0 && (
         <BuildBar
-          buildables={buildables}
-          built={buildState.built}
-          pending={buildState.pending}
+          stations={stations}
+          tiers={stationState.tiers}
+          pending={stationState.pending}
           resources={resources}
-          onBuild={(id) => canvasRef.current?.requestBuild(id) ?? false}
+          onBuild={(id) => {
+            setPopover(null);
+            return canvasRef.current?.requestBuild(id) ?? false;
+          }}
         />
       )}
     </div>

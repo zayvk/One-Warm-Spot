@@ -106,7 +106,7 @@ describe('scavenging availability', () => {
   });
 
   it('caps gathered materials at their storage limit', () => {
-    const stock = { timber: 49, scrap: 0, cloth: 0, stone: 0, seeds: 0, water: 40 };
+    const stock = { timber: 49, scrap: 0, cloth: 0, stone: 0, seeds: 0, water: 40, food: 0 };
     expect(addResources(stock, { timber: 5, water: 3, scrap: 2 })).toMatchObject({
       timber: 50,
       water: 40,
@@ -116,9 +116,9 @@ describe('scavenging availability', () => {
 });
 
 describe('Cozy vs. Challenge rules', () => {
-  it('Challenge starts with ~60% of the Cozy materials, never below 1 of anything', () => {
-    expect(startingResources('cozy')).toEqual({ timber: 4, scrap: 3, cloth: 2, stone: 2, seeds: 1, water: 5 });
-    expect(startingResources('challenge')).toEqual({ timber: 2, scrap: 2, cloth: 1, stone: 1, seeds: 1, water: 3 });
+  it('Challenge starts with ~60% of the Cozy materials, never below 1 of anything stocked (Food starts empty)', () => {
+    expect(startingResources('cozy')).toEqual({ timber: 4, scrap: 3, cloth: 2, stone: 2, seeds: 1, water: 5, food: 0 });
+    expect(startingResources('challenge')).toEqual({ timber: 2, scrap: 2, cloth: 1, stone: 1, seeds: 1, water: 3, food: 0 });
   });
 
   it('keeps shell-1 reachable after a single unlucky Challenge trip', () => {

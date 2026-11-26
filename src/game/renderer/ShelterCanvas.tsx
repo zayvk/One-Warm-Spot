@@ -8,41 +8,60 @@ import {
   BUILD_STAMINA_COST,
   WEED_STAMINA_COST,
 } from '../engine/dayCycle.ts';
+import { gatherStaminaCost, strengthDriftFactor } from '../engine/stations.ts';
 import {
   ShelterScene,
   type BuildCallback,
+  type CookCallback,
   type RewardCallback,
-  type SceneBuildState,
+  type SceneStationState,
   type ShelterSceneState,
+  type SleepCallback,
+  type SpendCallback,
+  type StationActionResult,
+  type StationOpenCallback,
 } from './shelterScene.ts';
 import { addResources } from '../engine/scavenge.ts';
 
 export interface ShelterCanvasHandle {
-  /** Ask the traveler to walk over and build an in-scene upgrade */
-  requestBuild: (id: string) => boolean;
+  /** Ask the traveler to walk over and build a station's next tier */
+  requestBuild: (stationId: string) => boolean;
+  /** Cook a grill recipe */
+  cook: (recipeId: string) => StationActionResult;
+  /** Craft a mending perk at the sewing kit */
+  craftPerk: (perkId: string) => StationActionResult;
 }
 
 export interface ShelterCanvasProps {
   ref?: Ref<ShelterCanvasHandle>;
-  onBuildStateChange?: (state: SceneBuildState) => void;
+  onStationStateChange?: (state: SceneStationState) => void;
+  onStationOpen?: StationOpenCallback;
 }
+
+const NOT_READY: StationActionResult = { ok: false, message: 'The rooftop is still settling in' };
 
 /**
  * ShelterCanvas — React bridge that mounts a PixiJS Application sized to its
  * container (via ResizeObserver) and forwards store state to `ShelterScene`.
- * Scene rewards, in-scene build payments and toasts flow back into the store.
+ * Scene rewards, station builds, cooking, mending and toasts flow back into the store.
  */
-export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvasProps) {
+export default function ShelterCanvas({ ref, onStationStateChange, onStationOpen }: ShelterCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<ShelterScene | null>(null);
-  const buildStateCbRef = useRef(onBuildStateChange);
+  const stationStateCbRef = useRef(onStationStateChange);
+  const stationOpenCbRef = useRef(onStationOpen);
+  /* Crafted perks shape gathering costs (gloves) and strength drift (cloak) */
+  const perksRef = useRef<string[]>([]);
 
   useEffect(() => {
-    buildStateCbRef.current = onBuildStateChange;
-  }, [onBuildStateChange]);
+    stationStateCbRef.current = onStationStateChange;
+    stationOpenCbRef.current = onStationOpen;
+  }, [onStationStateChange, onStationOpen]);
 
   useImperativeHandle(ref, () => ({
     requestBuild: (id: string) => sceneRef.current?.requestBuild(id) ?? false,
+    cook: (id: string) => sceneRef.current?.cook(id) ?? NOT_READY,
+    craftPerk: (id: string) => sceneRef.current?.craftPerk(id) ?? NOT_READY,
   }), []);
 
   const siteId = useGameStore((s) => s.chosenSite);
@@ -58,13 +77,13 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
 
   const stateRef = useRef<ShelterSceneState | null>(null);
 
-  /* Reward handler: add found materials and deduct gentle activity stamina */
+  /* Reward handler: add found materials; gathering (not daily station yields) costs gentle stamina */
   const handleReward = useCallback<RewardCallback>((reward, source) => {
     const s = useGameStore.getState();
     const updated = addResources(s.resources, reward);
     useGameStore.setState({ resources: updated });
-    if (source === 'weeds') s.spendStamina(WEED_STAMINA_COST);
-    else if (source === 'searchable') s.spendStamina(BOX_STAMINA_COST);
+    if (source === 'weeds') s.spendStamina(gatherStaminaCost(WEED_STAMINA_COST, perksRef.current));
+    else if (source === 'searchable') s.spendStamina(gatherStaminaCost(BOX_STAMINA_COST, perksRef.current));
     useGameStore.getState()._save();
   }, []);
 
@@ -79,16 +98,33 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
     return true;
   }, []);
 
-  const handleNotice = useCallback((message: string) => {
-    useGameStore.getState().pushNotice({ icon: '🚪', title: message, tone: 'build' });
+  /* Materials-only spend (firewood, mending) */
+  const handleSpend = useCallback<SpendCallback>((cost) => {
+    const next = spendResources(useGameStore.getState().resources, cost);
+    if (!next) return false;
+    useGameStore.setState({ resources: next });
+    useGameStore.getState()._save();
+    return true;
+  }, []);
+
+  const handleCook = useCallback<CookCallback>((recipe) => useGameStore.getState().cookRecipe(recipe), []);
+
+  const handleNotice = useCallback((message: string, icon = '🚪') => {
+    useGameStore.getState().pushNotice({ icon, title: message, tone: 'build' });
   }, []);
 
   const handleRest = useCallback(() => {
     useGameStore.getState().restAtShelter();
   }, []);
 
-  const handleSleep = useCallback(() => {
-    useGameStore.getState().sleepAtShelter();
+  const handleSleep = useCallback<SleepCallback>((comfort) => {
+    useGameStore.getState().sleepAtShelter(comfort);
+  }, []);
+
+  const handleStationState = useCallback((state: SceneStationState) => {
+    perksRef.current = state.perks;
+    useGameStore.getState().setStrengthDriftFactor(strengthDriftFactor(state.perks));
+    stationStateCbRef.current?.(state);
   }, []);
 
   /* Forward state changes to the scene */
@@ -141,10 +177,13 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
         scene = new ShelterScene(app, stateRef.current);
         scene.setRewardCallback(handleReward);
         scene.setBuildCallback(handleBuild);
+        scene.setSpendCallback(handleSpend);
+        scene.setCookCallback(handleCook);
         scene.setNoticeCallback(handleNotice);
         scene.setRestCallback(handleRest);
         scene.setSleepCallback(handleSleep);
-        scene.setBuildStateCallback((s) => buildStateCbRef.current?.(s));
+        scene.setStationOpenCallback((station, anchor) => stationOpenCbRef.current?.(station, anchor));
+        scene.setStationStateCallback(handleStationState);
         scene.setReadyCallback(() => {
           if (!disposed) setReadyRevision(sceneRevision);
         });
@@ -160,7 +199,7 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
       sceneRef.current = null;
     };
     /* `sceneRevision` remounts the scene so it reloads restored rooftop state */
-  }, [handleReward, handleBuild, handleNotice, handleRest, handleSleep, sceneRevision]);
+  }, [handleReward, handleBuild, handleSpend, handleCook, handleNotice, handleRest, handleSleep, handleStationState, sceneRevision]);
 
   const ready = readyRevision === sceneRevision;
 

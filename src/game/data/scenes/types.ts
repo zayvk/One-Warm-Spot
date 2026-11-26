@@ -4,7 +4,9 @@ import type { ResourceId } from '../../types/game.ts';
 
 export interface HotspotConfig {
   id: string;
-  type: 'firepit' | 'searchable' | 'weeds' | 'sleep' | 'door';
+  type: 'firepit' | 'searchable' | 'weeds' | 'sleep' | 'door' | 'planter' | 'barrel' | 'grill' | 'sewing';
+  /** The upgradeable station living on this hotspot (its tier drives the sprite & collider) */
+  station?: StationId;
   /** Normalized 0.0–1.0 anchor position (bottom-center on floor) */
   position: { x: number; y: number };
   /** Initial prop sprite path (from SCENE_PROPS or empty for backdrop regions) */
@@ -36,37 +38,44 @@ export type SceneObstacle =
   | { shape: 'ellipse'; x: number; y: number; rx: number; ry: number }
   | { shape: 'rect'; xMin: number; xMax: number; yMin: number; yMax: number };
 
-/** A visual upgrade the player builds in-scene by spending found materials */
-export interface BuildableConfig {
-  id: string;
-  /** Short name for the build bar & hover label */
+/* ───── Multi-tier stations (Shelter, Fire Pit, Farm, Rainwater, Grill, Sewing) ───── */
+
+export type StationId = 'shelter' | 'firepit' | 'planter' | 'barrel' | 'grill' | 'sewing';
+
+/** Finishing flourish when a tier is built */
+export type BuildEffect = 'lantern' | 'leaves' | 'water' | 'logs' | 'stones' | 'warm' | 'fabric';
+
+export interface StationTierConfig {
+  tier: number;
+  /** Short name for this tier (Build Bar chip & hover) */
   name: string;
-  /** Emoji shown on the build bar chip */
-  icon: string;
-  cost: Partial<Record<ResourceId, number>>;
-  /** Normalized anchor (bottom-center on floor) */
-  position: { x: number; y: number };
-  propSprite: string;
+  sprite: string;
+  /** Sprite height relative to the stage */
   propScale: number;
-  flipX?: boolean;
-  /** Collider that becomes active once built */
-  collider?: { rx: number; ry: number };
-  /** Where the traveler stands while building */
+  /** Materials to reach this tier (empty for a station's starting tier) */
+  cost: Partial<Record<ResourceId, number>>;
+  collider: { rx: number; ry: number };
+  /** Where the traveler stands to use the station at this tier */
   standOffset?: { dx: number; dy: number };
-  /**
-   * Upgrade an existing hotspot in place instead of placing a new prop.
-   * Its sprite becomes `propSprite`, and any `hotspotOverrides` are merged in.
-   */
-  upgradesHotspot?: string;
-  hotspotOverrides?: Partial<Pick<HotspotConfig, 'label' | 'propScale' | 'collider' | 'standOffset' | 'restOffset'>>;
-  /** Another buildable that must be built first (e.g. Tier 2 before Tier 3) */
-  requires?: string;
-  /** For tiered upgrades of the fire pit: the tier this build reaches */
-  tier?: 2 | 3;
-  /** Finishing flourish once built */
-  effect: 'lantern' | 'leaves' | 'water' | 'logs' | 'stones';
-  /** Lantern glow anchor as a fraction of the sprite (0–1 from left, 0–1 from top) */
-  lanternAnchor?: { x: number; y: number };
+  /** Shelter only: where the traveler sits to rest during day/dusk */
+  restOffset?: { dx: number; dy: number };
+  effect: BuildEffect;
+  /** Warm light points as fractions of the sprite (x from left, y from top) that glow at dusk/night */
+  glows?: { x: number; y: number; size: number }[];
+}
+
+export interface StationConfig {
+  id: StationId;
+  /** Hotspot this station lives on */
+  hotspotId: string;
+  /** Emoji on the Build Bar chip */
+  icon: string;
+  /** Tier at the start of a run (0 = not built yet, shown as a floor blueprint) */
+  baseTier: 0 | 1;
+  /** Tiers 1…max in order */
+  tiers: StationTierConfig[];
+  /** Where the traveler stands while building the first tier */
+  buildStandOffset: { dx: number; dy: number };
 }
 
 export interface ShelterSceneConfig {
@@ -82,6 +91,6 @@ export interface ShelterSceneConfig {
   idlePoint: { x: number; y: number };
   /** Interactive hotspots in the scene */
   hotspots: HotspotConfig[];
-  /** In-scene visual upgrades bought with found materials */
-  buildables?: BuildableConfig[];
+  /** Multi-tier stations upgraded in-scene with found materials */
+  stations?: StationConfig[];
 }

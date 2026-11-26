@@ -100,7 +100,7 @@ export const SCENE_STAGES: Partial<Record<SiteId, string>> = {
 /* ───── Scene Props ───── */
 
 export const SCENE_PROPS = {
-  /** Fire pit tiers: makeshift twigs → stacked logs → full stone-ring hearth */
+  /* Fire pit: T1 makeshift twigs → T2 stacked logs → T3 stone-ring hearth */
   firepitT1: '/source/props/prop-firepit-t1.webp',
   firepitT2: '/source/props/prop-firepit-t2.webp',
   firepit: '/source/props/prop-firepit.webp',
@@ -108,13 +108,32 @@ export const SCENE_PROPS = {
   'prop-boxes-cleared': '/source/props/prop-boxes-cleared.webp',
   'prop-weeds-1': '/source/props/prop-weeds-1.webp',
   'prop-weeds-2': '/source/props/prop-weeds-2.webp',
+  /* Shelter: T1 cloth lean-to → T2 timber shelter → T3 insulated hut */
   clothShed: '/source/props/prop-cloth-shed.webp',
   shedUpgraded: '/source/props/prop-shed-upgraded.webp',
+  shelterT3: '/source/props/prop-shelter-t3.webp',
   boxSingle: '/source/props/prop-box-single.webp',
   boxDouble: '/source/props/prop-box-double.webp',
   weeds3: '/source/props/prop-weeds-3.webp',
+  /* Farm planter: T1 seedling crate → T2 herb planter → T3 trellised garden bed */
+  planterT1: '/source/props/prop-planter-t1.webp',
   planter: '/source/props/prop-planter.webp',
+  planterT3: '/source/props/prop-planter-t3.webp',
+  /* Rainwater: T1 bucket barrel → T2 rain barrel → T3 guttered barrel rig */
+  barrelT1: '/source/props/prop-barrel-t1.webp',
   rainBarrel: '/source/props/prop-rain-barrel.webp',
+  barrelT3: '/source/props/prop-barrel-t3.webp',
+  /* Cooking: T1 grill rack → T2 camp grill → T3 grill counter → T4 hearth kitchen */
+  grillT1: '/source/props/prop-grill-rack.webp',
+  grillT2: '/source/props/prop-grill-t1.webp',
+  grillT3: '/source/props/prop-grill-t2.webp',
+  grillT4: '/source/props/prop-grill-t3.webp',
+  /* Sewing / knitting: needle → scraps → knitting basket → workbench → sewing table */
+  sewT1: '/source/props/prop-sew-needle.webp',
+  sewT2: '/source/props/prop-sew-scraps.webp',
+  sewT3: '/source/props/prop-knit-t1.webp',
+  sewT4: '/source/props/prop-knit-t2.webp',
+  sewT5: '/source/props/prop-knit-t3.webp',
 } as const;
 
 export type PropId = keyof typeof SCENE_PROPS;

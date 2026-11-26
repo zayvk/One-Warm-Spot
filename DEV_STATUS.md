@@ -35,18 +35,18 @@ One-Warm-Spot/
 │   └── source/                  # All active art & audio assets live here
 │       ├── ui/                  # Brand art: logo-title.webp (Title wordmark), logo-emblem.webp (lantern crest)
 │       ├── backgrounds/         # Background images (bg-title, bg-valley, bg-terrace...bg-island.webp)
-│       ├── sprites/             # Character pose sprites ({female,male}-{idle,walk,search,sit,sleep}.webp)
+│       ├── sprites/             # Traveler sprites: {female,male}-{idle,walk,search,sit,sleep,reach,peek,fix}.webp + 4-frame walk cycle {female,male}-walk-{1..4}.webp
 │       ├── scenes/              # Interactive stage backdrops (terrace-stage.webp — v2 with stairwell/lift bulkhead)
-│       ├── cutscenes/           # Terrace lift plates for both rides (terrace-lobby — also the interactive lobby, terrace-lift-frame w/ transparent doorway, terrace-lift-door)
+│       ├── cutscenes/           # Terrace lift & building plates (terrace-lobby = Floor 1, terrace-floor-2/3/4, terrace-lift-frame w/ transparent doorway, terrace-lift-door)
 │       ├── props/               # Interactive prop sprites: boxes-intact/cleared, box-single/double, weeds-1/2/3, and every station tier —
 │       │                        #   shelter (cloth-shed, shed-upgraded, shelter-t3), fire pit (firepit-t1, firepit-t2, firepit), farm (planter-t1, planter, planter-t3),
 │       │                        #   barrel (barrel-t1, rain-barrel, barrel-t3), grill (grill-rack, grill-t1..t3), sewing (sew-needle, sew-scraps, knit-t1..t3)
 │       └── audio/               # Optional music-menu.mp3 (not shipped — procedural warm-pad loop plays instead)
 └── src/
     ├── main.tsx                 # React root mount
-    ├── App.tsx                  # Screen router: title → site-select → arrival → shelter ⇄ lobby (+ global toasts)
+    ├── App.tsx                  # Screen router: title → site-select → arrival → shelter (R) ⇄ ride ⇄ floor (1–4) (+ global toasts)
     ├── styles/
-    │   └── theme.css            # CSS custom properties, cozy palette, frosted-card util, pouch pulse/tooltips, prop menu, shared lift-cutscene keyframes, lobby door glow
+    │   └── theme.css            # CSS custom properties, cozy palette, frosted-card util, pouch pulse/tooltips, prop menu, shared lift-cutscene keyframes, floor hotspot glow, brass elevator panel, fuse-box sparks
     ├── game/                    # ── Pure game logic (no React imports) ──
     │   ├── types/game.ts        # SiteId, TimeOfDay, Weather, PlayerStats, Upgrade, ScavengeZone, Relic, SaveState…
     │   ├── data/
@@ -58,6 +58,7 @@ One-Warm-Spot/
     │   │   ├── survivalKit.ts   # 5-item Day 1 kit (with "how it helps" copy)
     │   │   ├── upgrades.ts      # The 10 macro upgrades (cost, energy, cozy, tier prerequisite) + categories
     │   │   ├── recipes.ts       # 5 grill RECIPES (tier, ingredients, ⚡/❤️, needsFire) + 3 MENDING_PERKS
+    │   │   ├── floors.ts        # Old apartment building: BuildingFloorId (1–4 | 'R'), BUILDING_FLOORS (painting + % hotspots), ELEVATOR_STOPS, liftTickSequence, liftRideTimeline
     │   │   ├── media.ts         # Background, sprite, stage, prop (all station tier sprites) & cutscene paths + fallback gradients
     │   │   └── scenes/
     │   │       ├── types.ts     # ShelterSceneConfig, HotspotConfig, SceneObstacle, StationConfig / StationTierConfig, BuildSlotConfig, AssignableStationId schema (normalized 0–1 coords)
@@ -87,10 +88,12 @@ One-Warm-Spot/
         ├── backupImport.ts           # Shared `restoreBackupFile()` used by Title Load Backup & Settings import
         ├── SiteSelector.tsx          # Uniform 38px header toggles, traveler sprite portraits, centered flex-wrap shelter cards
         ├── ArrivalCutscene.tsx       # Cutscene shell (fade-out, Skip button, Space/Enter/Escape); Ken Burns fade for most shelters
-        ├── TerraceLiftCutscene.tsx   # 3-beat Terrace lift ride up (lobby push-in → lift ride 1→R → doors open on the rooftop), reduce-motion aware
-        ├── TerraceLobbyScreen.tsx    # Ride down (rooftop → lift R→1 → lobby) ending in the interactive ground-floor lobby ("Coming soon" doors, lift back up)
-        ├── liftStage.tsx             # Shared lift pieces for both rides: cover-fitted stage size, sliding doors, frame, amber floor readout, caption
-        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + emblem badge + 7-item Pouch HUD (hover/focus tooltips) + VitalityDialHud + PropActionMenu + StationPopover; hands the stairwell door to the app (`onDescend`)
+        ├── TerraceLiftCutscene.tsx   # Lift ride between any two stops (fromFloor → toFloor): push-in / step-in, ticking indicator, destination painting + caption; the arrival is the 1 → R ride
+        ├── LiftRideScreen.tsx        # Full-screen shell for in-building rides (fade-out, Skip button / click / Space-Enter-Escape)
+        ├── ElevatorPanelModal.tsx    # Antique brass floor picker (R, 4, 3, 2, 1; current floor lit & disabled; Cancel / outside click / Escape)
+        ├── BuildingFloorScreen.tsx   # One explorable apartment floor (1–4) from floors.ts: % hotspots with glow + "puzzle coming soon" toast, fuse-box electric arcs, the lift (opens the floor panel), floor title
+        ├── liftStage.tsx             # Shared lift pieces: cover-fitted stage size, sliding doors, frame, amber floor readout, caption
+        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + emblem badge + 7-item Pouch HUD (hover/focus tooltips) + VitalityDialHud + PropActionMenu + StationPopover; the stairwell door opens ElevatorPanelModal (`onRide`)
         ├── VitalityDialHud.tsx       # Bottom-left bronze Vitality Medallion (80px; phase sky window + progress ring + centred Day plaque) + slim smoked-glass Stamina/Strength capsule tucked behind it
         ├── PropActionMenu.tsx        # Contextual floating pill above clicked stations: Primary Action (Rest/Sleep/Light/Sit/Extinguish/Harvest/Collect/Cook/Mend) + Upgrade tier action; `SlotBuildMenu` for empty "Build here" slots
         ├── StationPopover.tsx        # Frosted Cooking (grill recipes) / Mending (sewing perks) popover anchored above the station
@@ -99,7 +102,7 @@ One-Warm-Spot/
         ├── ScavengePanel.tsx         # 💤 Dormant M1 Valley Scavenge drawer (unmounted)
         ├── SurvivalKitPanel.tsx      # 💤 Dormant M1 Survival Kit / Field Journal drawer (unmounted)
         ├── ConfirmResetModal.tsx     # 💤 Dormant in-shelter Reset Save confirmation (unmounted)
-        ├── NoticeToasts.tsx          # Gentle toasts (Day N · Morning + regrowth/weather, new shelter unlocked, firewood hint, lobby "Coming soon", backups)
+        ├── NoticeToasts.tsx          # Gentle toasts (Day N · Morning + regrowth/weather, new shelter unlocked, firewood hint, "scavenging puzzle coming soon", backups)
         ├── SettingsPopover.tsx       # Top-right popover: Music/SFX sliders, Reduce Motion (+ helper line), Export / Load Backup
         ├── ConfirmOverwriteModal.tsx # Safety modal before overwriting an existing saved shelter
         ├── AboutModal.tsx            # Player-facing About: emblem crest, 2-paragraph story, 3 How-to-play tips, v0.1 footer
@@ -123,7 +126,7 @@ The game has pivoted from menu drawers to a **point-and-click illustrated scene*
 
 | Piece | Wiring |
 |-------|--------|
-| `ShelterScreen.tsx` | Mounts `ShelterCanvas`, a **← Title** button + shelter name, the centered Found Materials Pouch (all 7: 🪵 🧵 🌱 💧 🔩 🪨 🍅, pulsing on gains, with instant `.ows-pouch-tooltip` parchment pills on hover/focus), the bottom-left `VitalityDialHud`, and mutually exclusive contextual overlays (`PropActionMenu` for station primary actions / upgrades and `StationPopover` for Cooking/Mending — both rendered inside `<main>`, so scene pixel anchors map straight to CSS). Drives the 1s real-time phase clock while mounted and unpaused. `PropActionMenu` calls `ShelterCanvas`'s imperative `performStationAction(stationId, action)`; `StationPopover` calls `cook(recipeId)` / `craftPerk(perkId)`; `SlotBuildMenu` (opened from an empty slot) lists `unplacedStations(stationState.slots)` and calls `buildInSlot(slotId, stationId)`. Starts the site ambience bed. Its `handleDoor` turns the `stairwell-door` hotspot into `onDescend()` (App → `lobby` screen). |
+| `ShelterScreen.tsx` | Mounts `ShelterCanvas`, a **← Title** button + shelter name, the centered Found Materials Pouch (all 7: 🪵 🧵 🌱 💧 🔩 🪨 🍅, pulsing on gains, with instant `.ows-pouch-tooltip` parchment pills on hover/focus), the bottom-left `VitalityDialHud`, and mutually exclusive contextual overlays (`PropActionMenu` for station primary actions / upgrades and `StationPopover` for Cooking/Mending — both rendered inside `<main>`, so scene pixel anchors map straight to CSS). Drives the 1s real-time phase clock while mounted and unpaused. `PropActionMenu` calls `ShelterCanvas`'s imperative `performStationAction(stationId, action)`; `StationPopover` calls `cook(recipeId)` / `craftPerk(perkId)`; `SlotBuildMenu` (opened from an empty slot) lists `unplacedStations(stationState.slots)` and calls `buildInSlot(slotId, stationId)`. Starts the site ambience bed. Its `handleDoor` turns the `stairwell-door` hotspot into the `ElevatorPanelModal` (current = R) and returns `false`, so the scene unlocks and Cancel leaves the traveler free; a pick calls `onRide(to)` (App → `ride` screen). |
 | `ShelterCanvas.tsx` | Reads `chosenSite`, `timeOfDay`, `dayPhase`, `unlockedUpgrades`, `lanternLit`, `reduceMotion`, `travelerGender` from the store and forwards them to the scene. Write-backs: **rewards** (`addResources()`; weeds/boxes cost `gatherStaminaCost()` stamina, farm/barrel yields are free), **build payments** (`spendResources()` + build stamina cost), **spends** (materials only — firewood, mending), **cooking** (`cookRecipe()`), **rest** (`restAtShelter()`), **sleep** (`sleepAtShelter(comfort)`, whose returned overnight `RegrowOutcome` is handed back to the scene), and **notices** (`pushNotice()` with an icon). Forwards door arrivals to `onDoor(doorId)` (returns whether the door leads somewhere). Checks material affordability live via `setCanAffordCallback()`. Each write calls `_save()`. On every station-state emit it caches crafted perks, sets the store's `strengthDriftFactor` (cloak) and mirrors `{ tiers, pending, fireLit, perks, planterReady, barrelReady, slots }` to `ShelterScreen`; it also forwards station-menu (`onStationMenuOpen`), slot-menu (`onSlotMenuOpen`) and station-open (`grill`/`sewing` + anchor) requests. |
 | `shelterScene.ts` | Looks up configs via `getSceneConfig()` in `data/scenes/index.ts` (`terrace` only; other sites get the generic fallback walk area with no hotspots). **All normalized scene coords (props, hotspots, colliders, obstacles, walk bounds, entry/idle points) are relative to `stageRect`** — the on-screen cover rect of the backdrop, recomputed at the start of every `layout()` — via `toPx()` / `toNorm()`; prop, traveler and glow sizes scale with `stageRect.height`. Tweens lighting over 1.4s across `day` / `dusk` / `night`, fading in twinkling stars, drifting fireflies, and brighter fire/lantern light pools at dusk/night. Context-aware `sleep-shed` rests in `sit` pose during `day`/`dusk` and sleeps until Day `N+1` morning during `night` (passing `sleepComfort(shelterTier, perks)` and refreshing the farm/barrel ready flags). Clicking an empty build slot always opens the slot build menu. Clicking a station opens `PropActionMenu` when multiple actions or an upgrade are available, and executes directly for single-action maxed stations. Hover: parchment label, warm sprite tint and a 3% lift (`applyHotspotSpriteScale`, no lift under Reduce Motion); blueprints brighten. Door hotspots (`stairwell-door`) have no outline — just the label — and on arrival call `onDoor(id)`; if nothing handles it they fall back to their optional `message` toast and unlock. On the Terrace, `resolveSceneConfig()` applies the run's saved box & weed `spawns` (`withTerraceSpawns`). Entry: the traveler appears at the stairwell threshold, waits for the 220ms reveal + 280ms, then strolls to `idlePoint` at a fixed ~2s pace (`walkTo(..., durationMs)`). Fire visuals (flame tongues, coal bed, ember rate, smoke wisps, glow size/brightness/tint, crackle level) come from the `FIRE_TIERS` profile for the current `firepitTier`; lighting the fire spends 1 timber via the spend callback. Persists prop + station state through `engine/terraceState.ts`. |
 
@@ -203,25 +206,52 @@ Flow:
 3. The scene's `applyOvernightRegrowth()` adopts the new `spawns` / `clearedWeeds` / `searchedBoxes` and re-resolves the scene config. It destroys only the regrown hotspot nodes and recreates them via `createHotspotNode()`, popping them in once their art loads (instant under Reduce Motion).
 4. The scene then refreshes the farm/barrel ready flags and saves.
 
-### Terrace Lift Rides & Ground-Floor Lobby
+### The Old Elevator: Floor Picker, Lift Rides & Apartment Floors
 
-Both rides share `ui/liftStage.tsx`: a 1376×768 cover-fitted stage (`LIFT_STAGE_W/H`), `LiftDoors` (two sliding panels inside the frame's transparent doorway), `LiftFrame`, `LiftFloorReadout` and `CutsceneCaption`. The keyframes `owsLiftTremor`, `owsLiftDigit`, `owsLobbyPush`, `fadeInUp` and `owsFadeOpacity` live in `theme.css`.
+**Data (`data/floors.ts`, pure, unit-tested):**
+- `BuildingFloorId = 1 | 2 | 3 | 4 | 'R'`.
+- `BUILDING_FLOORS` maps floors 1–4 to `{ name, backdrop, hotspots }`. Hotspots are `{ id, label, rect (% of the 1376×768 painting), kind: 'lift' | 'scavenge', hasSparks? }`. All four paintings share one camera, so a single `LIFT` rect serves every floor.
+- `ELEVATOR_STOPS` lists the panel buttons, top to bottom: R, 4, 3, 2, 1.
+- Helpers: `floorBackdrop()` (R → `terrace-stage.webp`), `floorCaption()`, `liftTickSequence(from, to)` (inclusive, e.g. `R → 4 → 3`) and `liftRideTimeline(from, to)`.
 
-| | Ride up (`TerraceLiftCutscene`, inside `ArrivalCutscene`) | Ride down (`TerraceLobbyScreen`) |
+| Floor | Painting | Hotspots (`id` — label) |
 |---|---|---|
-| Starts from | Title/selector (claiming the Terrace) **or** the lobby's lift / ↑ Rooftop button | Rooftop `stairwell-door` click (traveler walks over, footstep, 350ms) |
-| Beats | Lobby push-in → doors shut → 1→2→3→4→R → ding → doors open on the rooftop → step through | Pull back into the lift with the rooftop framed (60ms) → doors shut, rooftop ambience off (1.0s) → hum, R→4→3→2→1 (1.75–3.27s; the hidden view swaps to the lobby at 1.85s) → ding, lobby birdsong (3.65s) → doors open (3.8s) → *"Ground Floor · Lobby"* caption (4.1s) → step out (4.4s) → interactive lobby (5.1s) |
-| Ends in | `ShelterScreen` (traveler strolls out of the stairwell) | The lobby scene on the same stage (no screen swap) |
-| Skip | Skip button, click, `Space`/`Enter`/`Escape` | Same — jumps straight to the interactive lobby |
+| 1 · Ground Floor · Lobby | `terrace-lobby.webp` | `apartment-1a` Apartment 1A · `apartment-1b` Apartment 1B · `side-doorway` Open Doorway · `lift` |
+| 2 · Residential Hallway | `terrace-floor-2.webp` | `f2-cupboard` Hallway Cupboard · `f2-boarded` Boarded Doorway & Debris · `f2-room-2a` Sunlit Room 2A · `f2-door-2b` Cracked Door 2B · `lift` |
+| 3 · Utility Corridor | `terrace-floor-3.webp` | `f3-broken-door` Unhinged Door · `f3-room-3a` Utility Door 3A · `f3-fusebox` Sparking Fuse Box (`hasSparks`) · `f3-locker` Metal Utility Locker · `lift` |
+| 4 · Skylight Landing | `terrace-floor-4.webp` | `f4-broken-door` Splintered Doorway · `f4-room-4a` Dark Hallway 4A · `f4-boarded` Boarded Studio Doors · `f4-trunk` Dusty Steamer Trunk · `f4-bookshelf` Hallway Bookshelf · `lift` |
 
-**Lobby scene:** the `terrace-lobby.webp` painting with `LOBBY_SPOTS` buttons positioned in % of the painting.
-- **Locked doors** — Apartment 1A, Apartment 1B and the open side doorway. Hover/focus gives a warm outline glow and a name tag (`.ows-lobby-spot`, `.ows-lobby-label`). A click plays `playLocked()`, flares `.ows-lobby-spot--glow` (re-keyed so it replays) and pushes a *"Coming soon"* toast.
-- **Lift** — rides back up. So does the **↑ Rooftop** pill (top-left, beside a "Ground Floor Lobby" title). Both route through `App` → `arrival`, so the traveler re-enters via the stairwell stroll.
+**Ride timing (`liftRideTimeline`):**
+- **Length:** `total = 2800 + (floors − 1) × 567ms` — 2.8s for one floor, 4.5s for four.
+- **Intro:** `push` when leaving floors 1–4 (push-in on the floor painting, cut into the closed lift at 750ms, ride from 950ms). `step-in` when leaving R (the lift zooms in around the framed rooftop at 60ms, the doors shut at 450ms, ride from 700ms).
+- **Swap:** the view behind the doors becomes the destination only once they're fully shut (`step-in`: 450 + 800 + 100ms).
+- **Ticks:** spread evenly up to the arrival.
+- **Outro:** arrive (ding) at `total − 1100`, doors open at +150, caption at +400, step out at +650. The parent fades over the last 400ms (`liftRideHoldMs`).
 
-**Behaviour while downstairs:**
-- `ShelterScreen` is unmounted, so the day clock and the rooftop ambience stop; the run is saved on unmount.
-- The rooftop state stays in `ows_terrace_state`.
-- A page refresh returns to the Title (Continue → rooftop).
+**Components:**
+- **`TerraceLiftCutscene`** (`fromFloor`, `toFloor`, `reduceMotion`, `skipped`) renders every ride on the shared `liftStage.tsx` pieces. The origin and destination paintings sit behind the doors (the rooftop keeps its warm glow), with `startLiftHum` / `playLiftFloorTick` / `playLiftDing` / `playLiftDoorSlide`.
+- **Ambience on arrival:** the rooftop at full level, floors at 0.3.
+- **Arrival from the title:** `ArrivalCutscene` simply plays the `1 → R` ride.
+- **`LiftRideScreen`** is the in-building shell: fade-out, the same skip rules, and a rooftop backdrop preload when heading to R.
+- **`ElevatorPanelModal`** (`current`, `onSelect`, `onClose`) is a brass plate (`.ows-lift-panel`, `.ows-lift-btn`). The current floor's button is lit amber, disabled and tagged *Current*. The first selectable button gets focus. Cancel, an outside pointer-down or Escape closes it.
+- **`BuildingFloorScreen`** (`floor`, `onRide`):
+  - The painting on the cover-fitted stage, with `.ows-lobby-spot` buttons per hotspot (hover/focus glow + name tag).
+  - A scavenge click → `playLocked()`, a re-keyed glow flare, and the toast *"{label} — scavenging puzzle coming soon."*
+  - The `lift` hotspot opens the panel (R rides home). The top-left header is just the floor title (`pointer-events: none`). The earlier 🛗 Elevator / ↑ Rooftop pills were removed as duplicates of the lift.
+  - `hasSparks` hotspots get live electricity:
+    - **Arcs:** four `ARCS` at the fuse panel's contacts, wire ends and door edge. Each is a jagged SVG arc (`.ows-arc`, a cyan glow stroke plus a white core) that double-flickers on its own 1.9–3.1s rhythm.
+    - **Flash:** a cold-blue screen-blended flash on the box (`.ows-sparks__flash`), synced to the main arc.
+    - **Embers:** five hot `EMBERS` (`.ows-ember`) that kick sideways (`--kick`) and fall.
+    - **Reduce Motion:** none of it is rendered, and it's hidden by CSS as well.
+
+**Routing (`App.tsx`):**
+- Screens are `shelter` (R) → `ride` `{ from, to }` → `shelter` or `floor` (1–4).
+- On the rooftop, `ShelterScreen` opens the panel from the stairwell door. On a floor, `BuildingFloorScreen` opens it from the lift.
+- Arriving at R remounts `ShelterScreen`, so the traveler strolls out of the stairwell again.
+
+**While downstairs or riding:**
+- `ShelterScreen` is unmounted, so the day clock and the rooftop ambience stop; the run is saved on unmount and the clock resumes on return.
+- The rooftop state stays in `ows_terrace_state`. The current floor isn't persisted: a page refresh returns to the Title (Continue → rooftop).
 - Reduce Motion turns every push, slide and tremor into fades.
 
 ### Archived / Unmounted M1 Files (intentionally dormant — not broken wiring)
@@ -249,9 +279,9 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 | Asset | Location | Format | Fallback |
 |-------|----------|--------|----------|
 | Shelter backgrounds | `public/source/backgrounds/bg-*.webp` | WebP, 1920×1080 recommended | Cozy CSS gradient per entry in `media.ts` |
-| Traveler sprites | `public/source/sprites/{female,male}-{idle,walk,search,sit,sleep}.webp` | Transparent WebP | Graceful skip if absent |
+| Traveler sprites | `public/source/sprites/{female,male}-{idle,walk,search,sit,sleep,reach,peek,fix}.webp` + `{female,male}-walk-{1..4}.webp` (each gender's frames share one canvas: 248×512 / 213×512) | Transparent WebP | Graceful skip if absent; the single `walk` still is used if the frames haven't loaded or Reduce Motion is on |
 | Scene stages & props | `public/source/scenes/*.webp`, `public/source/props/*.webp` | WebP | Stage preloaded into Pixi `Assets` during the arrival cutscene; the scene stays veiled until it's decoded, then fades in (220ms). A failed load shows a neutral `#F5EFE4` base |
-| Cutscene plates | `public/source/cutscenes/terrace-*.webp` (1376×768 lobby & lift frame, 508×680 door panel) | WebP (frame has a transparent doorway) | Dark backdrop behind layers. Used by the ride up, the ride down and the interactive lobby |
+| Cutscene plates | `public/source/cutscenes/terrace-*.webp` (1376×768 lobby, floor-2/3/4 and lift frame; 508×680 door panel) | WebP (frame has a transparent doorway) | Dark backdrop behind layers. Used by every lift ride and as the four explorable floors |
 | Menu music | `public/source/audio/music-menu.mp3` (optional, **not shipped**) | MP3 (looping) | Procedural warm-pad chord loop — **currently the active menu music** |
 | UI & shelter foley | Procedural (Web Audio) | — | Always available, 0 KB (includes campfire, rummage, weed snip, sleep, build taps, log stack, stone set, water-drop chime, harvest, cook, sew, lift hum / door slide / floor tick / ding) |
 | Site ambience | Procedural (Web Audio) | — | 9 musical soundscapes (birdsong, chimes, drips, creaks, surf…), 350ms crossfade |
@@ -300,6 +330,7 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
   - `dayCycle.test.ts` — phase clock, rest and default sleep math.
   - `terraceScene.test.ts` — `spendResources` exact deduction & refusal; `ows_terrace_state` parsing (legacy payloads → base tiers + default layout, legacy `builtProps` → Tier 2 stations, per-station tier ranges, perk filtering, ready flags only for built stations, exact round-trip of every tier/perk/flag + a custom `slotAssignments` layout + spawns in lenient and strict mode, pre-slot rooftops returning built stations to their old slots, slot data reconciled with what is built (duplicates/unknowns dropped, unbuilt stations freed, displaced stations moved to a free slot), damaged spawns, fresh/unreadable data); balance (rooftop alone covers shelter & fire pit T2; the test pool + rooftop covers every tier, perk, 3 fires and each recipe).
   - `buildSlots.test.ts` — all 4 stations placed in every slot order (24 × 24 permutations) leave no empty slot; taken slots, double placement, unknown slots/stations are refused; legacy migration to default slots (or the first free one); unbuilt stations free their slot.
+  - `floors.test.ts` — `liftTickSequence` up/down, single- and multi-floor (R → 3, 3 → 1, 2 → R, 1 → 2, 1 ↔ R…) and one-floor-per-step for every pair; `liftRideTimeline` length by distance (2.8s / 4.5s), intro per origin, and every beat in order for all 20 pairs (ticks ascending before arrival, the behind-doors swap only once the doors are shut); floor config integrity (floors 1–4 with their own paintings, expected hotspot ids, exactly one lift each, rects inside the painting, only the Floor 3 fuse box sparks, panel stops R→1, captions & rooftop backdrop).
   - `stations.test.ts` — every station upgrades one tier at a time to its max (3/3/3/3/4/5), agreed tier costs, farm/barrel yields by tier, sleep comfort 75/90/100 (+10 sheets, cap) and T3 overnight loss 5, `applySleep` never lowering stamina, gloves (−30% gather stamina), cloak (half phase drift), perk & recipe blockers (tier, fire, ingredients), all 5 recipe effects, vitality cap and refusal without ingredients.
   - `terraceSpawns.test.ts` — 250 seeded layouts all pass `findSpawnProblems` (inside bounds, clear of walls/structures/entry path, no crowding) and keep clear of the fixed stations, every build slot and their stand spots; ≥ 95% of props on the perimeter band; valid hand-placed defaults; sprite composition (3 distinct boxes, two of each weed) and scale range; per-seed determinism; validator flags crowded/off-floor props. `repairTerraceSpawns` leaves valid layouts alone and moves only overlapping props (keeping their art). `regrowTerraceSpawns`: 1–2 cleared weeds regrow at new valid spots across 250 seeds with nothing else touched, never more than were cleared, a full rooftop is untouched, one searched box refreshes only on even days (mostly on the perimeter), seeded determinism, the `spawns: null` default layout, and 39 cleared-out nights staying valid within the 3-box / 6-weed caps (weeds always regrow; a box refreshes on ≥ 90% of even nights and otherwise waits when the edges are full).
   - `backup.test.ts` — full backup round-trip (save incl. food, stats, rooftop incl. station tiers, slot assignments, perks, flags & layout), pre-Food / pre-station / pre-slot backups (food 0, legacy builds → Tier 2, built stations back in their old slots), older backups without `terraceState` (load + "starts fresh" warning), rejection of damaged rooftop fields (tiers, flags, lists, layout, the same station in two slots, unknown slot, unknown slot station, non-object slot map), and friendly errors for unreadable/invalid saves.
@@ -371,10 +402,16 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - [x] **M2 · Terrace v2:** Distinct box art per spot (`boxes-intact`/`cleared`, `box-double`, `box-single` with a dusty searched tint) and all 3 weed sprites across 6 patches with varied scales/flips
 - [x] **M2 · Terrace v2:** `stairwell-door` hotspot (hover outline + "coming soon" label, walk-over + toast via `pushNotice`) *(superseded: the door now rides the lift down to the lobby; its outline and "coming soon" toast are gone)*
 - [x] **M2 · Terrace v2:** 3 in-scene buildables (Upgrade Shelter → timber shelter with lantern glow, Herb Planter, Rain Barrel) with bottom-center `BuildBar`, floor blueprint markers, pop-in tween, colliders + Y-sort, and `builtProps` persistence *(superseded by the multi-tier stations below; old `builtProps` migrate to Tier 2)*
-- [x] **M2 · Terrace lift arrival:** 3-beat elevator cutscene (`TerraceLiftCutscene.tsx`, ~5.2s) — lobby Ken Burns push-in + footsteps (0–1.7s) → cover-fitted 1376×768 lift stage with sliding door panels in the doorway cutout, amber 1→2→3→4→R indicator, hum + micro-tremor (1.7–3.7s) → ding, doors slide apart onto the sunlit Terrace, ambience swell, caption and step-through into the shelter (3.7–5.2s). Skip/keys stop all beats and the hum; Reduce Motion swaps motion for fades. New foley: `startLiftHum` / `stopLiftHum`, `playLiftDoorSlide`, `playLiftFloorTick`, `playLiftDing`
+- [x] **M2 · Terrace lift arrival:** 3-beat elevator cutscene (`TerraceLiftCutscene.tsx`, ~5.2s, now ~4.5s as the generalized `1 → R` ride) — lobby Ken Burns push-in + footsteps (0–1.7s) → cover-fitted 1376×768 lift stage with sliding door panels in the doorway cutout, amber 1→2→3→4→R indicator, hum + micro-tremor (1.7–3.7s) → ding, doors slide apart onto the sunlit Terrace, ambience swell, caption and step-through into the shelter (3.7–5.2s). Skip/keys stop all beats and the hum; Reduce Motion swaps motion for fades. New foley: `startLiftHum` / `stopLiftHum`, `playLiftDoorSlide`, `playLiftFloorTick`, `playLiftDing`
 - [x] **M2 · Stage-space anchoring:** Scene coords are mapped through the backdrop's cover rect (`stageRect`, `toPx` / `toNorm`), so props, colliders, walk bounds, hotspots and floor clicks stay locked to the painted floor on 16:9, ultrawide and portrait windows
 - [x] **M2 · 3-Phase Day Cycle & Vitality HUD:** 12-minute real-time day (`day` Full Sun → `dusk` Sunset → `night` Half Moon, 240s/phase, paused outside shelter or in settings), `stamina` & `strength` vitality stats persisted in `SaveState` with legacy `timeOfDay` migration, 1.4s smooth cubic sky lighting tweens, night twinkling stars + drifting warm fireflies + dusk/night fire/lantern glow pools, context-aware `sleep-shed` (**"Rest by shelter"** in day/dusk vs **"Sleep until morning"** at night → `Day N+1 · Morning`), and bottom-left circular Time-Dial + glass Test-Tube HUD (`VitalityDialHud.tsx`)
 - [x] **M2 · Calm rooftop entry:** traveler appears at the stairwell threshold (`entryPoint` 0.84, 0.69), pauses ~280ms after the reveal, then strolls ~2s to `idlePoint` (0.72, 0.71) with soft footsteps and a slower walk bob
+- [x] **M2 · 4-frame walk cycle & downstairs poses:**
+  - **Sprites (`media.ts`):** `TravelerPose` adds `reach`, `peek` and `fix` (`TRAVELER_POSES`). `travelerWalkFrames(gender)` returns the 4 `walk-{1..4}` paths, and `ALL_TRAVELER_SPRITES` lists every pose plus the frames.
+  - **Loading:** `ShelterScene.preloadTravelerPoses()` loads all 8 poses and the 4 frames, ignoring a late load after a traveler swap. A walk starts on frame 1.
+  - **Animation:** while walking, `stepWalkCycle()` steps `0 → 1 → 2 → 3 → 0` every 160ms (240ms on the stairwell entry stroll). It plays a footstep on each foot-contact frame (1 and 3); the bob dips at each contact and peaks mid-stride. The click itself is the first step, and the entry stroll's old fixed-time footsteps were removed in favour of frame-synced ones.
+  - **Fallbacks:** with Reduce Motion, or before the frames load, the single `walk` still is used with the steady 380ms footsteps and no bob.
+  - **Downstairs poses:** heights `reach` 1.0, `fix` 1.0, `peek` 0.60, with matching ground shadows. They're registered and preloaded but not used yet; they're intended for the scavenging rooms.
 - [x] **M2 · Randomized per-run layout:** seeded `generateTerraceSpawns()` places the 3 boxes and 6 weeds (shuffled sprites, 0.92–1.08× scale, random flips) clear of walls, structures, the entry path and each other; persisted as `spawns` in `ows_terrace_state`, regenerated on Start Fresh / Reset
 - [x] **M2 · 3-tier fire pit:** `firepitTier` (1 twigs → 2 stacked logs → 3 stone-ring hearth) via `firepit-t2` / `firepit-t3` buildables (`requires` chain in `BuildBar`), `playLogStack` / `playStoneSet` foley, and per-tier `FIRE_TIERS` visuals (multi-tongue flames, coal bed, ember rate, smoke wisps, 1× / 1.35× / 1.75× glow) plus `setCampfireAudio(active, level)` crackle intensity. Box timber yields raised (Broken Boxes 3, Weathered Crates 4) so the rooftop covers every build plus Tier 2 *(now the `firepit` station; Tier 3 costs `2🪵 1🔩 2🪨`)*
 - [x] **Polish · Brand:** `favicon.png` + `apple-touch-icon.png` in `index.html`; `UI_ASSETS` (`logoTitle`, `logoEmblem`) — painted wordmark on the Title Screen (sr-only `<h1>` kept), emblem as About crest, shelter header badge, and a delayed pulsing loading emblem while the stage decodes (`ShelterScene.setReadyCallback`)
@@ -391,18 +428,24 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - [x] **M2 · Overnight regrowth:** `regrowTerraceSpawns` (1–2 cleared weeds per night, one searched box every 2nd day, new valid spots) wired through `sleepAtShelter()` → `regrowStoredTerrace()` → `ShelterScene.applyOvernightRegrowth()`, with a morning-toast note
 - [x] **M2 · Core Vitality & Multi-Tier Progression:** 🍅 `food` as the 7th resource (save/backup migration → 0, 7-item pouch); 14 new station sprites in `SCENE_PROPS`; `TERRACE_STATIONS` (Shelter 1–3, Fire Pit 1–3, Farm 0–3, Rainwater Barrel 0–3, Cooking Grill 0–4, Sewing Kit 0–5) replacing the one-off buildables, with legacy `builtProps` → Tier 2 migration; shelter-tier sleep comfort + morning farm/barrel refresh; farm harvest & rainwater collection; `StationPopover` for grill Cooking (5 recipes) and sewing Mending (3 perks: sheets, gloves, cloak); `playHarvest` / `playCook` / `playSew`; grill steam; T3 hut window + lantern glows; ⚠️ `TEST_MODE_GENEROUS_START` pool
 - [x] **Polish · Pre-Game & In-World Contextual Menu Pass:** removed boxy dark halo scrim behind `TitleScreen` wordmark (keeping clean `drop-shadow`); centered `SiteSelector` flex-wrap card rows and equalized `.ows-pill` top-bar toggle heights (`38px`); replaced bottom `BuildBar` with contextual in-world `PropActionMenu` above clicked stations and *"Craft {name} ({cost})"* blueprint hints; natural tier names in lock hints (`stationRequirementHint`, 🔒 rows); prop hover tint + 3% lift replacing the old hover rings; added instant `.ows-pouch-tooltip` parchment hover/focus tooltips to all 7 pouch materials
-- [x] **M2 · Ride down to the lobby:** rooftop `stairwell-door` → `TerraceLobbyScreen` (reverse lift ride R→1, skippable, Reduce Motion fades) ending in an interactive ground-floor lobby — glowing *"Coming soon"* apartment doors and the lift / ↑ Rooftop back up via the arrival ride; shared `liftStage.tsx` and global lift keyframes; scene `DoorCallback`
+- [x] **M2 · Ride down to the lobby:** rooftop `stairwell-door` → `TerraceLobbyScreen` (reverse lift ride R→1, skippable, Reduce Motion fades) ending in an interactive ground-floor lobby — glowing *"Coming soon"* apartment doors and the lift / ↑ Rooftop back up via the arrival ride; shared `liftStage.tsx` and global lift keyframes; scene `DoorCallback` *(superseded by the elevator & four floors below; `TerraceLobbyScreen` became `BuildingFloorScreen`)*
+- [x] **M2 · The old elevator & four apartment floors:**
+  - Assets and data: `terrace-floor-2/3/4.webp` in `CUTSCENE_ASSETS`, and a data-driven `data/floors.ts` (floors 1–4 + R, % hotspots, panel stops, tick sequence, ride timeline).
+  - `ElevatorPanelModal` brass floor picker, opened from the rooftop door and from every floor's lift.
+  - `TerraceLiftCutscene` generalized to `fromFloor → toFloor` rides scaled by distance (2.8–4.5s) that open on the destination painting and caption. The arrival is the `1 → R` ride, and `LiftRideScreen` is the in-building shell.
+  - `BuildingFloorScreen` replaces `TerraceLobbyScreen`: every floor has glowing scavenging spots ("puzzle coming soon") and Floor 3's fuse box crackles with electric arcs; the lift is the single way to change floors (its panel includes R).
+  - The rooftop day clock is paused off the roof.
 - [x] **M2 · Flexible Predefined Build Slots:** the 4 hardcoded farm/barrel/grill/sewing spots became generic `slot-1…4` (`TERRACE_BUILD_SLOTS`). An empty slot reads *"Build here"* and opens `SlotBuildMenu` with every unplaced station (Tier 1 name, icon, cost); the pick walks over, pays, assigns the slot and pops the station in. `slotAssignments` is persisted in `ows_terrace_state` and backups: strict validation, no duplicates, and legacy saves keep their old layout via `reconcileSlotAssignments`. Pure rules live in `engine/buildSlots.ts`; spawns keep every slot clear for its widest possible station.
 - [ ] **M2:** Custom interactive scene configs & prop sprites for remaining shelters (`pipe`, `tree`, etc.)
 - [ ] **M2:** Tier 1–3 painted visual layer swaps & macro-build restoration integrated into interactive scenes
 - [ ] **M2:** Weather visuals & audio on the shelter scene (rain streaks, squall haze, rain-on-roof ambience)
 - [ ] **M2 Art & Immersion Upgrades:** Lit fire-pit sprites, "cleared" variants for `box-double`/`box-single`, arrival vignettes for the other 8 shelters, and dedicated Morning/Afternoon/Evening/Night painted backdrops
-- [ ] **M2 Design:** Wood-burning fire over time (lighting already costs 1 Timber), beyond-the-roof gathering behind the lobby's apartment doors (then switch off `TEST_MODE_GENEROUS_START` and tune scarcity), more Terrace anchor upgrades (parapet repair, string lights), traveler clothing progression (cozy cloak → Tier 2 outfit sprite) (see `GAME_CONTEXT.md` → Design Roadmap)
+- [ ] **M2 Design:** Wood-burning fire over time (lighting already costs 1 Timber), beyond-the-roof gathering behind the four floors' scavenging spots (then switch off `TEST_MODE_GENEROUS_START` and tune scarcity), more Terrace anchor upgrades (parapet repair, string lights), traveler clothing progression (cozy cloak → Tier 2 outfit sprite) (see `GAME_CONTEXT.md` → Design Roadmap)
 
 ### 🧭 Planned / Next Milestones
 
 - [ ] **Downstairs Apartment Interiors & Scavenging Mini-Game Framework** *(design: `GAME_CONTEXT.md` → Downstairs Scavenging & Cozy Mini-Game Puzzles)*
-  - **Rooms:** illustrated apartment interiors reached from the shipped Ground-Floor Lobby doors (Apartment 1A, Apartment 1B, side doorway in `TerraceLobbyScreen.tsx`), replacing their "Coming soon" toast.
+  - **Rooms:** illustrated apartment interiors and scavenging spots reached from the shipped building floors (`BUILDING_FLOORS` hotspots with `kind: 'scavenge'` in `data/floors.ts`, rendered by `BuildingFloorScreen.tsx`), replacing their "scavenging puzzle coming soon" toast.
   - **Reusable mini-game overlay:** one framework triggered from room scavenging hotspots (`safe`, `drawer`, `cupboard`, `under-bed`, `shelf`, …). Rewards feed back cleanly into the main Zustand resource store (`addResources()` + `_save()`); occasional Found Traveler Diary Pages are a later hook.
   - **Planned starter puzzle modules:** **Find the Object**, **Jigsaw Puzzle**, **Tic-Tac-Toe**, and **Dots & Lines** (spec TBD).
   - **Cozy guarantee:** no punishing timers or harsh failure states; puzzles can always be retried or left.
@@ -415,7 +458,8 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - [ ] **Stations → Cozy Index:** Decide how the in-scene stations relate to the 10 macro upgrades (Cozy Index, `totalUpgradesBuilt` milestones) — today they are visual + vitality/material loops only.
 - [ ] **Station art tuning:** `propScale`, colliders, stand offsets and glow anchors for the 14 tier sprites are first estimates — verify in the browser, especially the larger T3/T4/T5 sprites against the back parapet, now that any station can stand in any slot.
 - [ ] **Fine-tune exact Terrace station and slot coordinates for maximum cozy visual composition.** (`SHED_POS`, `FIREPIT_POS`, `TERRACE_BUILD_SLOTS` positions & stand offsets in `data/scenes/terrace.ts`; re-run the spawn tests afterwards since `keepClear` follows the slots.)
-- [ ] **Lobby hotspot tuning:** `LOBBY_SPOTS` rects in `TerraceLobbyScreen.tsx` were measured by eye from the painting — nudge them if a glow doesn't sit on its door frame.
+- [ ] **Floor hotspot tuning:** the `BUILDING_FLOORS` rects in `data/floors.ts` (lobby and Floors 2–4) were measured by eye from the paintings — nudge any whose glow doesn't sit on its door, cupboard, locker or trunk. Same for the fuse-box arc and ember positions (`ARCS` / `EMBERS` in `BuildingFloorScreen.tsx`).
+- [ ] **Persist the current floor (optional):** a refresh while downstairs returns to the Title → rooftop; store the floor if downstairs play grows longer sessions.
 - [ ] **Station-menu UX review:** maxed single-action stations skip the menu while upgradeable ones open it — revisit if that feels surprising in play. *(Empty build slots now always open a menu, so building is never an accidental one-click spend.)*
 - [ ] **`stationRequirementHint` is Terrace-only** (looks up `TERRACE_STATIONS`); make it site-aware when Shelter #2 gets stations.
 - [ ] **Generous test pool:** `TEST_MODE_GENEROUS_START` (`data/modes.ts`) must be switched off once downstairs scavenging provides Stone/extra materials.

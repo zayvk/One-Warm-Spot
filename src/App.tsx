@@ -6,20 +6,28 @@ import TitleScreen from './ui/TitleScreen.tsx';
 import SiteSelector from './ui/SiteSelector.tsx';
 import ArrivalCutscene from './ui/ArrivalCutscene.tsx';
 import ShelterScreen from './ui/ShelterScreen.tsx';
-import TerraceLobbyScreen from './ui/TerraceLobbyScreen.tsx';
+import BuildingFloorScreen from './ui/BuildingFloorScreen.tsx';
+import LiftRideScreen from './ui/LiftRideScreen.tsx';
 import AudioToggle from './ui/AudioToggle.tsx';
 import NoticeToasts from './ui/NoticeToasts.tsx';
+import type { BuildingFloorId, DownstairsFloorId } from './game/data/floors.ts';
 
-type Screen = 'title' | 'site-select' | 'arrival' | 'shelter' | 'lobby';
+/** `shelter` is the rooftop (lift stop R); `floor` is one of the apartment floors 1–4 */
+type Screen = 'title' | 'site-select' | 'arrival' | 'shelter' | 'ride' | 'floor';
 
 export default function App() {
   const chosenSite = useGameStore((s) => s.chosenSite);
   const reduceMotion = useGameStore((s) => s.reduceMotion);
 
   const [screen, setScreen] = useState<Screen>('title');
-  /* Arrival, shelter & lobby need a claimed site — fall back to the title otherwise */
+  /* Where the traveler is in the building, and the lift ride in progress */
+  const [floor, setFloor] = useState<DownstairsFloorId>(1);
+  const [ride, setRide] = useState<{ from: BuildingFloorId; to: BuildingFloorId }>({ from: 'R', to: 1 });
+  /* Everything past site selection needs a claimed site — fall back to the title otherwise */
   const activeScreen: Screen =
-    (screen === 'arrival' || screen === 'shelter' || screen === 'lobby') && !chosenSite ? 'title' : screen;
+    (screen === 'arrival' || screen === 'shelter' || screen === 'ride' || screen === 'floor') && !chosenSite
+      ? 'title'
+      : screen;
 
   /* ── Sync reduceMotion preference to root document attribute ── */
   useEffect(() => {
@@ -62,10 +70,21 @@ export default function App() {
     setScreen('title');
   }, []);
 
-  /* Rooftop stairwell door → ride the lift down to the lobby (the day clock rests meanwhile) */
-  const goToLobby = useCallback(() => {
-    setScreen('lobby');
+  /* Ride the old lift from wherever the traveler is (the rooftop day clock rests while away) */
+  const rideFrom = useCallback((from: BuildingFloorId, to: BuildingFloorId) => {
+    if (from === to) return;
+    setRide({ from, to });
+    setScreen('ride');
   }, []);
+
+  const arriveFromRide = useCallback(() => {
+    if (ride.to === 'R') {
+      setScreen('shelter');
+    } else {
+      setFloor(ride.to);
+      setScreen('floor');
+    }
+  }, [ride.to]);
 
   const handleContinue = useCallback(() => {
     if (chosenSite) {
@@ -86,11 +105,19 @@ export default function App() {
     content = (
       <ArrivalCutscene siteId={chosenSite} onComplete={goToShelter} />
     );
-  } else if (activeScreen === 'lobby') {
-    /* Riding back up replays the Terrace arrival (lobby → lift → rooftop) */
-    content = <TerraceLobbyScreen onReturnToRooftop={goToArrival} />;
+  } else if (activeScreen === 'ride') {
+    content = (
+      <LiftRideScreen
+        key={`${ride.from}-${ride.to}`}
+        fromFloor={ride.from}
+        toFloor={ride.to}
+        onArrive={arriveFromRide}
+      />
+    );
+  } else if (activeScreen === 'floor') {
+    content = <BuildingFloorScreen key={floor} floor={floor} onRide={(to) => rideFrom(floor, to)} />;
   } else {
-    content = <ShelterScreen onBackToTitle={goToTitle} onDescend={goToLobby} />;
+    content = <ShelterScreen onBackToTitle={goToTitle} onRide={(to) => rideFrom('R', to)} />;
   }
 
   return (

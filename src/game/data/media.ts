@@ -76,20 +76,26 @@ export const BG_SHELTERS: Record<SiteId, MediaEntry> = {
 
 /* ───── Traveler Sprites ───── */
 
-export type TravelerPose = 'idle' | 'walk' | 'search' | 'sit' | 'sleep';
+/** Rooftop poses + the downstairs action poses (`reach` high shelves, `peek` low/under things, `fix` hands-on repairs) */
+export type TravelerPose = 'idle' | 'walk' | 'search' | 'sit' | 'sleep' | 'reach' | 'peek' | 'fix';
 
+export const TRAVELER_POSES: readonly TravelerPose[] = ['idle', 'walk', 'search', 'sit', 'sleep', 'reach', 'peek', 'fix'];
+
+/** Single-image pose (`walk` is the still stride used when motion is reduced) */
 export function travelerSpriteSrc(gender: TravelerGender, pose: TravelerPose): string {
   return `/source/sprites/${gender}-${pose}.webp`;
 }
 
-/** All traveler sprite URLs for preloading */
-export const ALL_TRAVELER_SPRITES: string[] = (
-  ['female', 'male'] as TravelerGender[]
-).flatMap((g) =>
-  (['idle', 'walk', 'search', 'sit', 'sleep'] as TravelerPose[]).map((p) =>
-    travelerSpriteSrc(g, p),
-  ),
-);
+/** The 4-frame walk cycle (frames 1 & 3 are the foot-contact strides) */
+export function travelerWalkFrames(gender: TravelerGender): string[] {
+  return [1, 2, 3, 4].map((n) => `/source/sprites/${gender}-walk-${n}.webp`);
+}
+
+/** All traveler sprite URLs (poses + walk frames) for preloading */
+export const ALL_TRAVELER_SPRITES: string[] = (['female', 'male'] as TravelerGender[]).flatMap((g) => [
+  ...TRAVELER_POSES.map((p) => travelerSpriteSrc(g, p)),
+  ...travelerWalkFrames(g),
+]);
 
 /* ───── Scene Stages ───── */
 
@@ -151,7 +157,14 @@ export const UI_ASSETS = {
 
 /** Terrace elevator arrival: lobby → riding up → doors open onto the roof */
 export const CUTSCENE_ASSETS = {
+  /** Floor 1 · Ground Lobby (also the arrival cutscene's opening plate) */
   terraceLobby: '/source/cutscenes/terrace-lobby.webp',
+  /** Floor 2 · Residential Hallway */
+  terraceFloor2: '/source/cutscenes/terrace-floor-2.webp',
+  /** Floor 3 · Utility Corridor */
+  terraceFloor3: '/source/cutscenes/terrace-floor-3.webp',
+  /** Floor 4 · Skylight Landing */
+  terraceFloor4: '/source/cutscenes/terrace-floor-4.webp',
   /** Lift interior with a transparent doorway cutout */
   terraceLiftFrame: '/source/cutscenes/terrace-lift-frame.webp',
   /** One lift door panel (mirrored for the right half) */

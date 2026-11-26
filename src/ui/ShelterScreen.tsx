@@ -14,11 +14,13 @@ import type { ResourceId } from '../game/types/game.ts';
 import PropActionMenu, { SlotBuildMenu, type StationMenuAction } from './PropActionMenu.tsx';
 import StationPopover, { type PopoverStation } from './StationPopover.tsx';
 import VitalityDialHud from './VitalityDialHud.tsx';
+import ElevatorPanelModal from './ElevatorPanelModal.tsx';
+import type { BuildingFloorId } from '../game/data/floors.ts';
 
 export interface ShelterScreenProps {
   onBackToTitle: () => void;
-  /** The traveler stepped through the rooftop stairwell door (ride the lift down) */
-  onDescend?: () => void;
+  /** Ride the old lift from the rooftop to a floor picked on the elevator panel */
+  onRide?: (to: BuildingFloorId) => void;
 }
 
 /** Soft loudness for the in-shelter ambience bed */
@@ -26,7 +28,7 @@ const SHELTER_AMBIENCE_LEVEL = 0.55;
 
 const POUCH_IDS: ResourceId[] = ['timber', 'cloth', 'seeds', 'water', 'scrap', 'stone', 'food'];
 
-export default function ShelterScreen({ onBackToTitle, onDescend }: ShelterScreenProps) {
+export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenProps) {
   const chosenSite = useGameStore((s) => s.chosenSite);
   const dayPhase = useGameStore((s) => s.dayPhase);
   const resources = useGameStore((s) => s.resources);
@@ -67,14 +69,23 @@ export default function ShelterScreen({ onBackToTitle, onDescend }: ShelterScree
     return canvasRef.current?.performStationAction(stationId, action) ?? false;
   }, []);
 
+  /*
+   * The traveler reached the stairwell/lift door: open the floor panel. Returning
+   * false lets the scene unlock, so cancelling the panel leaves them free to roam.
+   */
+  const [elevatorOpen, setElevatorOpen] = useState(false);
   const handleDoor = useCallback(
     (doorId: string) => {
-      if (doorId !== 'stairwell-door' || !onDescend) return false;
-      onDescend();
-      return true;
+      if (doorId !== 'stairwell-door' || !onRide) return false;
+      setPopover(null);
+      setPropMenu(null);
+      setSlotMenu(null);
+      setElevatorOpen(true);
+      return false;
     },
-    [onDescend],
+    [onRide],
   );
+  const closeElevator = useCallback(() => setElevatorOpen(false), []);
 
   /* Soft shelter soundscape while on this screen */
   useEffect(() => {
@@ -257,6 +268,17 @@ export default function ShelterScreen({ onBackToTitle, onDescend }: ShelterScree
       </main>
 
       <VitalityDialHud />
+
+      {elevatorOpen && onRide && (
+        <ElevatorPanelModal
+          current="R"
+          onSelect={(to) => {
+            setElevatorOpen(false);
+            onRide(to);
+          }}
+          onClose={closeElevator}
+        />
+      )}
     </div>
   );
 }

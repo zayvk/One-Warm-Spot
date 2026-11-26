@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import BackgroundStage from './BackgroundStage.tsx';
-import TerraceLiftCutscene, { TERRACE_LIFT_HOLD_MS } from './TerraceLiftCutscene.tsx';
+import TerraceLiftCutscene, { LIFT_FADE_MS, liftRideHoldMs } from './TerraceLiftCutscene.tsx';
 import { BG_SHELTERS } from '../game/data/media.ts';
 import { SITES } from '../game/data/sites.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
@@ -21,7 +21,6 @@ export interface ArrivalCutsceneProps {
 const DURATION = 3500; // ms
 const REDUCED_DURATION = 2200; // calm hold for reduce-motion
 const FOOTSTEP_TIMES = [400, 900, 1400, 1950, 2500]; // ms offsets
-const LIFT_FADE_MS = 400;
 
 export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
@@ -63,7 +62,7 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
 
   /* Auto-complete after duration */
   useEffect(() => {
-    const holdMs = isLift ? TERRACE_LIFT_HOLD_MS : reduceMotion ? REDUCED_DURATION : DURATION;
+    const holdMs = isLift ? liftRideHoldMs(1, 'R') : reduceMotion ? REDUCED_DURATION : DURATION;
     const fadeMs = isLift ? LIFT_FADE_MS : reduceMotion ? 300 : 600;
     timerRef.current = setTimeout(() => {
       setPhase('fadeout');
@@ -113,7 +112,7 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
       }}
     >
       {isLift ? (
-        <TerraceLiftCutscene reduceMotion={reduceMotion} skipped={skipped} />
+        <TerraceLiftCutscene fromFloor={1} toFloor="R" reduceMotion={reduceMotion} skipped={skipped} />
       ) : (
         <>
           {/* Background with Ken Burns zoom (disabled when reduceMotion is active) */}

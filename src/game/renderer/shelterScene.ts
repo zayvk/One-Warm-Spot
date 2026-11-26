@@ -22,7 +22,7 @@ import type {
   StationId,
   StationTierConfig,
 } from '../data/scenes/types.ts';
-import { BG_SHELTERS, travelerSpriteSrc, SCENE_STAGES } from '../data/media.ts';
+import { BG_SHELTERS, travelerSpriteSrc, travelerWalkFrames, SCENE_STAGES, TRAVELER_POSES } from '../data/media.ts';
 import type { TravelerPose } from '../data/media.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
 import { getSceneConfig } from '../data/scenes/index.ts';
@@ -241,6 +241,10 @@ const POSE_HEIGHT_SCALE: Record<TravelerPose, number> = {
   search: 0.72,
   sit: 0.68,
   sleep: 0.36,
+  /* Downstairs action poses (ready for the scavenging rooms) */
+  reach: 1.00,
+  fix: 1.00,
+  peek: 0.60,
 };
 
 const POSE_SHADOW: Record<TravelerPose, { rx: number; ry: number; alpha: number }> = {
@@ -249,7 +253,16 @@ const POSE_SHADOW: Record<TravelerPose, { rx: number; ry: number; alpha: number 
   search: { rx: 0.28, ry: 0.058, alpha: 0.22 },
   sit: { rx: 0.31, ry: 0.062, alpha: 0.20 },
   sleep: { rx: 0.44, ry: 0.068, alpha: 0.18 },
+  reach: { rx: 0.24, ry: 0.052, alpha: 0.24 },
+  fix: { rx: 0.26, ry: 0.056, alpha: 0.23 },
+  peek: { rx: 0.36, ry: 0.064, alpha: 0.2 },
 };
+
+/* 4-frame walk cycle: frames 1 & 3 (indices 0 & 2) are foot contacts */
+const WALK_FRAME_MS = 160;
+/** The calm stairwell entry stroll steps more slowly */
+const STROLL_FRAME_MS = 240;
+const WALK_BOB_PX = 3;
 
 /* ═══════════════════════════════════════════
    Fire Pit Tiers — flame, embers, smoke & glow
@@ -418,6 +431,11 @@ export class ShelterScene {
   private travelerSprite: Sprite | null = null;
   private travelerShadow: Graphics;
   private currentPose: TravelerPose = 'idle';
+  /* Walk-cycle textures for the current traveler (empty until loaded) */
+  private walkFrames: Texture[] = [];
+  private walkFramesGender: TravelerGender | null = null;
+  private walkFrameIndex = 0;
+  private walkFrameElapsed = 0;
   private poseToken = 0;
   private poseScaleMultiplier = 1;
   private targetX = 0.40;
@@ -931,17 +949,34 @@ export class ShelterScene {
   /* ── Traveler ── */
 
   private preloadTravelerPoses(gender: TravelerGender): void {
-    const poses: TravelerPose[] = ['idle', 'walk', 'search', 'sit', 'sleep'];
-    for (const p of poses) {
+    for (const p of TRAVELER_POSES) {
       void Assets.load<Texture>(travelerSpriteSrc(gender, p)).catch(() => {});
     }
+    Promise.all(travelerWalkFrames(gender).map((src) => Assets.load<Texture>(src)))
+      .then((frames) => {
+        /* Ignore a late load for a traveler who has since been swapped */
+        if (this.disposed || this.state.gender !== gender || frames.some((f) => !f)) return;
+        this.walkFrames = frames;
+        this.walkFramesGender = gender;
+      })
+      .catch(() => { /* fall back to the single walk pose */ });
+  }
+
+  /** Animate the 4-frame walk cycle (otherwise the single still stride is used) */
+  private walkCycleReady(): boolean {
+    return !this.state.reduceMotion && this.walkFrames.length === 4 && this.walkFramesGender === this.state.gender;
   }
 
   private loadTraveler(gender: TravelerGender, pose: TravelerPose): void {
     const token = ++this.poseToken;
     const prevPose = this.currentPose;
-    const src = travelerSpriteSrc(gender, pose);
+    const animatedWalk = pose === 'walk' && this.walkCycleReady();
+    const src = animatedWalk ? travelerWalkFrames(gender)[0] : travelerSpriteSrc(gender, pose);
     this.currentPose = pose;
+    if (pose === 'walk') {
+      this.walkFrameIndex = 0;
+      this.walkFrameElapsed = 0;
+    }
 
     Assets.load<Texture>(src)
       .then((texture) => {
@@ -2160,6 +2195,27 @@ export class ShelterScene {
     this.setPose('walk');
   }
 
+  /**
+   * Advance the 4-frame walk cycle (0 → 1 → 2 → 3 → 0) and play a footstep on each
+   * foot-contact frame. Returns false when the still single-pose walk is in use.
+   */
+  private stepWalkCycle(dt: number): boolean {
+    const sprite = this.travelerSprite;
+    if (!this.walkCycleReady() || this.currentPose !== 'walk' || !sprite) return false;
+    /* Wait until the walk sprite itself has loaded (never retexture the outgoing pose) */
+    if (!this.walkFrames.includes(sprite.texture)) return true;
+
+    const frameMs = this.walkSpeed ? STROLL_FRAME_MS : WALK_FRAME_MS;
+    this.walkFrameElapsed += dt;
+    while (this.walkFrameElapsed >= frameMs) {
+      this.walkFrameElapsed -= frameMs;
+      this.walkFrameIndex = (this.walkFrameIndex + 1) % this.walkFrames.length;
+      if (this.walkFrameIndex % 2 === 0) playFootstep();
+    }
+    sprite.texture = this.walkFrames[this.walkFrameIndex];
+    return true;
+  }
+
   private handleFloorPointerDown = (event: { global: { x: number; y: number } }): void => {
     if (this.interactionLock || !this.entryDone) return;
     const { x: nx, y: ny } = this.toNorm(event.global.x, event.global.y);
@@ -2204,10 +2260,7 @@ export class ShelterScene {
     this.interactionLock = true;
 
     const startAt = STAGE_REVEAL_MS + ENTRY_PAUSE_MS;
-    for (const ms of [startAt + 320, startAt + 980, startAt + 1640]) {
-      this.after(ms, playFootstep);
-    }
-
+    /* Footsteps come from the walk cycle's foot-contact frames (at the slower stroll pace) */
     this.after(startAt, () => {
       this.walkTo(
         idle.x,
@@ -2469,10 +2522,13 @@ export class ShelterScene {
         this.targetX += (dx / dist) * Math.min(speed, dist);
         this.targetY += (dy / dist) * Math.min(speed, dist);
         this.travelerFlipped = dx < 0;
-        this.footstepAccum += dt;
-        if (this.footstepAccum >= 380) {
-          this.footstepAccum = 0;
-          if (this.entryDone) playFootstep();
+        if (!this.stepWalkCycle(dt)) {
+          /* Single still stride (Reduce Motion / frames not loaded): steady footsteps */
+          this.footstepAccum += dt;
+          if (this.footstepAccum >= 380) {
+            this.footstepAccum = 0;
+            playFootstep();
+          }
         }
         this.layoutTraveler();
       }
@@ -2488,10 +2544,17 @@ export class ShelterScene {
       this.travelerSprite.scale.y = baseScale * breathScale;
     }
 
-    /* Walking bob (relative to travelerNode feet); calmer cadence on a slow stroll */
+    /* Walking bob (relative to travelerNode feet): lowest at each foot contact, highest mid-stride */
     if (this.currentPose === 'walk' && this.travelerSprite && !this.state.reduceMotion) {
-      const cadence = this.walkSpeed ? 0.55 : 1;
-      this.travelerSprite.y = -3 * Math.abs(Math.sin(this.elapsed * 8.5 * cadence));
+      if (this.walkFrames.includes(this.travelerSprite.texture)) {
+        const frameMs = this.walkSpeed ? STROLL_FRAME_MS : WALK_FRAME_MS;
+        const stride = ((this.walkFrameIndex % 2) + Math.min(1, this.walkFrameElapsed / frameMs)) / 2;
+        const amplitude = this.walkSpeed ? WALK_BOB_PX * 0.8 : WALK_BOB_PX;
+        this.travelerSprite.y = this.walkingTo ? -amplitude * Math.sin(Math.PI * stride) : 0;
+      } else {
+        const cadence = this.walkSpeed ? 0.55 : 1;
+        this.travelerSprite.y = -WALK_BOB_PX * Math.abs(Math.sin(this.elapsed * 8.5 * cadence));
+      }
     }
 
     /* Fire flames & particles */

@@ -8,9 +8,9 @@ import {
   playHover,
   unlock,
 } from '../game/audio/soundEngine.ts';
-import { exportSave, importSave } from '../game/engine/saveSystem.ts';
+import { exportBackup } from '../game/engine/backup.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
-import { SITES } from '../game/data/sites.ts';
+import { restoreBackupFile } from './backupImport.ts';
 
 export interface SettingsPopoverProps {
   onClose: () => void;
@@ -29,7 +29,6 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const setReduceMotion = useGameStore((s) => s.setReduceMotion);
   const getSaveSnapshot = useGameStore((s) => s.getSaveSnapshot);
-  const applyImportedSave = useGameStore((s) => s.applyImportedSave);
 
   const [musicVol, setMusicVol] = useState(getMusicVolume);
   const [sfxVol, setSfxVol] = useState(getSfxVolume);
@@ -81,8 +80,7 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
 
   const handleExport = () => {
     playClick();
-    const snap = getSaveSnapshot();
-    const filename = exportSave(snap);
+    const filename = exportBackup(getSaveSnapshot());
     showStatus('success', `Exported ${filename}`);
   };
 
@@ -96,19 +94,8 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
     e.target.value = '';
     if (!file) return;
 
-    const result = await importSave(file);
-    if (!result.ok) {
-      showStatus('error', `Could not load save — ${result.error}`);
-      return;
-    }
-
-    const parsed = result.save;
-    applyImportedSave(parsed);
-    const siteName = SITES.find((s) => s.id === parsed.chosenSite)?.name;
-    const loaded = siteName
-      ? `Loaded Day ${parsed.day} · ${siteName}`
-      : `Loaded Day ${parsed.day} save data`;
-    showStatus('success', [loaded, ...result.warnings].join(' '));
+    const result = await restoreBackupFile(file);
+    showStatus(result.ok ? 'success' : 'error', result.message);
   };
 
   return (
@@ -226,8 +213,8 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
       >
         <div style={{ paddingTop: '6px' }}>
           <div style={{ fontSize: '0.86rem', fontWeight: 500 }}>Reduce Motion</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            Gentle fades instead of zoom &amp; bob
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+            Calms camera zoom, elevator shake, particles, fire flicker, and UI animations.
           </div>
         </div>
         <button
@@ -265,7 +252,7 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
             onMouseEnter={playHover}
             style={{ flex: 1, fontSize: '0.78rem', padding: '6px 8px' }}
           >
-            Export Save (.json)
+            Export Backup (.json)
           </button>
           <button
             type="button"
@@ -274,7 +261,7 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
             onMouseEnter={playHover}
             style={{ flex: 1, fontSize: '0.78rem', padding: '6px 8px' }}
           >
-            Import Save (.json)
+            Load Backup (.json)
           </button>
         </div>
 

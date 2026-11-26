@@ -20,6 +20,8 @@ export const SITES: Site[] = [
       'A past traveler tied a torn canvas flap over this mossy culvert and built a small stone fire ring outside. Its thick concrete arch already blocks the rain\u2014it just needs sturdy repairs.',
     leftBehind: 'Torn tarp flap, plank windbreak, stone fire ring',
     mode: 'cozy',
+    comingSoon: true,
+    unlockHint: 'Coming soon',
     silhouetteColor: 0x8aad7a,
   },
   {
@@ -30,6 +32,8 @@ export const SITES: Site[] = [
       'Tucked high in an ancient oak sits a weathered, moss-draped treehouse with missing roof slats and a frayed rope ladder. With fresh timber and care, this crooked perch can become home.',
     leftBehind: 'Crooked plank platform, frayed rope ladder, hanging lantern',
     mode: 'cozy',
+    comingSoon: true,
+    unlockHint: 'Coming soon',
     silhouetteColor: 0x5b7d4e,
   },
   {

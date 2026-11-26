@@ -113,6 +113,7 @@ export function emptyStats(): PlayerStats {
 }
 
 export function isSiteUnlocked(site: Site, stats: PlayerStats): boolean {
+  if (site.comingSoon) return false;
   const req = site.unlockRequirement;
   return !req || stats[req.stat] >= req.count;
 }

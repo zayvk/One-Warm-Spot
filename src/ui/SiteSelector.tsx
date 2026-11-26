@@ -297,7 +297,7 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
                 letterSpacing: '0.08em',
               }}
             >
-              Locked — earn milestones to unlock
+              Locked — coming soon, or earned through milestones
             </p>
             <div className="ows-site-grid">
               {lockedSites.map((site) => (

@@ -47,8 +47,8 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
 | ID | Name | Status | Tagline | Left Behind |
 |----|------|--------|---------|-------------|
 | `terrace` | Old Apartment Terrace | ✅ Unlocked · 🎮 Interactive scene | Sunlit rooftop, half-pitched camp | Sagging tarp, crate table, salvaged planks |
-| `pipe` | Giant Storm Pipe | ✅ Unlocked | Curved walls, quiet roadside camp | Torn tarp flap, plank windbreak, stone fire ring |
-| `tree` | Abandoned Treehouse | ✅ Unlocked | Half-broken canopy refuge | Crooked plank platform, frayed rope ladder, hanging lantern |
+| `pipe` | Giant Storm Pipe | 🔒 Coming soon | Curved walls, quiet roadside camp | Torn tarp flap, plank windbreak, stone fire ring |
+| `tree` | Abandoned Treehouse | 🔒 Coming soon | Half-broken canopy refuge | Crooked plank platform, frayed rope ladder, hanging lantern |
 | `countryhouse` | Abandoned Country House | 🔒 Survive 7 days | Ivy cottage, propped porch | Propped porch beam, patched window tarp, crate & lantern |
 | `farmhouse` | Abandoned Farmhouse | 🔒 2 upgrades | Fallow beds, timber barn | Porch tarp, salvaged fence planks, watering can & lantern |
 
@@ -61,20 +61,20 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
 | `beachhouse` | Abandoned Beachhouse | 🔒 Survive 14 days | Stilt cabin, salt breeze | Torn porch tarp, driftwood fire ring, wooden crate |
 | `island` | Abandoned Island Camp | 🔒 4 upgrades | Driftwood jetty, pine shore | Collapsed branch tent, stone fire ring, supply crate |
 
-> Only the Terrace has an interactive scene today. The other 8 shelters currently show their painted background with the traveler on a generic walkable floor (no hotspots) until their own scene configs are authored.
+> **Terrace-only focus:** **Old Apartment Terrace** is currently the single playable shelter while the core mechanics are perfected. Giant Storm Pipe and Abandoned Treehouse show as **"Coming soon"** and stay locked regardless of milestones; the other 6 keep their milestone requirements. Only the Terrace has an interactive scene today.
 
 ---
 
 ## Player Identity & Onboarding Flow
 
-1. **Title Screen** — Game title, Start / Continue / About buttons, shared menu music.
+1. **Title Screen** — The painted **One Warm Spot** wordmark (ivy & lantern) floating over the sunrise sky, Start / Continue / New Game, plus **About** and **Load Backup** side by side, and the shared menu music. *Load Backup* opens a `.json` picker; a restored run appears straight away as **Continue**, with a friendly toast either way.
 2. **Shelter Selector** — Traveler picker (Female / Male sprite portraits), Cozy / Challenge mode tabs, 9 shelter cards with hover background crossfade and procedural ambience.
 3. **Arrival Cutscene** — For most shelters, a ~3.5s atmospheric Ken Burns zoom on the shelter background with soft footsteps, swelling ambience and a Day 1 caption. **The Terrace arrives by the old apartment lift** in a ~5.2s, 3-beat illustrated vignette:
    1. **The Quiet Lobby** — a sunlit, ivy-draped hallway; a slow push-in toward the open elevator with a few soft footsteps.
    2. **Riding Up** — inside the old lift (green-painted walls, wood wainscot, brass rails) with the doors closed; a warm amber brass indicator ticks **1 → 2 → 3 → 4 → R** with tiny relay clicks over a low mechanical hum and a gentle 1–2px tremor.
    3. **Doors Open to Sunlight** — a vintage brass *"ding!"*, the doors slide apart onto the sunlit rooftop, the Terrace ambience swells, an *"Old Apartment Terrace"* caption appears, and the view steps through the doorway into the live shelter, where the traveler walks out of the rooftop stairwell door.
    Every cutscene is skippable at any moment (Skip button, click, `Space` / `Enter` / `Escape`) and respects Reduce Motion (no push-ins, tremor or sliding — calm fades instead).
-4. **Interactive Shelter** — The point-and-click painted scene (see below), with a minimal floating HUD: a **← Title** button with the shelter name (top-left), the centered **Found Materials Pouch**, a bottom-left **Time-Dial & Test-Tube Vitality HUD** (`Day N`, 3-phase sky dial, Stamina & Strength meters), and a tiny bottom-center **Build Bar** while in-scene upgrades remain. Progress auto-saves.
+4. **Interactive Shelter** — The point-and-click painted scene (see below), with a minimal floating HUD: a **← Title** button with the lantern emblem and shelter name (top-left), the centered **Found Materials Pouch**, a bottom-left **Vitality Medallion** (`Day N` plaque, bronze sky medallion, Stamina & Strength bars), and a tiny bottom-center **Build Bar** while in-scene upgrades remain. If the stage art needs a moment to load, a softly pulsing lantern emblem waits in its place. Progress auto-saves.
 
 ---
 
@@ -100,7 +100,7 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
   - A full day lasts **12 real-time minutes** (`240s` per phase: **Day** Full Sun → **Dusk** Sunset → **Night** Half Moon), paused when outside the shelter or inside Settings. Night holds calmly without harsh pass-outs until the player chooses to sleep.
   - **Stamina (`0–100`, restedness)** is gently spent by clearing weeds (`-6`), searching boxes (`-10`), and building upgrades (`-12`), and restored by resting or sleeping.
   - **Strength (`0–100`, nourishment/resilience)** eases gently across phase shifts (`-8`) and overnight (`-10`), non-lethal and zero-stress.
-  - Displayed in the bottom-left **Time-Dial + Test-Tube Vitality HUD**, paired with **twinkling night stars**, **drifting warm fireflies**, and brighter fire pit / lantern glow pools at night.
+  - Displayed in the bottom-left **Vitality Medallion** — a calm, Witcher 3–inspired antique-bronze bezel framing a recessed sky window: a radiant full sun on warm gold by Day, a big sunset sun dipping over a burnt-amber & rose horizon at Dusk, and a luminous half moon over a starry indigo sky at Night. A slim ring inside the bezel tracks the phase, a small **Day N** plaque sits above it, and smoked-glass bars extend to the right for **Stamina** (sage-emerald) and **Strength** (hearth-amber) with `value/100` readouts. In the scene it's paired with **twinkling night stars**, **drifting warm fireflies**, and brighter fire pit / lantern glow pools at night.
 - **In-scene building (no menu drawers):** Spend found materials directly on the rooftop. A tiny bottom-center **Build Bar** shows a frosted chip for each unbuilt, unlocked upgrade with its material cost; chips you can't afford yet are dimmed. Planter and barrel spots also glow as soft blueprint markers on the floor that can be clicked directly. Building walks the traveler over, plays soft mallet foley and a warm chime, deducts the materials from the pouch, and pops the new prop in:
   - **🔥 Stack Firepit Logs** (2 🪵) — fire pit Tier 1 → 2, with a wood-stacking knock.
   - **🧱 Stone-Ring Hearth** (2 🪵 + 1 🔩) — appears once the logs are stacked; fire pit Tier 2 → 3, with stony clacks as the ring is set.
@@ -167,6 +167,10 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 ## Art & Audio Direction
 
 - **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP backgrounds, stage backdrops, cutscene plates, character pose sprites, and interactive prop sprites organized under `public/source/`. Target <5 MB initial browser payload. Interactive stages stay locked to their painted floor on any window shape (16:9, ultrawide or portrait).
+- **Brand:** A painted ivy-and-lantern **wordmark** (`public/source/ui/logo-title.webp`) on the Title Screen, and a round **lantern emblem** (`logo-emblem.webp`) used as the About crest, the shelter HUD badge and the loading emblem. Browser tab icon: `favicon.png`; home-screen icon: `apple-touch-icon.png`.
+- **About & copy:** Player-facing and warm — a short story intro, three "How to play" tips, and a quiet `One Warm Spot · v0.1` footer. No technical wording.
+- **Comfort & accessibility:** **Reduce Motion** (Settings) calms camera zoom, elevator shake, particles, fire flicker and UI animations: steady fire glow with no sparks or smoke, still fireflies and stars, no leaf bursts, reward text that fades in place, no pouch bounce, and instant sky/HUD transitions.
+- **Backups:** Export / Load Backup saves a single `.json` with the whole run — day, vitality, materials, milestone stats **and the Terrace rooftop** (fire pit tier, layout, searched boxes, cleared weeds, builds). Older backups still load; the rooftop just starts fresh.
 - **Characters:** Understated, faceless 3/4-view travelers in ragged earthy gear, painted to match the backdrops.
 - **Audio:** Menu music tries an optional `public/source/audio/music-menu.mp3`; since that file isn't shipped yet, the **procedural warm-pad chord loop** is what currently plays. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle that grows fuller with each fire pit tier, fire extinguish hiss, box rummage, weed snip, bedroll sleep, rest chime, building mallet taps, log-stacking knocks, hearth stone clacks, rain-barrel water-drop chimes, and the Terrace lift's low hum, door slides, floor-tick relay clicks and brass arrival ding) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover and softly while in the shelter.
 

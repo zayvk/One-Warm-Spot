@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import BackgroundStage from './BackgroundStage.tsx';
 import AboutModal from './AboutModal.tsx';
 import ConfirmOverwriteModal from './ConfirmOverwriteModal.tsx';
-import { BG_TITLE } from '../game/data/media.ts';
+import { BG_TITLE, UI_ASSETS } from '../game/data/media.ts';
 import { SITES } from '../game/data/sites.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
-import { playHover, playClick } from '../game/audio/soundEngine.ts';
+import { playHover, playClick, playClaim, playLocked } from '../game/audio/soundEngine.ts';
+import { restoreBackupFile } from './backupImport.ts';
 
 export interface TitleScreenProps {
   onStart: () => void;
@@ -49,6 +50,29 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
     setShowAbout(true);
   };
 
+  const backupInputRef = useRef<HTMLInputElement>(null);
+  const pushNotice = useGameStore((s) => s.pushNotice);
+
+  const handleLoadBackupClick = () => {
+    playClick();
+    backupInputRef.current?.click();
+  };
+
+  /* Restored runs show up right away as "Continue" */
+  const handleBackupFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const result = await restoreBackupFile(file);
+    if (result.ok) {
+      playClaim();
+      pushNotice({ icon: '📦', title: 'Backup restored', body: result.message, tone: 'unlock' });
+    } else {
+      playLocked();
+      pushNotice({ icon: '⚠️', title: "That backup couldn't be loaded", body: result.message, tone: 'build' });
+    }
+  };
+
   return (
     <>
       <BackgroundStage media={BG_TITLE} />
@@ -71,22 +95,14 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
         }}
       >
         <div className="ows-title-scrim">
-          {/* Game title */}
-          <h1
-            style={{
-              fontFamily: 'var(--font-game-title)',
-              fontSize: 'clamp(2.8rem, 6.5vw, 5rem)',
-              fontWeight: 700,
-              color: '#fff',
-              textShadow:
-                '0 3px 22px rgba(48, 38, 30, 0.55), 0 1px 4px rgba(48, 38, 30, 0.4)',
-              letterSpacing: '0.02em',
-              marginBottom: 'var(--space-sm)',
-              lineHeight: 1.12,
-            }}
-          >
-            One Warm Spot
-          </h1>
+          {/* Game title: painted wordmark, with a hidden heading for screen readers */}
+          <h1 className="ows-sr-only">One Warm Spot</h1>
+          <img
+            src={UI_ASSETS.logoTitle}
+            alt="One Warm Spot"
+            draggable={false}
+            className="ows-title-logo"
+          />
 
           {/* Tagline */}
           <p
@@ -110,7 +126,7 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
               gap: 'var(--space-sm)',
               alignItems: 'center',
               width: '100%',
-              maxWidth: '220px',
+              maxWidth: '260px',
             }}
           >
             {hasSave ? (
@@ -167,21 +183,51 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={handleAboutOpen}
-              onMouseEnter={playHover}
-              onFocus={playHover}
-              className="ows-btn-glass"
-              style={{
-                padding: '9px var(--space-lg)',
-                fontSize: '0.9rem',
-                borderRadius: 'var(--radius-md)',
-                width: '100%',
+            <div style={{ display: 'flex', gap: 'var(--space-sm)', width: '100%' }}>
+              <button
+                type="button"
+                onClick={handleAboutOpen}
+                onMouseEnter={playHover}
+                onFocus={playHover}
+                className="ows-btn-glass"
+                style={{
+                  flex: 1,
+                  padding: '9px var(--space-sm)',
+                  fontSize: '0.9rem',
+                  borderRadius: 'var(--radius-md)',
+                }}
+              >
+                About
+              </button>
+              <button
+                type="button"
+                onClick={handleLoadBackupClick}
+                onMouseEnter={playHover}
+                onFocus={playHover}
+                className="ows-btn-glass"
+                title="Resume from a .json backup"
+                style={{
+                  flex: 1,
+                  padding: '9px var(--space-sm)',
+                  fontSize: '0.9rem',
+                  borderRadius: 'var(--radius-md)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Load Backup
+              </button>
+            </div>
+            <input
+              ref={backupInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={(e) => {
+                void handleBackupFile(e);
               }}
-            >
-              About
-            </button>
+              style={{ display: 'none' }}
+              aria-hidden="true"
+              tabIndex={-1}
+            />
           </div>
         </div>
       </div>

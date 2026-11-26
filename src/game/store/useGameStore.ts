@@ -45,7 +45,7 @@ import {
   type ScavengeResult,
 } from '../engine/scavenge.ts';
 import { morningWaterBonus, rollWeather } from '../engine/weather.ts';
-import { clearTerraceState } from '../engine/terraceState.ts';
+import { clearTerraceState, saveTerraceState, type TerraceState } from '../engine/terraceState.ts';
 import {
   advancePhaseClock,
   applyRest,
@@ -147,7 +147,7 @@ function statsFromSave(save: SaveState): PlayerStats {
 }
 
 function milestoneSitesUnlocked(stats: PlayerStats): SiteId[] {
-  return getUnlockedSiteIds(stats).filter((id) => !['terrace', 'pipe', 'tree'].includes(id));
+  return getUnlockedSiteIds(stats).filter((id) => SITES.find((s) => s.id === id)?.unlockRequirement);
 }
 
 let noticeSeq = 0;
@@ -214,6 +214,10 @@ export interface GameState {
   resetGame: (opts?: { clearMilestones?: boolean }) => void;
   getSaveSnapshot: () => SaveState;
   applyImportedSave: (save: SaveState) => void;
+  /** Restore a full backup: run save + stats + Terrace rooftop (`null` = start the rooftop fresh) */
+  applyImportedBackup: (save: SaveState, terrace: TerraceState | null) => void;
+  /** Bumped when the shelter scene must reload its persisted state (e.g. after a backup import) */
+  sceneRevision: number;
   dismissNotice: (id: number) => void;
   /** Queue a gentle toast (e.g. in-scene discoveries) */
   pushNotice: (notice: Omit<Notice, 'id'>) => void;
@@ -288,6 +292,7 @@ export const useGameStore = create<GameState>()((set, get) => {
     announcedUnlocks: initialAnnounced,
     notices: [],
     timePaused: false,
+    sceneRevision: 0,
     reduceMotion: getInitialReduceMotion(),
 
     chooseSite(id: SiteId) {
@@ -536,6 +541,13 @@ export const useGameStore = create<GameState>()((set, get) => {
       const imported = normalized.stats ?? statsFromSave(normalized);
       commitStats(mergeStats(get().stats, imported));
       get()._save();
+    },
+
+    applyImportedBackup(save: SaveState, terrace: TerraceState | null) {
+      if (terrace) saveTerraceState(terrace);
+      else clearTerraceState();
+      get().applyImportedSave(save);
+      set({ sceneRevision: get().sceneRevision + 1 });
     },
 
     dismissNotice(id: number) {

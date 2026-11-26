@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { playClick, playHover } from '../game/audio/soundEngine.ts';
-import { exportSave } from '../game/engine/saveSystem.ts';
+import { exportBackup } from '../game/engine/backup.ts';
 import type { SaveState } from '../game/types/game.ts';
 
 export interface ConfirmResetModalProps {
@@ -32,7 +32,7 @@ export default function ConfirmResetModal({
 
   const handleExportBackup = useCallback(() => {
     playClick();
-    setBackupMsg(`Saved backup as ${exportSave(saveState)}`);
+    setBackupMsg(`Saved backup as ${exportBackup(saveState)}`);
   }, [saveState]);
 
   const handleConfirm = useCallback(() => {

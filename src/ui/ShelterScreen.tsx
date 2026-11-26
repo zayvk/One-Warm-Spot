@@ -4,6 +4,7 @@ import type { SceneBuildState } from '../game/renderer/shelterScene.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { SITES } from '../game/data/sites.ts';
 import { RESOURCES } from '../game/data/resources.ts';
+import { UI_ASSETS } from '../game/data/media.ts';
 import { getSceneConfig } from '../game/data/scenes/index.ts';
 import { playClick, playHover, startSiteAmbience } from '../game/audio/soundEngine.ts';
 import type { ResourceId } from '../game/types/game.ts';
@@ -108,6 +109,14 @@ export default function ShelterScreen({ onBackToTitle }: ShelterScreenProps) {
         >
           ← Title
         </button>
+        <img
+          src={UI_ASSETS.logoEmblem}
+          alt=""
+          width={26}
+          height={26}
+          draggable={false}
+          style={{ flexShrink: 0, filter: 'drop-shadow(0 2px 5px rgba(48, 38, 30, 0.45))' }}
+        />
         <span
           style={{
             fontFamily: 'var(--font-game-title)',

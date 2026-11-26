@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { playClick, playHover } from '../game/audio/soundEngine.ts';
-import { exportSave } from '../game/engine/saveSystem.ts';
+import { exportBackup } from '../game/engine/backup.ts';
 import type { SaveState } from '../game/types/game.ts';
 
 export interface ConfirmOverwriteModalProps {
@@ -31,7 +31,7 @@ export default function ConfirmOverwriteModal({
 
   const handleExportBackup = useCallback(() => {
     playClick();
-    const filename = exportSave(saveState);
+    const filename = exportBackup(saveState);
     setBackupMsg(`Saved backup as ${filename}`);
   }, [saveState]);
 

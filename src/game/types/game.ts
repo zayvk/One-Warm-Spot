@@ -39,9 +39,11 @@ export interface Site {
   name: string;
   tagline: string;
   description: string;
-  /** Omitted for the three Day 1 starter shelters */
+  /** Omitted for always-open starter shelters */
   unlockRequirement?: UnlockRequirement;
   unlockHint?: string;
+  /** Not playable yet in this build (stays locked regardless of milestones) */
+  comingSoon?: boolean;
   /** Traces left behind by a previous traveler */
   leftBehind?: string;
   /** Which mode tab this site belongs to */

@@ -127,6 +127,39 @@ export function loadTerraceState(): TerraceState {
   }
 }
 
+/** The stored rooftop as-is (no fresh layout generated), or `null` if none */
+export function readStoredTerraceState(): TerraceState | null {
+  try {
+    const raw = localStorage.getItem(TERRACE_STATE_KEY);
+    return raw ? parseTerraceState(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Strict check for rooftop state carried inside a backup file.
+ * Returns the normalized state, or `null` if any field is damaged.
+ */
+export function validateTerraceState(v: unknown): TerraceState | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const obj = v as Record<string, unknown>;
+  const isList = (x: unknown) => Array.isArray(x) && x.every((s) => typeof s === 'string');
+  if (typeof obj.fireLit !== 'boolean') return null;
+  if (obj.firepitTier !== 1 && obj.firepitTier !== 2 && obj.firepitTier !== 3) return null;
+  if (!isList(obj.searchedBoxes) || !isList(obj.clearedWeeds) || !isList(obj.builtProps)) return null;
+  const spawns = obj.spawns === null ? null : parseSpawns(obj.spawns);
+  if (obj.spawns !== null && !spawns) return null;
+  return {
+    fireLit: obj.fireLit,
+    searchedBoxes: [...(obj.searchedBoxes as string[])],
+    clearedWeeds: [...(obj.clearedWeeds as string[])],
+    builtProps: [...new Set((obj.builtProps as string[]).filter((id) => KNOWN_BUILDABLES.has(id)))],
+    firepitTier: obj.firepitTier,
+    spawns,
+  };
+}
+
 export function saveTerraceState(s: TerraceState): void {
   try {
     localStorage.setItem(TERRACE_STATE_KEY, JSON.stringify(s));

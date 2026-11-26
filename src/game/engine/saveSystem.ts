@@ -25,7 +25,6 @@ const PROGRESS_KEY = 'one-warm-spot-progress';
 /** v2: mode/gender · v3: day loop, lantern, stats · v4: weather, relics */
 export const SAVE_VERSION = 4;
 const MAX_DAY = 100_000;
-const MAX_IMPORT_BYTES = 512 * 1024;
 
 const VALID_SITE_IDS: ReadonlySet<string> = new Set<SiteId>([
   'terrace',
@@ -329,29 +328,4 @@ export function clearProgress(): void {
   }
 }
 
-/* ───── JSON export / import ───── */
-
-/** Export save as a downloadable JSON file */
-export function exportSave(state: SaveState): string {
-  const filename = `one-warm-spot-day${state.day}.json`;
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-  return filename;
-}
-
-/** Import a save file — returns the migrated save or a friendly error */
-export async function importSave(file: File): Promise<SaveCheck> {
-  if (file.size > MAX_IMPORT_BYTES) {
-    return { ok: false, error: "That file is too large to be a One Warm Spot save." };
-  }
-  try {
-    return parseSaveText(await file.text());
-  } catch {
-    return { ok: false, error: "That file couldn't be read." };
-  }
-}
+/* ───── JSON backup files live in `backup.ts` (save + stats + Terrace rooftop) ───── */

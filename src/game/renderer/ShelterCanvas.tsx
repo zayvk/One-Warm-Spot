@@ -1,6 +1,7 @@
-import { useEffect, useRef, useCallback, useImperativeHandle, type Ref } from 'react';
+import { useEffect, useRef, useCallback, useImperativeHandle, useState, type Ref } from 'react';
 import { Application } from 'pixi.js';
 import { useGameStore } from '../store/useGameStore.ts';
+import { UI_ASSETS } from '../data/media.ts';
 import { computeCozyIndex, spendResources } from '../engine/progression.ts';
 import {
   BOX_STAMINA_COST,
@@ -51,6 +52,9 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
   const lanternLit = useGameStore((s) => s.lanternLit);
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const gender = useGameStore((s) => s.travelerGender);
+  const sceneRevision = useGameStore((s) => s.sceneRevision);
+  /* Which scene revision has revealed its stage (drives the loading emblem) */
+  const [readyRevision, setReadyRevision] = useState(-1);
 
   const stateRef = useRef<ShelterSceneState | null>(null);
 
@@ -141,6 +145,9 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
         scene.setRestCallback(handleRest);
         scene.setSleepCallback(handleSleep);
         scene.setBuildStateCallback((s) => buildStateCbRef.current?.(s));
+        scene.setReadyCallback(() => {
+          if (!disposed) setReadyRevision(sceneRevision);
+        });
         sceneRef.current = scene;
         observer.observe(container);
       });
@@ -152,19 +159,30 @@ export default function ShelterCanvas({ ref, onBuildStateChange }: ShelterCanvas
       scene = null;
       sceneRef.current = null;
     };
-  }, [handleReward, handleBuild, handleNotice, handleRest, handleSleep]);
+    /* `sceneRevision` remounts the scene so it reloads restored rooftop state */
+  }, [handleReward, handleBuild, handleNotice, handleRest, handleSleep, sceneRevision]);
+
+  const ready = readyRevision === sceneRevision;
 
   return (
-    <div
-      ref={containerRef}
-      aria-label="Your shelter — click to explore"
-      role="application"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        overflow: 'hidden',
-        cursor: 'crosshair',
-      }}
-    />
+    <>
+      <div
+        ref={containerRef}
+        aria-label="Your shelter — click to explore"
+        role="application"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          overflow: 'hidden',
+          cursor: 'crosshair',
+        }}
+      />
+      {/* Gentle lantern emblem while the stage art decodes (only appears if it takes a moment) */}
+      {!ready && (
+        <div className="ows-scene-loader" aria-hidden="true">
+          <img src={UI_ASSETS.logoEmblem} alt="" width={72} height={72} draggable={false} />
+        </div>
+      )}
+    </>
   );
 }

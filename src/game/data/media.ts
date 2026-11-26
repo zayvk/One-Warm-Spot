@@ -119,6 +119,15 @@ export const SCENE_PROPS = {
 
 export type PropId = keyof typeof SCENE_PROPS;
 
+/* ───── Brand / UI Art ───── */
+
+export const UI_ASSETS = {
+  /** Full "One Warm Spot" wordmark with ivy & lantern (Title Screen) */
+  logoTitle: '/source/ui/logo-title.webp',
+  /** Round lantern crest (About header, HUD badge, loading emblem) */
+  logoEmblem: '/source/ui/logo-emblem.webp',
+} as const;
+
 /* ───── Arrival Cutscene Art ───── */
 
 /** Terrace elevator arrival: lobby → riding up → doors open onto the roof */

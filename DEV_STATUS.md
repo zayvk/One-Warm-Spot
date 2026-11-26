@@ -26,12 +26,14 @@
 One-Warm-Spot/
 ├── GAME_CONTEXT.md              # Creative & design bible
 ├── DEV_STATUS.md                # This file — architecture & tracker
-├── index.html                   # Entry HTML (loads Google Fonts)
+├── index.html                   # Entry HTML (Google Fonts, favicon.png + apple-touch-icon.png)
 ├── package.json
 ├── tsconfig.json / .app / .node # TypeScript project references, strict: true
 ├── vite.config.ts
 ├── public/
+│   ├── favicon.png / apple-touch-icon.png  # Browser tab & home-screen icons (favicon.svg is no longer linked)
 │   └── source/                  # All active art & audio assets live here
+│       ├── ui/                  # Brand art: logo-title.webp (Title wordmark), logo-emblem.webp (lantern crest)
 │       ├── backgrounds/         # Background images (bg-title, bg-valley, bg-terrace...bg-island.webp)
 │       ├── sprites/             # Character pose sprites ({female,male}-{idle,walk,search,sit,sleep}.webp)
 │       ├── scenes/              # Interactive stage backdrops (terrace-stage.webp — v2 with stairwell/lift bulkhead)
@@ -64,7 +66,8 @@ One-Warm-Spot/
     │   │   ├── progression.ts   # Pure rules: time-of-day, Cozy Index, upgrade status/build, canAfford/spendResources, site unlocks
     │   │   ├── scavenge.ts      # Pure runScavenge(), trip availability, capped resource adds
     │   │   ├── weather.ts       # Daily weather roll + soft-rain water bonus
-    │   │   ├── saveSystem.ts    # v4 save: strict validation, migration, persistent progress, JSON import/export
+    │   │   ├── saveSystem.ts    # v4 save: strict validation, migration, persistent progress
+    │   │   ├── backup.ts        # .json backups: SaveState (+ stats) + Terrace `terraceState`; strict validate, export/import
     │   │   ├── terraceState.ts  # `ows_terrace_state` parse/load/save/clear (fire, boxes, weeds, builtProps, firepitTier, spawns)
     │   │   ├── terraceSpawns.ts # Pure seeded box & weed layout generator + `findSpawnProblems` validator
     │   │   └── __tests__/       # Vitest suites (save, scavenging & modes, progression & unlocks, Terrace v2)
@@ -76,12 +79,13 @@ One-Warm-Spot/
     │       ├── ShelterCanvas.tsx # React bridge: Pixi Application + ResizeObserver + reward/build/notice bridges + requestBuild handle
     │       └── shelterScene.ts   # Data-driven point-and-click Pixi scene: stage-space (cover rect) mapping, backdrop, pose crossfades, hotspots, obstacles, in-scene builds, particles
     └── ui/
-        ├── TitleScreen.tsx           # Upper-sky title block + radial scrim + Continue/New Game/About
+        ├── TitleScreen.tsx           # Painted logo-title wordmark (+ sr-only h1) + Continue/New Game + About / Load Backup
+        ├── backupImport.ts           # Shared `restoreBackupFile()` used by Title Load Backup & Settings import
         ├── SiteSelector.tsx          # Header bar, traveler sprite portraits, 3/2/1 responsive shelter cards
         ├── ArrivalCutscene.tsx       # Cutscene shell (fade-out, Skip button, Space/Enter/Escape); Ken Burns fade for most shelters
         ├── TerraceLiftCutscene.tsx   # 3-beat Terrace lift arrival (lobby push-in → lift ride 1→R → doors open), reduce-motion aware
-        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + Pouch HUD + VitalityDialHud + Build Bar
-        ├── VitalityDialHud.tsx       # Bottom-left circular 3-phase Time Dial + Day crest + Stamina/Strength glass test-tube capsule
+        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + emblem badge + Pouch HUD + VitalityDialHud + Build Bar
+        ├── VitalityDialHud.tsx       # Bottom-left bronze Vitality Medallion (phase sky window + progress ring + Day plaque) + smoked-glass Stamina/Strength bars
         ├── BuildBar.tsx              # Bottom-center frosted chips for unbuilt, unlocked (`requires`) in-scene upgrades (dimmed when unaffordable)
         ├── TopBar.tsx                # 💤 Dormant M1 HUD bar (unmounted — see "Archived / Unmounted M1 Files")
         ├── UpgradePanel.tsx          # 💤 Dormant M1 Upgrade drawer (unmounted)
@@ -89,9 +93,9 @@ One-Warm-Spot/
         ├── SurvivalKitPanel.tsx      # 💤 Dormant M1 Survival Kit / Field Journal drawer (unmounted)
         ├── ConfirmResetModal.tsx     # 💤 Dormant in-shelter Reset Save confirmation (unmounted)
         ├── NoticeToasts.tsx          # Gentle toasts (Morning of Day N, new shelter unlocked, stairwell door)
-        ├── SettingsPopover.tsx       # Top-right popover: Music/SFX sliders, Reduce Motion, Save export/import
+        ├── SettingsPopover.tsx       # Top-right popover: Music/SFX sliders, Reduce Motion (+ helper line), Export / Load Backup
         ├── ConfirmOverwriteModal.tsx # Safety modal before overwriting an existing saved shelter
-        ├── AboutModal.tsx            # Frosted-glass world intro modal
+        ├── AboutModal.tsx            # Player-facing About: emblem crest, 2-paragraph story, 3 How-to-play tips, v0.1 footer
         ├── BackgroundStage.tsx       # Full-viewport crossfade background (image/video/gradient)
         └── AudioToggle.tsx           # Floating Settings gear + Mute/Unmute cluster
 ```
@@ -172,9 +176,9 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - **Strict validation (`findSaveProblem` / `validateSave` / `parseSaveText`)**: rejects payloads with a friendly, player-facing reason — unreadable JSON, missing/unknown/future `version`, non-integer or out-of-range `day`, unknown shelter / mode / traveler / time of day / weather, negative or fractional materials, damaged upgrade/relic lists, flags or stats. Imports over 512 KB are refused.
 - **Migration (`migrateSave`)**: v2 → v3 maps the legacy `'tarp-pitched'` flag onto `shell-1` and fills day-loop defaults; v3 → v4 adds `weather: 'clear'` and `discoveredRelics: []`. Unknown or orphaned upgrades (tier 2 without tier 1) and unknown relics are dropped, materials are capped at storage limits, and each clean-up is reported as a warning (shown after import). Migrated saves are re-written on load.
 - **Persistent progress:** `localStorage` key `one-warm-spot-progress` — `PlayerStats` (`maxDaysSurvived`, `totalUpgradesBuilt`, `totalExpansionsBuilt`) + already-announced unlocks. Survives starting a new shelter so unlocked sites stay claimable; pre-v3 players are seeded from their existing save.
-- **Terrace prop state (separate key):** `localStorage` key `ows_terrace_state` — `{ fireLit, searchedBoxes, clearedWeeds, builtProps, firepitTier, spawns }`, handled by `engine/terraceState.ts`. `parseTerraceState` tolerates legacy payloads (missing `firepitTier` → Tier 1, missing/damaged `spawns` → `null` = hand-placed default layout), drops unknown/duplicate build IDs, and treats missing/unreadable data as a fresh run with a newly generated layout; `loadTerraceState` writes the normalized state back so that layout survives refresh / Continue. It is **outside** the versioned `SaveState`, so it is not schema-validated and not included in JSON Export/Import. It is cleared by `chooseSite()` and `resetGame()` (fresh runs start with nothing built and a new layout).
+- **Terrace prop state (separate key):** `localStorage` key `ows_terrace_state` — `{ fireLit, searchedBoxes, clearedWeeds, builtProps, firepitTier, spawns }`, handled by `engine/terraceState.ts`. `parseTerraceState` tolerates legacy payloads (missing `firepitTier` → Tier 1, missing/damaged `spawns` → `null` = hand-placed default layout), drops unknown/duplicate build IDs, and treats missing/unreadable data as a fresh run with a newly generated layout; `loadTerraceState` writes the normalized state back so that layout survives refresh / Continue. It is **outside** the versioned `SaveState` in localStorage, but `.json` backups now bundle it (see Export/Import). It is cleared by `chooseSite()` and `resetGame()` (fresh runs start with nothing built and a new layout).
 - **Reset:** Currently reachable via **New Game / Start Fresh** on the Title screen and Shelter Selector (`ConfirmOverwriteModal`, with backup export). The in-shelter top-bar Reset Save (`ConfirmResetModal`, optional "forget milestones") is dormant with the rest of the M1 UI.
-- **Export/Import:** Settings import shows the exact validation error or the applied clean-ups; imported stats merge (max) into persistent progress.
+- **Export/Import (`engine/backup.ts`):** A backup file is the `SaveState` (which carries `stats`) plus `terraceState` (`fireLit`, `firepitTier`, `searchedBoxes`, `clearedWeeds`, `builtProps`, `spawns`). `exportBackup()` bundles the stored rooftop; `parseBackupText()` / `importBackup()` run the strict save checks, then `validateTerraceState()` (strict: any damaged rooftop field rejects the file with a friendly message). Older backups without `terraceState` still load — the rooftop starts fresh (with a warning if the run is on the Terrace). Restoring goes through the shared `restoreBackupFile()` (`ui/backupImport.ts`) → store `applyImportedBackup()`: writes/clears `ows_terrace_state`, applies the save, merges stats (max) into persistent progress, and bumps `sceneRevision` so a mounted `ShelterCanvas` rebuilds its scene from the restored rooftop. Available from **Title → Load Backup** (toast + immediate Continue) and **Settings → Export / Load Backup** (inline status). The overwrite/reset modals' "Export Backup" use the same full backup.
 
 ---
 
@@ -191,7 +195,7 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 | Modes | **Cozy:** standard start, ×1 yields, weather clear 50 · breezy 30 · rain 18 · storm 2. **Challenge:** ~60% start (🪵2 🔩2 🧵1 🪨1 🌱1 💧3), ×0.75 yields (floored), weather clear 34 · breezy 26 · rain 20 · storm 20. Zero permadeath, zero raids in both. Claiming a shelter uses that shelter's mode. |
 | Weather | Day 1 is always clear. **Soft Rain:** +1–2 💧 each morning (+1 with Rig Rain Collector). **Dust Squall:** closes scavenging for the morning unless Reinforce & Fortify Walls (`shell-2`) is built — afternoon reopens. |
 | Lantern | "Light the lantern" appears at dusk/night; once lit it glows every evening. |
-| Unlocks | Starters `terrace`, `pipe`, `tree`. Farmhouse 2 upgrades · Country House 7 days · Cave 10 days · Bunker 1 expansion · Beachhouse 14 days · Island 4 upgrades. Days survived = `day − 1`. |
+| Unlocks | Starter: `terrace` only. `pipe` & `tree` are `comingSoon` (always locked, "Coming soon") while the Terrace is the single focus shelter. Farmhouse 2 upgrades · Country House 7 days · Cave 10 days · Bunker 1 expansion · Beachhouse 14 days · Island 4 upgrades. Days survived = `day − 1`. |
 
 ---
 
@@ -200,9 +204,10 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - `npm test` (`vitest run`) — pure engine suites in `src/game/engine/__tests__/`:
   - `saveSystem.test.ts` — v2 → v4 and v3 → v4 migration, idempotent re-migration, clean-up warnings, 18 malformed-payload rejections with friendly messages.
   - `scavenge.test.ts` — seeded yield bounds per zone, Challenge ≤ Cozy for the same luck, Cozy Index bonus tiers, relic de-duplication, storm/dusk/energy availability, storage caps, mode starting materials, weather odds and rain bonus.
-  - `progression.test.ts` — all five upgrade statuses, prerequisite precedence, exact resource/energy deduction, Cozy Index totals, milestone unlocks for days / upgrades / expansions and one-time announcements.
+  - `progression.test.ts` — all five upgrade statuses, prerequisite precedence, exact resource/energy deduction, Cozy Index totals, Terrace as the only Day 1 shelter, "coming soon" shelters never unlocking, milestone unlocks for days / upgrades / expansions and one-time announcements.
   - `terraceScene.test.ts` — `spendResources` exact deduction & refusal; `ows_terrace_state` parsing (legacy payloads → Tier 1 + default layout, unknown/duplicate `builtProps`, `firepitTier` values, exact round-trip of tier + spawns, damaged spawns, fresh/unreadable data); balance (rooftop boxes + weeds cover every build plus fire pit Tier 2; a Challenge start + rooftop covers everything incl. Tier 3).
   - `terraceSpawns.test.ts` — 250 seeded layouts all pass `findSpawnProblems` (inside bounds, clear of walls/structures/entry path, no crowding), sprite composition (3 distinct boxes, two of each weed) and scale range, per-seed determinism, and the validator flagging crowded/off-floor props.
+  - `backup.test.ts` — full backup round-trip (save, stats, rooftop incl. tier & layout), older backups without `terraceState` (load + "starts fresh" warning), rejection of damaged rooftop fields, and friendly errors for unreadable/invalid saves.
 
 ---
 
@@ -277,6 +282,12 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - [x] **M2 · Calm rooftop entry:** traveler appears at the stairwell threshold (`entryPoint` 0.84, 0.69), pauses ~280ms after the reveal, then strolls ~2s to `idlePoint` (0.72, 0.71) with soft footsteps and a slower walk bob
 - [x] **M2 · Randomized per-run layout:** seeded `generateTerraceSpawns()` places the 3 boxes and 6 weeds (shuffled sprites, 0.92–1.08× scale, random flips) clear of walls, structures, the entry path and each other; persisted as `spawns` in `ows_terrace_state`, regenerated on Start Fresh / Reset
 - [x] **M2 · 3-tier fire pit:** `firepitTier` (1 twigs → 2 stacked logs → 3 stone-ring hearth) via `firepit-t2` / `firepit-t3` buildables (`requires` chain in `BuildBar`), `playLogStack` / `playStoneSet` foley, and per-tier `FIRE_TIERS` visuals (multi-tongue flames, coal bed, ember rate, smoke wisps, 1× / 1.35× / 1.75× glow) plus `setCampfireAudio(active, level)` crackle intensity. Box timber yields raised (Broken Boxes 3, Weathered Crates 4) so the rooftop covers every build plus Tier 2
+- [x] **Polish · Brand:** `favicon.png` + `apple-touch-icon.png` in `index.html`; `UI_ASSETS` (`logoTitle`, `logoEmblem`) — painted wordmark on the Title Screen (sr-only `<h1>` kept), emblem as About crest, shelter header badge, and a delayed pulsing loading emblem while the stage decodes (`ShelterScene.setReadyCallback`)
+- [x] **Polish · About:** player-facing story intro, 3 How-to-play tips, `One Warm Spot · v0.1` footer
+- [x] **Polish · Reduce Motion:** helper line in Settings; in-scene floating reward text fades in place; pouch bounce, medallion/bar transitions and loader pulse disabled in CSS (fire flicker, sparks/smoke, fireflies, stars and leaf bursts were already calmed)
+- [x] **Polish · Full-state backups:** `backup.ts` bundles `terraceState` into `.json` backups with strict validation + older-backup compatibility; **Load Backup** on the Title Screen; scene reloads via `sceneRevision` after a restore
+- [x] **Polish · Terrace-only focus:** `pipe` & `tree` marked `comingSoon` ("Coming soon") — the Terrace is the single unlocked shelter
+- [x] **Polish · Vitality Medallion HUD:** antique-bronze bezel with phase sky windows (full sun / sunset / half moon, crossfading), progress ring inside the bezel, Day plaque above (fixes the "Day 1" overlap), smoked-glass sage-emerald / hearth-amber bars
 - [ ] **M2:** Custom interactive scene configs & prop sprites for remaining shelters (`pipe`, `tree`, etc.)
 - [ ] **M2:** Tier 1–3 painted visual layer swaps & macro-build restoration integrated into interactive scenes
 - [ ] **M2:** Weather visuals & audio on the shelter scene (rain streaks, squall haze, rain-on-roof ambience)
@@ -285,7 +296,7 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 
 ### 🔧 Known Technical Backlog
 
-- [ ] **Save schema v5:** Fold `ows_terrace_state` (`fireLit`, `searchedBoxes`, `clearedWeeds`, `builtProps`) into the versioned `SaveState` with a v4 → v5 migration, so JSON Export/Import validates and preserves in-scene prop and build states (and per-site prop state scales to other shelters).
+- [ ] **Save schema v5:** Fold `ows_terrace_state` (`fireLit`, `searchedBoxes`, `clearedWeeds`, `builtProps`, `firepitTier`, `spawns`) into the versioned `SaveState` with a v4 → v5 migration (backups already bundle and validate it via `backup.ts`; this would unify localStorage too and let per-site prop state scale to other shelters).
 - [x] ~~**Sleep → day progression:** Connect the lean-to / timber-shelter sleep hotspot to `sleepToNextDay` / day progression and milestone unlocks once the new day rhythm is finalized.~~ → Implemented via `sleepAtShelter()` (`day + 1`, `"Day N · Morning"` toast, day-survival milestone checks) and `restAtShelter()`.
 - [ ] **Buildables → Cozy Index:** Decide how in-scene buildables relate to the 10 macro upgrades (Cozy Index, `totalUpgradesBuilt` milestones) — today they are purely visual + material sinks.
 - [ ] **Scene registry:** Replicate the data-driven `ShelterSceneConfig` pattern from `src/game/data/scenes/terrace.ts` to the remaining 8 shelters and register them in `getSceneConfig()` (`src/game/data/scenes/index.ts`).

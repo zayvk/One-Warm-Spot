@@ -60,10 +60,18 @@ describe('upgrade eligibility', () => {
 });
 
 describe('milestone unlocks', () => {
-  const starters = ['terrace', 'pipe', 'tree'];
+  const starters = ['terrace'];
 
-  it('keeps only the three starters open on Day 1', () => {
+  it('keeps only the Old Apartment Terrace open on Day 1', () => {
     expect(getUnlockedSiteIds(emptyStats())).toEqual(starters);
+  });
+
+  it('keeps “coming soon” shelters locked no matter how far the player gets', () => {
+    const maxed = { maxDaysSurvived: 999, totalUpgradesBuilt: 999, totalExpansionsBuilt: 999 };
+    const unlocked = getUnlockedSiteIds(maxed);
+    expect(unlocked).not.toContain('pipe');
+    expect(unlocked).not.toContain('tree');
+    expect(findNewUnlocks(maxed, []).map((s) => s.id)).not.toContain('pipe');
   });
 
   it('counts days survived as day − 1', () => {

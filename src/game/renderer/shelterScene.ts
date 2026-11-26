@@ -381,6 +381,7 @@ export class ShelterScene {
   private onBuild: BuildCallback | null = null;
   private onBuildState: BuildStateCallback | null = null;
   private onNotice: NoticeCallback | null = null;
+  private onReady: (() => void) | null = null;
 
   /* Fire, Stars, Fireflies & Burst Particles */
   private readonly starLayer = new Container();
@@ -572,6 +573,12 @@ export class ShelterScene {
     this.onNotice = cb;
   }
 
+  /** Fires once the stage backdrop is decoded and the scene starts fading in */
+  setReadyCallback(cb: () => void): void {
+    this.onReady = cb;
+    if (this.backdropReady) cb();
+  }
+
   /**
    * Walk over and build an in-scene upgrade. Returns false if the scene is busy
    * or the upgrade is unknown/already built/still locked; materials are paid on arrival.
@@ -715,6 +722,7 @@ export class ShelterScene {
   private revealStage(): void {
     this.backdropReady = true;
     if (this.state.reduceMotion) this.app.stage.alpha = 1;
+    this.onReady?.();
     if (!this.entryStarted) {
       this.entryStarted = true;
       this.startEntryAnimation();
@@ -1667,10 +1675,12 @@ export class ShelterScene {
     this.labelLayer.addChild(txt);
 
     const start = performance.now();
+    /* Reduce Motion: the reward line fades in place instead of drifting upward */
+    const rise = this.state.reduceMotion ? 0 : 44;
     const animate = () => {
       if (this.disposed || txt.destroyed) return;
       const p = (performance.now() - start) / 1300;
-      txt.y = anchor.y - 34 - p * 44;
+      txt.y = anchor.y - 34 - p * rise;
       txt.alpha = Math.max(0, 1 - Math.max(0, p - 0.25) / 0.75);
       if (p < 1) {
         requestAnimationFrame(animate);

@@ -11,6 +11,7 @@ import {
 import {
   DEFAULT_TERRACE_SPAWNS,
   TERRACE_BOX_IDS,
+  TERRACE_BUILD_SLOTS,
   TERRACE_SPAWN_RULES,
   TERRACE_STATIONS,
   TERRACE_WEED_IDS,
@@ -58,10 +59,17 @@ describe('generateTerraceSpawns', () => {
 
   it('keeps every box and weed clear of every station anchor and its stand spot', () => {
     const { aspect } = TERRACE_SPAWN_RULES;
-    const anchors = TERRACE_STATIONS.flatMap((s) => {
-      const pos = terraceScene.hotspots.find((h) => h.id === s.hotspotId)!.position;
-      return [pos, { x: pos.x + s.buildStandOffset.dx, y: pos.y + s.buildStandOffset.dy }];
-    });
+    const anchors = [
+      ...TERRACE_STATIONS.filter((s) => s.hotspotId).map((s) => {
+        const pos = terraceScene.hotspots.find((h) => h.id === s.hotspotId)!.position;
+        const stand = s.buildStandOffset ?? { dx: 0, dy: 0 };
+        return [pos, { x: pos.x + stand.dx, y: pos.y + stand.dy }];
+      }),
+      ...TERRACE_BUILD_SLOTS.map((slot) => [
+        slot.position,
+        { x: slot.position.x + slot.standOffset.dx, y: slot.position.y + slot.standOffset.dy },
+      ]),
+    ].flat();
     for (const seed of SEEDS) {
       for (const s of Object.values(generateTerraceSpawns(seed))) {
         for (const a of anchors) {
@@ -198,6 +206,8 @@ describe('regrowTerraceSpawns', () => {
   it('keeps the rooftop valid and within its 3-box / 6-weed caps across many cleared-out nights', () => {
     const rng = seededRng(2026);
     let state = rooftop(99, [], []);
+    let boxNights = 0;
+    let boxesRefreshed = 0;
     for (let day = 2; day <= 40; day++) {
       /* The traveler clears and searches everything each day */
       state = { ...state, clearedWeeds: [...TERRACE_WEED_IDS], searchedBoxes: [...TERRACE_BOX_IDS] };
@@ -205,8 +215,16 @@ describe('regrowTerraceSpawns', () => {
       state = out.state;
       expect(Object.keys(state.spawns!).sort()).toEqual([...TERRACE_BOX_IDS, ...TERRACE_WEED_IDS].sort());
       expect(6 - state.clearedWeeds.length).toBe(out.regrownWeeds.length);
-      expect(3 - state.searchedBoxes.length).toBe(day % 2 === 0 ? 1 : 0);
+      expect(out.regrownWeeds.length).toBeGreaterThanOrEqual(1);
+      /* Boxes only refresh on even days; if the edges are momentarily full, one waits for a later night */
+      expect(3 - state.searchedBoxes.length).toBe(out.refreshedBoxes.length);
+      expect(out.refreshedBoxes.length).toBeLessThanOrEqual(day % 2 === 0 ? 1 : 0);
+      if (day % 2 === 0) {
+        boxNights++;
+        boxesRefreshed += out.refreshedBoxes.length;
+      }
       expect(findSpawnProblems(state.spawns!), `day ${day}`).toEqual([]);
     }
+    expect(boxesRefreshed / boxNights).toBeGreaterThanOrEqual(0.9);
   });
 });

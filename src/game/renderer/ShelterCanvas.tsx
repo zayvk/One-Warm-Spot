@@ -21,8 +21,10 @@ import {
   type StationActionResult,
   type StationMenuAction,
   type StationMenuCallback,
+  type SlotMenuCallback,
   type StationOpenCallback,
 } from './shelterScene.ts';
+import type { AssignableStationId } from '../data/scenes/types.ts';
 import { addResources } from '../engine/scavenge.ts';
 
 export interface ShelterCanvasHandle {
@@ -30,6 +32,8 @@ export interface ShelterCanvasHandle {
   requestBuild: (stationId: string) => boolean;
   /** Execute a contextual action from the in-world PropActionMenu */
   performStationAction: (stationId: string, action: StationMenuAction) => boolean;
+  /** Walk to an empty build slot and place a station there */
+  buildInSlot: (slotId: string, stationId: AssignableStationId) => boolean;
   /** Cook a grill recipe */
   cook: (recipeId: string) => StationActionResult;
   /** Craft a mending perk at the sewing kit */
@@ -41,6 +45,8 @@ export interface ShelterCanvasProps {
   onStationStateChange?: (state: SceneStationState) => void;
   onStationOpen?: StationOpenCallback;
   onStationMenuOpen?: StationMenuCallback;
+  /** An empty build slot was clicked (open the "what to build here" menu) */
+  onSlotMenuOpen?: SlotMenuCallback;
   /** The traveler reached a door; return true if it leads somewhere (e.g. `stairwell-door`) */
   onDoor?: (doorId: string) => boolean;
 }
@@ -57,6 +63,7 @@ export default function ShelterCanvas({
   onStationStateChange,
   onStationOpen,
   onStationMenuOpen,
+  onSlotMenuOpen,
   onDoor,
 }: ShelterCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -64,6 +71,7 @@ export default function ShelterCanvas({
   const stationStateCbRef = useRef(onStationStateChange);
   const stationOpenCbRef = useRef(onStationOpen);
   const stationMenuCbRef = useRef(onStationMenuOpen);
+  const slotMenuCbRef = useRef(onSlotMenuOpen);
   const doorCbRef = useRef(onDoor);
   /* Crafted perks shape gathering costs (gloves) and strength drift (cloak) */
   const perksRef = useRef<string[]>([]);
@@ -72,13 +80,16 @@ export default function ShelterCanvas({
     stationStateCbRef.current = onStationStateChange;
     stationOpenCbRef.current = onStationOpen;
     stationMenuCbRef.current = onStationMenuOpen;
+    slotMenuCbRef.current = onSlotMenuOpen;
     doorCbRef.current = onDoor;
-  }, [onStationStateChange, onStationOpen, onStationMenuOpen, onDoor]);
+  }, [onStationStateChange, onStationOpen, onStationMenuOpen, onSlotMenuOpen, onDoor]);
 
   useImperativeHandle(ref, () => ({
     requestBuild: (id: string) => sceneRef.current?.requestBuild(id) ?? false,
     performStationAction: (id: string, action: StationMenuAction) =>
       sceneRef.current?.performStationAction(id, action) ?? false,
+    buildInSlot: (slotId: string, stationId: AssignableStationId) =>
+      sceneRef.current?.requestBuildInSlot(slotId, stationId) ?? false,
     cook: (id: string) => sceneRef.current?.cook(id) ?? NOT_READY,
     craftPerk: (id: string) => sceneRef.current?.craftPerk(id) ?? NOT_READY,
   }), []);
@@ -203,6 +214,7 @@ export default function ShelterCanvas({
         scene.setCanAffordCallback((cost) => canAfford(cost, useGameStore.getState().resources));
         scene.setStationOpenCallback((station, anchor) => stationOpenCbRef.current?.(station, anchor));
         scene.setStationMenuCallback((stationId, anchor) => stationMenuCbRef.current?.(stationId, anchor));
+        scene.setSlotMenuCallback((slotId, anchor) => slotMenuCbRef.current?.(slotId, anchor));
         scene.setStationStateCallback(handleStationState);
         scene.setReadyCallback(() => {
           if (!disposed) setReadyRevision(sceneRevision);

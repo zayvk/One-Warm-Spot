@@ -1,6 +1,6 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties, type RefObject } from 'react';
 import type { ResourceId } from '../game/types/game.ts';
-import type { StationConfig } from '../game/data/scenes/types.ts';
+import type { AssignableStationId, StationConfig } from '../game/data/scenes/types.ts';
 import type { DayPhase } from '../game/types/game.ts';
 import { RESOURCE_MAP } from '../game/data/resources.ts';
 import { canAfford } from '../game/engine/progression.ts';
@@ -27,6 +27,36 @@ export interface PropActionMenuProps {
 
 const MENU_HALF_WIDTH = 185;
 const FLIP_BELOW_Y = 148;
+
+/** Close on Escape or a pointer press outside the menu */
+function useMenuDismiss(rootRef: RefObject<HTMLDivElement | null>, onClose: () => void): void {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const onPointer = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onPointer, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onPointer, true);
+    };
+  }, [rootRef, onClose]);
+}
+
+/** Anchor above the prop (or below it near the top of the screen), kept on-screen */
+function menuStyle(anchor: { x: number; y: number }): CSSProperties {
+  const below = anchor.y < FLIP_BELOW_Y;
+  return {
+    left: `clamp(${MENU_HALF_WIDTH + 10}px, ${anchor.x}px, calc(100% - ${MENU_HALF_WIDTH + 10}px))`,
+    top: below ? anchor.y + 62 : anchor.y - 12,
+    transform: below ? 'translateX(-50%)' : 'translate(-50%, -100%)',
+  };
+}
 
 function CostInline({
   cost,
@@ -80,35 +110,14 @@ export default function PropActionMenu({
   onClose,
 }: PropActionMenuProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    const onPointer = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('pointerdown', onPointer, true);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('pointerdown', onPointer, true);
-    };
-  }, [onClose]);
+  useMenuDismiss(rootRef, onClose);
 
   const tier = stationState.tiers[station.id] ?? 0;
   const currentCfg = stationTierConfig(station, tier);
   const nextCfg = nextStationTier(station, tier);
   const busy = stationState.pending !== null;
 
-  const below = anchor.y < FLIP_BELOW_Y;
-  const style: CSSProperties = {
-    left: `clamp(${MENU_HALF_WIDTH + 10}px, ${anchor.x}px, calc(100% - ${MENU_HALF_WIDTH + 10}px))`,
-    top: below ? anchor.y + 62 : anchor.y - 12,
-    transform: below ? 'translateX(-50%)' : 'translate(-50%, -100%)',
-  };
+  const style = menuStyle(anchor);
 
   const trigger = (action: StationMenuAction) => {
     if (onAction(station.id, action)) {
@@ -313,6 +322,74 @@ export default function PropActionMenu({
       {nextCfg && !nextAffordable && (
         <p className="ows-prop-menu__hint">{upgradeHint}</p>
       )}
+    </div>
+  );
+}
+
+export interface SlotBuildMenuProps {
+  /** Stations not yet placed in any slot, in display order */
+  stations: readonly StationConfig[];
+  anchor: { x: number; y: number };
+  resources: Record<ResourceId, number>;
+  busy: boolean;
+  /** Returns false if the scene couldn't start the build */
+  onPick: (stationId: AssignableStationId) => boolean;
+  onClose: () => void;
+}
+
+/**
+ * SlotBuildMenu — opened from an empty "Build here" spot: one row per station
+ * that hasn't been placed yet (icon, Tier 1 name, cost; dimmed when unaffordable).
+ */
+export function SlotBuildMenu({ stations, anchor, resources, busy, onPick, onClose }: SlotBuildMenuProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useMenuDismiss(rootRef, onClose);
+
+  return (
+    <div
+      ref={rootRef}
+      className="ows-prop-menu"
+      style={menuStyle(anchor)}
+      role="dialog"
+      aria-label="Choose what to build here"
+    >
+      <div className="ows-prop-menu__title">
+        <span>🧰</span>
+        <span>Build here</span>
+      </div>
+      <div className="ows-prop-menu__actions">
+        {stations.map((station) => {
+          const first = station.tiers[0];
+          const id = station.assignableId;
+          if (!first || !id) return null;
+          const affordable = canAfford(first.cost, resources);
+          const hint = affordable ? `Build ${first.name} here` : `${first.name} — ${missingHint(first.cost, resources)}`;
+          return (
+            <button
+              key={station.id}
+              type="button"
+              className="ows-prop-menu__btn ows-prop-menu__btn--upgrade"
+              disabled={!affordable || busy}
+              title={hint}
+              aria-label={hint}
+              onMouseEnter={affordable && !busy ? playHover : undefined}
+              onClick={() => {
+                if (onPick(id)) {
+                  playClick();
+                  onClose();
+                } else {
+                  playLocked();
+                }
+              }}
+            >
+              <span>
+                {station.icon} {first.name}
+              </span>
+              <CostInline cost={first.cost} resources={resources} />
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

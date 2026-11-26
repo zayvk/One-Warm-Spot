@@ -20,6 +20,12 @@ import {
   type Rng,
 } from './terraceSpawns.ts';
 import { stationMaxTier, type StationTiers } from './stations.ts';
+import {
+  emptySlotAssignments,
+  parseSlotAssignments,
+  reconcileSlotAssignments,
+  type SlotAssignments,
+} from './buildSlots.ts';
 
 export const TERRACE_STATE_KEY = 'ows_terrace_state';
 
@@ -45,6 +51,8 @@ export interface TerraceState {
   barrelReady: boolean;
   /** Mending perks crafted at the sewing kit */
   craftedPerks: string[];
+  /** Which station stands in each flexible build slot (`null` = empty) */
+  slotAssignments: SlotAssignments;
   /** This run's box & weed layout; `null` = hand-placed defaults (older saves) */
   spawns: TerraceSpawns | null;
 }
@@ -93,6 +101,7 @@ export function emptyTerraceState(spawns: TerraceSpawns | null = null): TerraceS
     planterReady: false,
     barrelReady: false,
     craftedPerks: [],
+    slotAssignments: emptySlotAssignments(),
     spawns,
   };
 }
@@ -190,6 +199,11 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
   state.planterReady = state.planterTier >= 1 && (typeof obj.planterReady === 'boolean' ? obj.planterReady : true);
   state.barrelReady = state.barrelTier >= 1 && (typeof obj.barrelReady === 'boolean' ? obj.barrelReady : true);
   state.craftedPerks = [...new Set(stringList(obj.craftedPerks).filter((id) => PERK_IDS.has(id)))];
+
+  /* Older rooftops have no slot data: built stations go back to their old spots */
+  const slots = parseSlotAssignments(obj.slotAssignments, strict);
+  if (!slots) return null;
+  state.slotAssignments = reconcileSlotAssignments(slots, stationTiersOf(state));
 
   if (obj.spawns === undefined || obj.spawns === null) {
     state.spawns = null;

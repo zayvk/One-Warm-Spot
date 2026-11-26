@@ -1,6 +1,13 @@
 /* ───── Old Apartment Terrace — Interactive Scene Config (v2) ───── */
 
-import type { HotspotConfig, ShelterSceneConfig, StationConfig } from './types.ts';
+import type {
+  AssignableStationId,
+  BuildSlotConfig,
+  HotspotConfig,
+  ShelterSceneConfig,
+  StationConfig,
+  StationId,
+} from './types.ts';
 import { SCENE_PROPS } from '../media.ts';
 
 /* ── Randomizable box & weed variants ── */
@@ -107,7 +114,7 @@ export const DEFAULT_TERRACE_SPAWNS: TerraceSpawns = {
   'weeds-1': { x: 0.656, y: 0.767, variant: 'weeds-3', scale: 1.04, flipX: true },
   'weeds-2': { x: 0.823, y: 0.835, variant: 'weeds-2', scale: 1, flipX: true },
   'weeds-3': { x: 0.552, y: 0.623, variant: 'weeds-2', scale: 0.96, flipX: true },
-  'weeds-4': { x: 0.269, y: 0.736, variant: 'weeds-1', scale: 0.94, flipX: true },
+  'weeds-4': { x: 0.285, y: 0.752, variant: 'weeds-1', scale: 0.94, flipX: true },
   'weeds-5': { x: 0.341, y: 0.848, variant: 'weeds-3', scale: 1, flipX: false },
   'weeds-6': { x: 0.525, y: 0.827, variant: 'weeds-1', scale: 1.02, flipX: false },
 };
@@ -142,31 +149,56 @@ export function withTerraceSpawns(base: ShelterSceneConfig, spawns: TerraceSpawn
   };
 }
 
-/* ── Fixed structures ── */
+/* ── Fixed structures & flexible build slots ── */
 
 /*
  * Composed in three zones so the middle of the rooftop stays open:
  * Living & Mending nook (back-left parapet), the Central Hearth, and a
  * Cooking & Utility line (back-right parapet against the stairwell).
+ * The shelter, fire pit and stairwell door are fixed; the four build slots
+ * host whichever of the farm, barrel, grill and sewing kit the player places there.
  */
 const FIREPIT_POS = { x: 0.49, y: 0.72 };
 const FIREPIT_STAND = { dx: -0.058, dy: 0.015 };
 /** Shelter tucked into the back-left corner, sheltered by the brick wall */
 const SHED_POS = { x: 0.3, y: 0.56 };
-/** Farm along the sunny left brick parapet */
-const HERB_PLANTER_POS = { x: 0.17, y: 0.68 };
-/** Rainwater barrel snug against the stairwell bulkhead */
-const RAIN_BARREL_POS = { x: 0.76, y: 0.57 };
-/** Cooking grill on the back-right parapet, in a kitchen line with the barrel */
-const GRILL_POS = { x: 0.62, y: 0.56 };
-/** Sewing / knitting kit beside the shelter along the back parapet */
-const SEWING_POS = { x: 0.46, y: 0.54 };
 const STAIRWELL_POS = { x: 0.86, y: 0.66 };
 
-const PLANTER_STAND = { dx: 0.058, dy: 0.02 };
-const BARREL_STAND = { dx: -0.045, dy: 0.025 };
-const GRILL_STAND = { dx: 0, dy: 0.045 };
-const SEWING_STAND = { dx: 0, dy: 0.045 };
+/*
+ * Stand spots are sized for the widest station tier (Hearth Kitchen collider
+ * rx 0.05 / ry 0.026), so any station fits any slot. Wall slots stand out toward
+ * the open floor; back-parapet slots stand in front.
+ */
+export const TERRACE_BUILD_SLOTS = [
+  /** Along the sunny left brick parapet */
+  { id: 'slot-1', position: { x: 0.17, y: 0.68 }, standOffset: { dx: 0.064, dy: 0.02 }, collider: { rx: 0.032, ry: 0.018 } },
+  /** Back parapet, beside the shelter */
+  { id: 'slot-2', position: { x: 0.46, y: 0.54 }, standOffset: { dx: 0, dy: 0.045 }, collider: { rx: 0.032, ry: 0.018 } },
+  /** Back-right parapet */
+  { id: 'slot-3', position: { x: 0.62, y: 0.56 }, standOffset: { dx: 0, dy: 0.045 }, collider: { rx: 0.032, ry: 0.018 } },
+  /** Snug against the stairwell bulkhead */
+  { id: 'slot-4', position: { x: 0.76, y: 0.57 }, standOffset: { dx: -0.056, dy: 0.03 }, collider: { rx: 0.032, ry: 0.018 } },
+] as const satisfies readonly BuildSlotConfig[];
+
+export const TERRACE_SLOT_IDS = TERRACE_BUILD_SLOTS.map((s) => s.id);
+
+export const ASSIGNABLE_STATION_IDS: readonly AssignableStationId[] = ['planter', 'rain-barrel', 'grill', 'sewing'];
+
+/** Assignable id → the station whose tier it carries */
+export const ASSIGNABLE_STATION: Record<AssignableStationId, StationId> = {
+  planter: 'planter',
+  'rain-barrel': 'barrel',
+  grill: 'grill',
+  sewing: 'sewing',
+};
+
+/** Where each station stood before slots were flexible (used to migrate older rooftops) */
+export const LEGACY_DEFAULT_SLOT: Record<AssignableStationId, string> = {
+  planter: 'slot-1',
+  sewing: 'slot-2',
+  grill: 'slot-3',
+  'rain-barrel': 'slot-4',
+};
 
 /* ── Multi-tier stations ── */
 
@@ -231,55 +263,52 @@ export const TERRACE_STATIONS: StationConfig[] = [
       { tier: 3, name: 'Stone-Ring Hearth', sprite: SCENE_PROPS.firepit, propScale: 0.085, cost: { timber: 2, scrap: 1, stone: 2 }, collider: { rx: 0.042, ry: 0.026 }, standOffset: FIREPIT_STAND, effect: 'stones' },
     ],
   },
+  /* Slot-placed stations: built into whichever free build slot the player picks */
   {
     id: 'planter',
-    hotspotId: 'planter',
+    assignableId: 'planter',
     icon: '🌱',
     baseTier: 0,
-    buildStandOffset: PLANTER_STAND,
     tiers: [
-      { tier: 1, name: 'Seedling Crate', sprite: SCENE_PROPS.planterT1, propScale: 0.1, cost: { timber: 1, seeds: 1 }, collider: { rx: 0.034, ry: 0.02 }, standOffset: PLANTER_STAND, effect: 'leaves' },
-      { tier: 2, name: 'Herb Planter', sprite: SCENE_PROPS.planter, propScale: 0.14, cost: { timber: 2, seeds: 2 }, collider: { rx: 0.036, ry: 0.022 }, standOffset: PLANTER_STAND, effect: 'leaves' },
-      { tier: 3, name: 'Trellis Garden', sprite: SCENE_PROPS.planterT3, propScale: 0.165, cost: { timber: 3, scrap: 2, seeds: 2 }, collider: { rx: 0.04, ry: 0.024 }, standOffset: { dx: 0.064, dy: 0.02 }, effect: 'leaves' },
+      { tier: 1, name: 'Seedling Crate', sprite: SCENE_PROPS.planterT1, propScale: 0.1, cost: { timber: 1, seeds: 1 }, collider: { rx: 0.034, ry: 0.02 }, effect: 'leaves' },
+      { tier: 2, name: 'Herb Planter', sprite: SCENE_PROPS.planter, propScale: 0.14, cost: { timber: 2, seeds: 2 }, collider: { rx: 0.036, ry: 0.022 }, effect: 'leaves' },
+      { tier: 3, name: 'Trellis Garden', sprite: SCENE_PROPS.planterT3, propScale: 0.165, cost: { timber: 3, scrap: 2, seeds: 2 }, collider: { rx: 0.04, ry: 0.024 }, effect: 'leaves' },
     ],
   },
   {
     id: 'barrel',
-    hotspotId: 'rain-barrel',
+    assignableId: 'rain-barrel',
     icon: '💧',
     baseTier: 0,
-    buildStandOffset: BARREL_STAND,
     tiers: [
-      { tier: 1, name: 'Bucket Barrel', sprite: SCENE_PROPS.barrelT1, propScale: 0.11, cost: { timber: 1, cloth: 1 }, collider: { rx: 0.022, ry: 0.015 }, standOffset: BARREL_STAND, effect: 'water' },
-      { tier: 2, name: 'Rain Barrel', sprite: SCENE_PROPS.rainBarrel, propScale: 0.13, cost: { timber: 2, scrap: 2 }, collider: { rx: 0.024, ry: 0.016 }, standOffset: BARREL_STAND, effect: 'water' },
-      { tier: 3, name: 'Guttered Rain Rig', sprite: SCENE_PROPS.barrelT3, propScale: 0.16, cost: { timber: 3, scrap: 2, stone: 2 }, collider: { rx: 0.036, ry: 0.022 }, standOffset: { dx: -0.056, dy: 0.03 }, effect: 'water' },
+      { tier: 1, name: 'Bucket Barrel', sprite: SCENE_PROPS.barrelT1, propScale: 0.11, cost: { timber: 1, cloth: 1 }, collider: { rx: 0.022, ry: 0.015 }, effect: 'water' },
+      { tier: 2, name: 'Rain Barrel', sprite: SCENE_PROPS.rainBarrel, propScale: 0.13, cost: { timber: 2, scrap: 2 }, collider: { rx: 0.024, ry: 0.016 }, effect: 'water' },
+      { tier: 3, name: 'Guttered Rain Rig', sprite: SCENE_PROPS.barrelT3, propScale: 0.16, cost: { timber: 3, scrap: 2, stone: 2 }, collider: { rx: 0.036, ry: 0.022 }, effect: 'water' },
     ],
   },
   {
     id: 'grill',
-    hotspotId: 'grill',
+    assignableId: 'grill',
     icon: '🍳',
     baseTier: 0,
-    buildStandOffset: GRILL_STAND,
     tiers: [
-      { tier: 1, name: 'Grill Rack', sprite: SCENE_PROPS.grillT1, propScale: 0.05, cost: { scrap: 1, stone: 1 }, collider: { rx: 0.03, ry: 0.016 }, standOffset: GRILL_STAND, effect: 'stones' },
-      { tier: 2, name: 'Camp Grill', sprite: SCENE_PROPS.grillT2, propScale: 0.11, cost: { scrap: 2, stone: 2 }, collider: { rx: 0.036, ry: 0.02 }, standOffset: GRILL_STAND, effect: 'stones' },
-      { tier: 3, name: 'Grill Counter', sprite: SCENE_PROPS.grillT3, propScale: 0.13, cost: { timber: 2, stone: 2, scrap: 1 }, collider: { rx: 0.042, ry: 0.024 }, standOffset: GRILL_STAND, effect: 'logs' },
-      { tier: 4, name: 'Hearth Kitchen', sprite: SCENE_PROPS.grillT4, propScale: 0.16, cost: { timber: 4, scrap: 2, stone: 2 }, collider: { rx: 0.05, ry: 0.026 }, standOffset: GRILL_STAND, effect: 'warm' },
+      { tier: 1, name: 'Grill Rack', sprite: SCENE_PROPS.grillT1, propScale: 0.05, cost: { scrap: 1, stone: 1 }, collider: { rx: 0.03, ry: 0.016 }, effect: 'stones' },
+      { tier: 2, name: 'Camp Grill', sprite: SCENE_PROPS.grillT2, propScale: 0.11, cost: { scrap: 2, stone: 2 }, collider: { rx: 0.036, ry: 0.02 }, effect: 'stones' },
+      { tier: 3, name: 'Grill Counter', sprite: SCENE_PROPS.grillT3, propScale: 0.13, cost: { timber: 2, stone: 2, scrap: 1 }, collider: { rx: 0.042, ry: 0.024 }, effect: 'logs' },
+      { tier: 4, name: 'Hearth Kitchen', sprite: SCENE_PROPS.grillT4, propScale: 0.16, cost: { timber: 4, scrap: 2, stone: 2 }, collider: { rx: 0.05, ry: 0.026 }, effect: 'warm' },
     ],
   },
   {
     id: 'sewing',
-    hotspotId: 'sewing',
+    assignableId: 'sewing',
     icon: '🧵',
     baseTier: 0,
-    buildStandOffset: SEWING_STAND,
     tiers: [
-      { tier: 1, name: 'Needle & Thread', sprite: SCENE_PROPS.sewT1, propScale: 0.045, cost: { cloth: 1 }, collider: { rx: 0.022, ry: 0.012 }, standOffset: SEWING_STAND, effect: 'fabric' },
-      { tier: 2, name: 'Patch Scraps', sprite: SCENE_PROPS.sewT2, propScale: 0.045, cost: { cloth: 2 }, collider: { rx: 0.026, ry: 0.012 }, standOffset: SEWING_STAND, effect: 'fabric' },
-      { tier: 3, name: 'Knitting Basket', sprite: SCENE_PROPS.sewT3, propScale: 0.1, cost: { timber: 2, cloth: 2 }, collider: { rx: 0.028, ry: 0.016 }, standOffset: SEWING_STAND, effect: 'fabric' },
-      { tier: 4, name: 'Mending Bench', sprite: SCENE_PROPS.sewT4, propScale: 0.125, cost: { timber: 3, cloth: 2, scrap: 1 }, collider: { rx: 0.036, ry: 0.02 }, standOffset: SEWING_STAND, effect: 'fabric' },
-      { tier: 5, name: 'Sewing Table', sprite: SCENE_PROPS.sewT5, propScale: 0.145, cost: { timber: 4, cloth: 3, scrap: 2 }, collider: { rx: 0.046, ry: 0.024 }, standOffset: SEWING_STAND, effect: 'fabric' },
+      { tier: 1, name: 'Needle & Thread', sprite: SCENE_PROPS.sewT1, propScale: 0.045, cost: { cloth: 1 }, collider: { rx: 0.022, ry: 0.012 }, effect: 'fabric' },
+      { tier: 2, name: 'Patch Scraps', sprite: SCENE_PROPS.sewT2, propScale: 0.045, cost: { cloth: 2 }, collider: { rx: 0.026, ry: 0.012 }, effect: 'fabric' },
+      { tier: 3, name: 'Knitting Basket', sprite: SCENE_PROPS.sewT3, propScale: 0.1, cost: { timber: 2, cloth: 2 }, collider: { rx: 0.028, ry: 0.016 }, effect: 'fabric' },
+      { tier: 4, name: 'Mending Bench', sprite: SCENE_PROPS.sewT4, propScale: 0.125, cost: { timber: 3, cloth: 2, scrap: 1 }, collider: { rx: 0.036, ry: 0.02 }, effect: 'fabric' },
+      { tier: 5, name: 'Sewing Table', sprite: SCENE_PROPS.sewT5, propScale: 0.145, cost: { timber: 4, cloth: 3, scrap: 2 }, collider: { rx: 0.046, ry: 0.024 }, effect: 'fabric' },
     ],
   },
 ];
@@ -324,10 +353,17 @@ export const terraceScene: ShelterSceneConfig = {
       standOffset: { dx: -0.03, dy: -0.012 },
       restOffset: { dx: 0.085, dy: 0.035 },
     },
-    { id: 'planter', type: 'planter', station: 'planter', position: HERB_PLANTER_POS, propSprite: '', label: 'Farm planter', standOffset: PLANTER_STAND },
-    { id: 'rain-barrel', type: 'barrel', station: 'barrel', position: RAIN_BARREL_POS, propSprite: '', label: 'Rainwater barrel', standOffset: BARREL_STAND },
-    { id: 'grill', type: 'grill', station: 'grill', position: GRILL_POS, propSprite: '', label: 'Cooking grill', standOffset: GRILL_STAND },
-    { id: 'sewing', type: 'sewing', station: 'sewing', position: SEWING_POS, propSprite: '', label: 'Sewing kit', standOffset: SEWING_STAND },
+    /* ── 4 flexible build slots: an empty "Build here" blueprint until the player places a station ── */
+    ...TERRACE_BUILD_SLOTS.map(
+      (slot): HotspotConfig => ({
+        id: slot.id,
+        type: 'slot',
+        position: slot.position,
+        propSprite: '',
+        label: 'Build here',
+        standOffset: slot.standOffset,
+      }),
+    ),
 
     /* ── 3 searchable boxes + 6 weed patches (positions randomized per run) ── */
     ...TERRACE_BOX_IDS.map((id) => terraceSpawnHotspot(id, DEFAULT_TERRACE_SPAWNS[id])),
@@ -346,6 +382,7 @@ export const terraceScene: ShelterSceneConfig = {
   ],
 
   stations: TERRACE_STATIONS,
+  buildSlots: [...TERRACE_BUILD_SLOTS],
 };
 
 /* ── Spawn rules for randomized box & weed placement ── */
@@ -375,14 +412,11 @@ export const TERRACE_SPAWN_RULES = {
     { x: SHED_POS.x, y: SHED_POS.y - 0.01, r: 0.125 },
     /* Rest / build spot beside the shelter (T1–T3 rest offsets) */
     standSpot(SHED_POS, { dx: 0.0875, dy: 0.035 }, 0.045),
-    { x: HERB_PLANTER_POS.x, y: HERB_PLANTER_POS.y, r: 0.085 },
-    standSpot(HERB_PLANTER_POS, { dx: 0.061, dy: 0.02 }, 0.04),
-    { x: RAIN_BARREL_POS.x, y: RAIN_BARREL_POS.y, r: 0.08 },
-    standSpot(RAIN_BARREL_POS, { dx: -0.05, dy: 0.028 }, 0.04),
-    { x: GRILL_POS.x, y: GRILL_POS.y - 0.02, r: 0.1 },
-    standSpot(GRILL_POS, GRILL_STAND, 0.035),
-    { x: SEWING_POS.x, y: SEWING_POS.y - 0.01, r: 0.085 },
-    standSpot(SEWING_POS, SEWING_STAND, 0.035),
+    /* Any station (at its largest tier) can stand in any build slot, so each slot keeps the widest zone clear */
+    ...TERRACE_BUILD_SLOTS.flatMap((slot) => [
+      { x: slot.position.x, y: slot.position.y - 0.015, r: 0.1 },
+      standSpot(slot.position, slot.standOffset, 0.04),
+    ]),
     { x: 0.84, y: 0.69, r: 0.07 },
     { x: 0.78, y: 0.7, r: 0.06 },
     { x: 0.72, y: 0.71, r: 0.055 },

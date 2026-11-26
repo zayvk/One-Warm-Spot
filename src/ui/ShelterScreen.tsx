@@ -8,9 +8,10 @@ import { UI_ASSETS } from '../game/data/media.ts';
 import { getSceneConfig } from '../game/data/scenes/index.ts';
 import type { StationId } from '../game/data/scenes/types.ts';
 import { stationTierConfig } from '../game/engine/stations.ts';
+import { unplacedStations } from '../game/engine/buildSlots.ts';
 import { playClick, playHover, startSiteAmbience } from '../game/audio/soundEngine.ts';
 import type { ResourceId } from '../game/types/game.ts';
-import PropActionMenu, { type StationMenuAction } from './PropActionMenu.tsx';
+import PropActionMenu, { SlotBuildMenu, type StationMenuAction } from './PropActionMenu.tsx';
 import StationPopover, { type PopoverStation } from './StationPopover.tsx';
 import VitalityDialHud from './VitalityDialHud.tsx';
 
@@ -37,19 +38,29 @@ export default function ShelterScreen({ onBackToTitle, onDescend }: ShelterScree
   const [stationState, setStationState] = useState<SceneStationState | null>(null);
   const [popover, setPopover] = useState<{ station: PopoverStation; anchor: { x: number; y: number } } | null>(null);
   const [propMenu, setPropMenu] = useState<{ stationId: StationId; anchor: { x: number; y: number } } | null>(null);
+  const [slotMenu, setSlotMenu] = useState<{ slotId: string; anchor: { x: number; y: number } } | null>(null);
 
   const stations = getSceneConfig(chosenSite)?.stations ?? [];
 
   const closePopover = useCallback(() => setPopover(null), []);
   const openPopover = useCallback((station: PopoverStation, anchor: { x: number; y: number }) => {
     setPropMenu(null);
+    setSlotMenu(null);
     setPopover({ station, anchor });
   }, []);
 
   const closePropMenu = useCallback(() => setPropMenu(null), []);
   const openPropMenu = useCallback((stationId: StationId, anchor: { x: number; y: number }) => {
     setPopover(null);
+    setSlotMenu(null);
     setPropMenu({ stationId, anchor });
+  }, []);
+
+  const closeSlotMenu = useCallback(() => setSlotMenu(null), []);
+  const openSlotMenu = useCallback((slotId: string, anchor: { x: number; y: number }) => {
+    setPopover(null);
+    setPropMenu(null);
+    setSlotMenu({ slotId, anchor });
   }, []);
 
   const handlePropAction = useCallback((stationId: string, action: StationMenuAction) => {
@@ -120,6 +131,10 @@ export default function ShelterScreen({ onBackToTitle, onDescend }: ShelterScree
       ? (stationTierConfig(popoverStation, stationState.tiers[popoverStation.id])?.name ?? '')
       : '';
   const menuStation = propMenu ? stations.find((s) => s.id === propMenu.stationId) : undefined;
+  /* What an empty slot can still host: every assignable station not yet placed anywhere */
+  const slotChoices = stationState
+    ? unplacedStations(stationState.slots).flatMap((id) => stations.filter((s) => s.assignableId === id))
+    : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -197,8 +212,21 @@ export default function ShelterScreen({ onBackToTitle, onDescend }: ShelterScree
           onStationStateChange={setStationState}
           onStationOpen={openPopover}
           onStationMenuOpen={openPropMenu}
+          onSlotMenuOpen={openSlotMenu}
           onDoor={handleDoor}
         />
+
+        {slotMenu && stationState && slotChoices.length > 0 && (
+          <SlotBuildMenu
+            key={`${slotMenu.slotId}-${slotMenu.anchor.x}-${slotMenu.anchor.y}`}
+            stations={slotChoices}
+            anchor={slotMenu.anchor}
+            resources={resources}
+            busy={stationState.pending !== null}
+            onPick={(stationId) => canvasRef.current?.buildInSlot(slotMenu.slotId, stationId) ?? false}
+            onClose={closeSlotMenu}
+          />
+        )}
 
         {propMenu && menuStation && stationState && (
           <PropActionMenu

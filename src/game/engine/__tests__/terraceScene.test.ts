@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseTerraceState, freshTerraceState, validateTerraceState } from '../terraceState.ts';
 import { spendResources } from '../progression.ts';
 import { findSpawnProblems, generateTerraceSpawns } from '../terraceSpawns.ts';
+import type { SlotAssignments } from '../buildSlots.ts';
 import {
   TERRACE_BOX_VARIANTS,
   TERRACE_STATIONS,
@@ -42,6 +43,7 @@ describe('parseTerraceState', () => {
       planterReady: false,
       barrelReady: false,
       craftedPerks: [],
+      slotAssignments: { 'slot-1': null, 'slot-2': null, 'slot-3': null, 'slot-4': null },
       spawns: null,
     });
   });
@@ -100,9 +102,38 @@ describe('parseTerraceState', () => {
       planterReady: false,
       barrelReady: true,
       craftedPerks: ['mended-gloves'],
+      /* A player-chosen layout, different from the old fixed spots */
+      slotAssignments: { 'slot-1': 'grill', 'slot-2': 'rain-barrel', 'slot-3': 'sewing', 'slot-4': 'planter' } satisfies SlotAssignments,
     };
     expect(parseTerraceState(JSON.stringify(state))).toEqual(state);
     expect(validateTerraceState(JSON.parse(JSON.stringify(state)))).toEqual(state);
+  });
+
+  it('gives older rooftops without slot data their built stations back in their old spots', () => {
+    const raw = JSON.stringify({ planterTier: 2, grillTier: 1, sewingTier: 0, barrelTier: 3 });
+    expect(parseTerraceState(raw).slotAssignments).toEqual({
+      'slot-1': 'planter',
+      'slot-2': null,
+      'slot-3': 'grill',
+      'slot-4': 'rain-barrel',
+    });
+    /* Legacy one-off builds migrate to Tier 2 and take their old spots too */
+    expect(parseTerraceState(JSON.stringify({ builtProps: ['herb-planter'] })).slotAssignments['slot-1']).toBe('planter');
+  });
+
+  it('keeps slot data consistent with what is actually built', () => {
+    const raw = JSON.stringify({
+      planterTier: 1,
+      grillTier: 1,
+      /* Grill sits in the farm's old spot, an unbuilt barrel claims a slot, and a duplicate/unknown slip in */
+      slotAssignments: { 'slot-1': 'grill', 'slot-2': 'rain-barrel', 'slot-3': 'grill', 'slot-9': 'sewing' },
+    });
+    expect(parseTerraceState(raw).slotAssignments).toEqual({
+      'slot-1': 'grill',
+      'slot-2': 'planter',
+      'slot-3': null,
+      'slot-4': null,
+    });
   });
 
   it('nudges saved props that now sit on a recomposed station, keeping the rest of the layout', () => {

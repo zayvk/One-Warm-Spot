@@ -122,7 +122,7 @@ export function findSpawnProblems(spawns: TerraceSpawns): string[] {
 }
 
 const MAX_LAYOUT_ATTEMPTS = 12;
-const MAX_PROP_SAMPLES = 400;
+const MAX_PROP_SAMPLES = 1200;
 /* Boxes pick the tightest of a few perimeter spots (corners); weeds scatter anywhere along the edges */
 const BOX_CANDIDATES = 4;
 const WEED_CANDIDATES = 1;

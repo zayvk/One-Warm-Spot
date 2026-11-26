@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildBackup, parseBackupText } from '../backup.ts';
 import { freshTerraceState } from '../terraceState.ts';
+import type { SlotAssignments } from '../buildSlots.ts';
 import { SAVE_VERSION } from '../saveSystem.ts';
 import type { SaveState } from '../../types/game.ts';
 
@@ -30,6 +31,7 @@ describe('backup files', () => {
       barrelTier: 2,
       barrelReady: false,
       craftedPerks: ['warm-sheets'],
+      slotAssignments: { 'slot-1': 'sewing', 'slot-2': null, 'slot-3': 'rain-barrel', 'slot-4': 'grill' } satisfies SlotAssignments,
     };
     const result = parseBackupText(JSON.stringify(buildBackup(save, terrace)));
     expect(result.ok).toBe(true);
@@ -51,6 +53,8 @@ describe('backup files', () => {
     if (!result.ok) return;
     expect(result.save.resources.food).toBe(0);
     expect(result.terrace).toMatchObject({ barrelTier: 2, barrelReady: true, firepitTier: 2, shelterTier: 1, grillTier: 0 });
+    /* Built before slots were flexible: the barrel keeps its old spot by the stairwell */
+    expect(result.terrace?.slotAssignments).toEqual({ 'slot-1': null, 'slot-2': null, 'slot-3': null, 'slot-4': 'rain-barrel' });
   });
 
   it('still loads older backups without rooftop details, starting the Terrace fresh', () => {
@@ -66,6 +70,10 @@ describe('backup files', () => {
     ['an out-of-range grill tier', { grillTier: 9 }],
     ['a non-boolean harvest flag', { planterReady: 'soon' }],
     ['a damaged perk list', { craftedPerks: [1] }],
+    ['the same station in two slots', { grillTier: 1, slotAssignments: { 'slot-1': 'grill', 'slot-3': 'grill' } }],
+    ['an unknown build slot', { slotAssignments: { 'slot-7': 'planter' } }],
+    ['an unknown slot station', { slotAssignments: { 'slot-1': 'hot-tub' } }],
+    ['a damaged slot map', { slotAssignments: ['planter'] }],
     ['a non-boolean fire flag', { fireLit: 'yes' }],
     ['a damaged box list', { searchedBoxes: [1, 2] }],
     ['a broken layout', { spawns: { 'boxes-1': { x: 4 } } }],

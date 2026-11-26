@@ -13,6 +13,8 @@ import {
 } from 'pixi.js';
 import type { DayPhase, ResourceId, SiteId, TimeOfDay, TravelerGender } from '../types/game.ts';
 import type {
+  AssignableStationId,
+  BuildSlotConfig,
   HotspotConfig,
   SceneObstacle,
   ShelterSceneConfig,
@@ -44,6 +46,17 @@ import {
 } from '../engine/stations.ts';
 import type { SleepComfort } from '../engine/dayCycle.ts';
 import type { RegrowOutcome } from '../engine/terraceSpawns.ts';
+import { placeStationInSlot, type SlotAssignments } from '../engine/buildSlots.ts';
+
+/** Hotspot type a slot takes on once a station is placed in it */
+const STATION_HOTSPOT_TYPE: Partial<Record<StationId, HotspotConfig['type']>> = {
+  planter: 'planter',
+  barrel: 'barrel',
+  grill: 'grill',
+  sewing: 'sewing',
+};
+
+const BUILD_HERE_LABEL = 'Build here';
 import {
   playFireLight,
   playFireDouse,
@@ -110,6 +123,8 @@ export interface SceneStationState {
   perks: string[];
   planterReady: boolean;
   barrelReady: boolean;
+  /** Which station stands in each flexible build slot */
+  slots: SlotAssignments;
 }
 export type StationStateCallback = (state: SceneStationState) => void;
 
@@ -118,6 +133,9 @@ export type StationOpenCallback = (station: 'grill' | 'sewing', anchor: { x: num
 
 /** Callback when a station (or empty blueprint) opens its contextual action menu */
 export type StationMenuCallback = (stationId: StationId, anchor: { x: number; y: number }) => void;
+
+/** Callback when an empty build slot opens its "what to build here" menu */
+export type SlotMenuCallback = (slotId: string, anchor: { x: number; y: number }) => void;
 
 export type StationMenuAction = 'primary' | 'sit' | 'extinguish' | 'upgrade';
 
@@ -356,6 +374,8 @@ interface HotspotNode {
   blueprint: Graphics | null;
   /** Station hotspots: warm window / lantern glows for the current tier */
   glows: { sprite: Sprite; anchor: { x: number; y: number; size: number } }[];
+  /** Flexible build slots: the slot this hotspot is (empty, or hosting a placed station) */
+  slot?: BuildSlotConfig;
 }
 
 interface SceneParticle {
@@ -422,6 +442,7 @@ export class ShelterScene {
   private onStationState: StationStateCallback | null = null;
   private onStationOpen: StationOpenCallback | null = null;
   private onStationMenu: StationMenuCallback | null = null;
+  private onSlotMenu: SlotMenuCallback | null = null;
   private onCanAfford: ((cost: Partial<Record<ResourceId, number>>) => boolean) | null = null;
   private onNotice: NoticeCallback | null = null;
   private onDoor: DoorCallback | null = null;
@@ -621,6 +642,10 @@ export class ShelterScene {
     this.onStationMenu = cb;
   }
 
+  setSlotMenuCallback(cb: SlotMenuCallback): void {
+    this.onSlotMenu = cb;
+  }
+
   setCanAffordCallback(cb: (cost: Partial<Record<ResourceId, number>>) => boolean): void {
     this.onCanAfford = cb;
   }
@@ -655,7 +680,33 @@ export class ShelterScene {
     if (!station || !hs) return false;
     const next = nextStationTier(station, this.tierOf(station.id));
     if (!next) return false;
+    this.walkAndBuild(station, hs, next, station.buildStandOffset ?? hs.config.standOffset ?? { dx: 0, dy: 0.045 });
+    return true;
+  }
 
+  /**
+   * Walk to an empty build slot and place a not-yet-built station there (Tier 1).
+   * Returns false if the scene is busy, the slot is taken or the station is already placed.
+   */
+  requestBuildInSlot(slotId: string, stationId: AssignableStationId): boolean {
+    if (this.disposed || this.interactionLock || !this.entryDone) return false;
+    const hs = this.hotspots.find((h) => h.slot?.id === slotId);
+    const station = this.sceneConfig?.stations?.find((s) => s.assignableId === stationId);
+    if (!hs?.slot || !station || hs.config.type !== 'slot' || this.tierOf(station.id) !== 0) return false;
+    if (!placeStationInSlot(this.terrace.slotAssignments, slotId, stationId)) return false;
+    const next = nextStationTier(station, 0);
+    if (!next) return false;
+    this.walkAndBuild(station, hs, next, hs.slot.standOffset, slotId);
+    return true;
+  }
+
+  private walkAndBuild(
+    station: StationConfig,
+    hs: HotspotNode,
+    next: StationTierConfig,
+    standOffset: { dx: number; dy: number },
+    slotId?: string,
+  ): void {
     if (this.sleepMode || this.currentPose === 'sleep') this.wakeUp();
     for (const h of this.hotspots) if (h.hovered) this.onHotspotHover(h, false);
 
@@ -664,20 +715,19 @@ export class ShelterScene {
     this.emitStationState();
 
     const pos = hs.config.position;
-    const stand = this.clampFloorTarget(pos.x + station.buildStandOffset.dx, pos.y + station.buildStandOffset.dy);
+    const stand = this.clampFloorTarget(pos.x + standOffset.dx, pos.y + standOffset.dy);
     const arrive = () => {
       if (Math.abs(pos.x - this.targetX) > 0.005) {
         this.travelerFlipped = pos.x < this.targetX;
         this.layoutTraveler();
       }
-      this.performBuild(station, hs, next);
+      this.performBuild(station, hs, next, slotId);
     };
     if (Math.hypot(stand.x - this.targetX, stand.y - this.targetY) < 0.015) {
       arrive();
     } else {
       this.walkTo(stand.x, stand.y, arrive);
     }
-    return true;
   }
 
   /** Run a station action chosen from the in-world PropActionMenu */
@@ -995,9 +1045,11 @@ export class ShelterScene {
     root.cursor = 'pointer';
     root.hitArea = new Circle(0, -20, 42);
 
-    /* Stations get a floor blueprint (shown while unbuilt) beneath their sprite */
+    const slot = cfg.type === 'slot' ? this.sceneConfig?.buildSlots?.find((s) => s.id === cfg.id) : undefined;
+
+    /* Stations & build slots get a floor blueprint (shown while empty) beneath their sprite */
     let blueprint: Graphics | null = null;
-    if (cfg.station) {
+    if (cfg.station || slot) {
       blueprint = new Graphics();
       blueprint.eventMode = 'none';
       blueprint.visible = false;
@@ -1005,7 +1057,7 @@ export class ShelterScene {
     }
 
     let propSprite: Sprite | null = null;
-    if (cfg.propSprite || cfg.station) {
+    if (cfg.propSprite || cfg.station || slot) {
       propSprite = Sprite.from(Texture.EMPTY);
       propSprite.anchor.set(0.5, 1);
       propSprite.eventMode = 'none';
@@ -1025,6 +1077,7 @@ export class ShelterScene {
       interacted: false,
       blueprint,
       glows: [],
+      slot,
     };
     if (cfg.propSprite) this.setHotspotSprite(node, cfg.propSprite, onSpriteReady);
 
@@ -1111,6 +1164,7 @@ export class ShelterScene {
     for (const hs of this.hotspots) {
       const station = this.stationOf(hs);
       if (station) this.setHotspotLabel(hs, this.stationLabel(station, hs));
+      else if (hs.config.type === 'slot') this.setHotspotLabel(hs, BUILD_HERE_LABEL);
     }
   }
 
@@ -1183,7 +1237,7 @@ export class ShelterScene {
 
   private isHotspotInteractive(node: HotspotNode): boolean {
     const t = node.config.type;
-    return !node.interacted || !!node.config.station || t === 'sleep' || t === 'firepit' || t === 'door';
+    return !node.interacted || !!node.config.station || t === 'slot' || t === 'sleep' || t === 'firepit' || t === 'door';
   }
 
   private setHotspotLabel(node: HotspotNode, text: string): void {
@@ -1230,9 +1284,9 @@ export class ShelterScene {
   private drawBlueprint(node: HotspotNode): number {
     if (!node.blueprint) return 24;
     const { width: SW, height: SH } = this.stage;
-    const first = this.stationOf(node)?.tiers[0];
-    const rx = Math.max(16, (first?.collider.rx ?? 0.03) * SW * 1.15);
-    const ry = Math.max(7, (first?.collider.ry ?? 0.02) * SH * 1.35);
+    const footprint = this.stationOf(node)?.tiers[0]?.collider ?? node.slot?.collider;
+    const rx = Math.max(16, (footprint?.rx ?? 0.03) * SW * 1.15);
+    const ry = Math.max(7, (footprint?.ry ?? 0.02) * SH * 1.35);
     node.blueprint.clear();
     node.blueprint
       .ellipse(0, 0, rx, ry)
@@ -1282,6 +1336,12 @@ export class ShelterScene {
     this.onStationMenu?.(stationId, anchor);
   }
 
+  private emitSlotMenu(hs: HotspotNode): void {
+    if (!hs.slot) return;
+    this.onHotspotHover(hs, false);
+    this.onSlotMenu?.(hs.slot.id, this.toPx(hs.config.position.x, hs.config.position.y - 0.04));
+  }
+
   private walkToHotspotAndRun(
     node: HotspotNode,
     useRestSpot: boolean,
@@ -1326,6 +1386,12 @@ export class ShelterScene {
   private onHotspotClick(node: HotspotNode): void {
     if (this.interactionLock || !this.entryDone) return;
     if (!this.isHotspotInteractive(node)) return;
+
+    /* Empty build slot: choose which station goes here */
+    if (node.config.type === 'slot') {
+      this.emitSlotMenu(node);
+      return;
+    }
 
     const station = this.stationOf(node);
     if (station) {
@@ -1707,8 +1773,9 @@ export class ShelterScene {
     return hs.config.station ? this.sceneConfig?.stations?.find((s) => s.id === hs.config.station) : undefined;
   }
 
+  /** The hotspot a station currently lives on (fixed hotspot, or the build slot it was placed in) */
   private stationHotspot(station: StationConfig): HotspotNode | undefined {
-    return this.hotspots.find((h) => h.config.id === station.hotspotId);
+    return this.hotspots.find((h) => h.config.station === station.id);
   }
 
   private tierOf(id: StationId): number {
@@ -1729,6 +1796,7 @@ export class ShelterScene {
       perks: [...this.terrace.craftedPerks],
       planterReady: this.terrace.planterReady,
       barrelReady: this.terrace.barrelReady,
+      slots: { ...this.terrace.slotAssignments },
     });
   }
 
@@ -1742,7 +1810,13 @@ export class ShelterScene {
     hs.glows = [];
 
     if (!cfg) {
-      hs.config = { ...hs.config, propSprite: '', propScale: undefined, collider: undefined, standOffset: station.buildStandOffset };
+      hs.config = {
+        ...hs.config,
+        propSprite: '',
+        propScale: undefined,
+        collider: undefined,
+        standOffset: station.buildStandOffset ?? hs.config.standOffset,
+      };
       hs.spriteSrc = '';
       if (hs.propSprite) hs.propSprite.visible = false;
       if (hs.blueprint) hs.blueprint.visible = true;
@@ -1752,7 +1826,8 @@ export class ShelterScene {
         propSprite: cfg.sprite,
         propScale: cfg.propScale,
         collider: cfg.collider,
-        standOffset: cfg.standOffset ?? hs.config.standOffset,
+        /* A build slot keeps its own stand spot whatever station stands there */
+        standOffset: hs.slot ? hs.slot.standOffset : (cfg.standOffset ?? hs.config.standOffset),
         restOffset: cfg.restOffset ?? hs.config.restOffset,
       };
       if (hs.blueprint) hs.blueprint.visible = false;
@@ -1779,26 +1854,66 @@ export class ShelterScene {
     this.layout();
   }
 
-  private performBuild(station: StationConfig, hs: HotspotNode, next: StationTierConfig): void {
+  /**
+   * Show a build slot as whatever stands there: the placed station at its tier
+   * (taking on that station's type, art, collider & interactions), or an empty,
+   * walkable "Build here" blueprint.
+   */
+  private applySlot(hs: HotspotNode, animate: boolean): void {
+    const slot = hs.slot;
+    if (!slot) return;
+    const placed = this.terrace.slotAssignments[slot.id] ?? null;
+    const station = placed ? this.sceneConfig?.stations?.find((s) => s.assignableId === placed) : undefined;
+    const type = station && STATION_HOTSPOT_TYPE[station.id];
+
+    if (station && type && this.tierOf(station.id) > 0) {
+      hs.config = { ...hs.config, type, station: station.id };
+      this.applyStationTier(hs, station, animate);
+      return;
+    }
+
+    for (const g of hs.glows) g.sprite.destroy();
+    hs.glows = [];
+    hs.config = {
+      id: slot.id,
+      type: 'slot',
+      position: slot.position,
+      propSprite: '',
+      label: BUILD_HERE_LABEL,
+      standOffset: slot.standOffset,
+    };
+    hs.spriteSrc = '';
+    if (hs.propSprite) hs.propSprite.visible = false;
+    if (hs.blueprint) hs.blueprint.visible = true;
+    this.setHotspotLabel(hs, BUILD_HERE_LABEL);
+    this.layout();
+  }
+
+  private performBuild(station: StationConfig, hs: HotspotNode, next: StationTierConfig, slotId?: string): void {
     this.setPose('search');
     playBuild();
 
     this.after(950, () => {
-      const paid = this.onBuild?.(next.cost) ?? false;
+      const slots = slotId ? placeStationInSlot(this.terrace.slotAssignments, slotId, station.assignableId!) : null;
+      /* The slot (or station) may have been claimed meanwhile — never pay for a build that can't land */
+      const placeable = !slotId || slots !== null;
+      const paid = placeable && (this.onBuild?.(next.cost) ?? false);
       const lift = { x: hs.config.position.x, y: hs.config.position.y - next.propScale * 0.55 };
       if (paid) {
+        if (slots) this.terrace.slotAssignments = slots;
         (this.terrace[STATION_TIER_KEY[station.id]] as number) = next.tier;
         /* A brand-new farm or barrel starts ready to use */
         if (next.tier === 1 && station.id === 'planter') this.terrace.planterReady = true;
         if (next.tier === 1 && station.id === 'barrel') this.terrace.barrelReady = true;
         saveTerraceState(this.terrace);
-        this.applyStationTier(hs, station, true);
+        if (slotId) this.applySlot(hs, true);
+        else this.applyStationTier(hs, station, true);
         this.refreshStationLabels();
         playClaim();
         this.showFloatingText(lift, formatMaterials(next.cost, '−'));
         this.playBuildFlourish(next, hs, lift);
       } else {
-        this.showFloatingText(lift, 'Need more materials');
+        this.showFloatingText(lift, placeable ? 'Need more materials' : 'This spot is taken');
       }
       this.pendingStation = null;
       this.setPose('idle');
@@ -2140,8 +2255,13 @@ export class ShelterScene {
       }
     }
 
-    /* Every station at its saved tier (or as a blueprint while unbuilt) */
+    /* Build slots show whatever the player placed there (or an empty "Build here" spot) */
+    for (const hs of this.hotspots) {
+      if (hs.slot) this.applySlot(hs, false);
+    }
+    /* Fixed stations at their saved tier */
     for (const station of this.sceneConfig?.stations ?? []) {
+      if (station.assignableId) continue;
       const hs = this.stationHotspot(station);
       if (hs) this.applyStationTier(hs, station, false);
     }

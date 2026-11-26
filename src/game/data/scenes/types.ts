@@ -4,7 +4,7 @@ import type { ResourceId } from '../../types/game.ts';
 
 export interface HotspotConfig {
   id: string;
-  type: 'firepit' | 'searchable' | 'weeds' | 'sleep' | 'door' | 'planter' | 'barrel' | 'grill' | 'sewing';
+  type: 'firepit' | 'searchable' | 'weeds' | 'sleep' | 'door' | 'planter' | 'barrel' | 'grill' | 'sewing' | 'slot';
   /** The upgradeable station living on this hotspot (its tier drives the sprite & collider) */
   station?: StationId;
   /** Normalized 0.0–1.0 anchor position (bottom-center on floor) */
@@ -42,6 +42,9 @@ export type SceneObstacle =
 
 export type StationId = 'shelter' | 'firepit' | 'planter' | 'barrel' | 'grill' | 'sewing';
 
+/** Stations the player places in any free build slot (saved in `slotAssignments`) */
+export type AssignableStationId = 'planter' | 'rain-barrel' | 'grill' | 'sewing';
+
 /** Finishing flourish when a tier is built */
 export type BuildEffect = 'lantern' | 'leaves' | 'water' | 'logs' | 'stones' | 'warm' | 'fabric';
 
@@ -66,16 +69,29 @@ export interface StationTierConfig {
 
 export interface StationConfig {
   id: StationId;
-  /** Hotspot this station lives on */
-  hotspotId: string;
+  /** Fixed hotspot this station lives on (shelter, fire pit). Omitted for slot-placed stations */
+  hotspotId?: string;
+  /** Set for stations the player places in a free build slot */
+  assignableId?: AssignableStationId;
   /** Emoji shown in the station's action menu title */
   icon: string;
-  /** Tier at the start of a run (0 = not built yet, shown as a floor blueprint) */
+  /** Tier at the start of a run (0 = not built yet) */
   baseTier: 0 | 1;
   /** Tiers 1…max in order */
   tiers: StationTierConfig[];
-  /** Where the traveler stands while building the first tier */
-  buildStandOffset: { dx: number; dy: number };
+  /** Where the traveler stands while building on a fixed hotspot (slots use their own stand spot) */
+  buildStandOffset?: { dx: number; dy: number };
+}
+
+/** A predefined empty spot on the floor where any not-yet-placed station can be built */
+export interface BuildSlotConfig {
+  id: string;
+  /** Normalized anchor (bottom-centre of whatever gets built here) */
+  position: { x: number; y: number };
+  /** Where the traveler stands to build and use whatever station is placed here */
+  standOffset: { dx: number; dy: number };
+  /** Footprint of the empty floor blueprint (not solid; the built tier's collider takes over) */
+  collider: { rx: number; ry: number };
 }
 
 export interface ShelterSceneConfig {
@@ -93,4 +109,6 @@ export interface ShelterSceneConfig {
   hotspots: HotspotConfig[];
   /** Multi-tier stations upgraded in-scene with found materials */
   stations?: StationConfig[];
+  /** Flexible build slots (each hosts one assignable station) */
+  buildSlots?: BuildSlotConfig[];
 }

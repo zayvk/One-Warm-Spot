@@ -21,6 +21,8 @@ export interface MiniGameProps {
   mode: GameMode;
   /** Optional heading (each game has its own default) */
   title?: string;
+  /** Allow Play Again after losing (default `true`; floor scavenging spots pass `false`) */
+  allowRetryOnLoss?: boolean;
   /** Finished and the player chose to move on */
   onComplete: (result: MiniGameResult) => void;
   /** Closed early (× / Escape) */

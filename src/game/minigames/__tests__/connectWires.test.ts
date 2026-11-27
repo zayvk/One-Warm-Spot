@@ -136,7 +136,12 @@ describe('repaired downstairs spots', () => {
   it('Floor 3’s fuse box is a live Connect the Wires puzzle paying 3 scrap', () => {
     const fusebox = BUILDING_FLOORS[3].hotspots.find((h) => h.id === 'f3-fusebox');
     expect(fusebox?.hasSparks).toBe(true);
-    expect(fusebox?.puzzle).toMatchObject({ game: 'connect-wires', reward: { scrap: 3 }, repairedLabel: 'Repaired Fuse Box' });
+    expect(fusebox).toMatchObject({
+      puzzle: 'connect-wires',
+      resetRule: 'rain',
+      reward: { scrap: 3 },
+      repairedLabel: 'Repaired Fuse Box',
+    });
   });
 
   it('a fresh run has nothing repaired; marking a spot is immutable and idempotent', () => {

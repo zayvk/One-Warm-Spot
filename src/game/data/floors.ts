@@ -1,12 +1,22 @@
 /* ───── Old Apartment building: floors, hotspots & lift-ride timing (pure data) ───── */
 
 import { CUTSCENE_ASSETS, SCENE_STAGES } from './media.ts';
+import { RESOURCE_MAP } from './resources.ts';
 import type { StageSafeArea } from '../engine/stageFit.ts';
 import type { ResourceId } from '../types/game.ts';
 
 /** Every lift stop: the four apartment floors and the Rooftop Terrace */
 export type BuildingFloorId = 1 | 2 | 3 | 4 | 'R';
 export type DownstairsFloorId = Exclude<BuildingFloorId, 'R'>;
+
+/** How a won scavenging spot resets overnight on a new morning */
+export type FloorResetRule = 'rain' | 'wind' | 'daily';
+
+/** Future tool required before clearing/entering the spot */
+export type FloorToolGate = 'axe';
+
+/** Live mini-game wired to a downstairs scavenging spot */
+export type FloorPuzzleGame = 'connect-wires' | 'tic-tac-toe' | 'dots-and-lines';
 
 /** Rect in % of the 1376×768 painting (same aspect-locked stage as the lift) */
 export interface FloorRect {
@@ -24,22 +34,22 @@ export interface FloorHotspot {
   kind: 'lift' | 'scavenge';
   /** Live electric arcs & embers (e.g. a fuse box) — they settle once the spot is repaired */
   hasSparks?: boolean;
-  /** A live scavenging puzzle: solving it repairs the spot once per run */
-  puzzle?: FloorPuzzle;
-}
-
-export interface FloorPuzzle {
-  game: 'connect-wires';
-  /** Mini-game heading */
-  title: string;
-  /** Materials awarded on the first repair */
-  reward: Partial<Record<ResourceId, number>>;
-  /** Hover label once repaired */
-  repairedLabel: string;
-  /** Toast on solving */
-  doneNotice: string;
-  /** Toast when clicked again after repair */
-  repairedNotice: string;
+  /** How this spot resets overnight after being won */
+  resetRule?: FloorResetRule;
+  /** Optional future tool gate; puzzle config stays defined for when the tool lands */
+  requiresTool?: FloorToolGate;
+  /** Mini-game wired to this spot */
+  puzzle?: FloorPuzzleGame;
+  /** Materials awarded on winning the puzzle */
+  reward?: Partial<Record<ResourceId, number>>;
+  /** Optional custom heading inside the mini-game modal */
+  puzzleTitle?: string;
+  /** Optional hover label once won/repaired */
+  repairedLabel?: string;
+  /** Optional toast on winning */
+  doneNotice?: string;
+  /** Optional toast when clicked again after winning today */
+  repairedNotice?: string;
 }
 
 export interface BuildingFloor {
@@ -48,6 +58,35 @@ export interface BuildingFloor {
   name: string;
   backdrop: string;
   hotspots: FloorHotspot[];
+}
+
+export function formatFloorReward(reward: Partial<Record<ResourceId, number>> | undefined): string {
+  if (!reward) return '';
+  return (Object.entries(reward) as [ResourceId, number][])
+    .filter(([, n]) => n > 0)
+    .map(([id, n]) => {
+      const res = RESOURCE_MAP[id];
+      return res ? `+${n} ${res.emoji} ${res.name}` : `+${n} ${id}`;
+    })
+    .join(', ');
+}
+
+export function floorSpotRepairedLabel(spot: FloorHotspot): string {
+  if (spot.repairedLabel) return spot.repairedLabel;
+  return spot.resetRule === 'daily' ? `${spot.label} (Searched)` : `${spot.label} (Opened)`;
+}
+
+export function floorSpotDoneNotice(spot: FloorHotspot): string {
+  if (spot.doneNotice) return spot.doneNotice;
+  const loot = formatFloorReward(spot.reward);
+  return loot ? `${spot.label} searched! Found ${loot}.` : `${spot.label} searched!`;
+}
+
+export function floorSpotRepairedNotice(spot: FloorHotspot): string {
+  if (spot.repairedNotice) return spot.repairedNotice;
+  if (spot.resetRule === 'rain') return 'Already repaired — dry and humming.';
+  if (spot.resetRule === 'daily') return 'Already searched today — check back tomorrow.';
+  return 'Already searched today — door stands open.';
 }
 
 /* Every floor is painted from the same spot, so the lift sits in the same place on each */
@@ -64,10 +103,34 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
     name: 'Ground Floor · Lobby',
     backdrop: CUTSCENE_ASSETS.terraceLobby,
     hotspots: [
-      { id: 'apartment-1a', label: 'Apartment 1A', rect: { left: 25.4, top: 21.5, width: 5.6, height: 49 }, kind: 'scavenge' },
+      {
+        id: 'f1-apt-1a',
+        label: 'Apartment 1A',
+        rect: { left: 25.4, top: 21.5, width: 5.6, height: 49 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'tic-tac-toe',
+        reward: { timber: 2, cloth: 1 },
+      },
       LIFT,
-      { id: 'apartment-1b', label: 'Apartment 1B', rect: { left: 69.2, top: 21.2, width: 5.5, height: 51.7 }, kind: 'scavenge' },
-      { id: 'side-doorway', label: 'Open Doorway', rect: { left: 82.3, top: 7.5, width: 10.8, height: 85.5 }, kind: 'scavenge' },
+      {
+        id: 'f1-apt-1b',
+        label: 'Apartment 1B',
+        rect: { left: 69.2, top: 21.2, width: 5.5, height: 51.7 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'tic-tac-toe',
+        reward: { timber: 1, cloth: 2 },
+      },
+      {
+        id: 'f1-side-door',
+        label: 'Side Doorway',
+        rect: { left: 82.3, top: 7.5, width: 10.8, height: 85.5 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'dots-and-lines',
+        reward: { timber: 1, cloth: 1, seeds: 1 },
+      },
     ],
   },
   2: {
@@ -75,11 +138,44 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
     name: 'Floor 2 · Residential Hallway',
     backdrop: CUTSCENE_ASSETS.terraceFloor2,
     hotspots: [
-      { id: 'f2-cupboard', label: 'Hallway Cupboard', rect: { left: 1.3, top: 8.5, width: 21.2, height: 89 }, kind: 'scavenge' },
-      { id: 'f2-boarded', label: 'Boarded Doorway & Debris', rect: { left: 25.1, top: 21.5, width: 7.3, height: 50 }, kind: 'scavenge' },
+      {
+        id: 'f2-cupboard',
+        label: 'Hallway Cupboard',
+        rect: { left: 1.3, top: 8.5, width: 21.2, height: 89 },
+        kind: 'scavenge',
+        resetRule: 'daily',
+        puzzle: 'dots-and-lines',
+        reward: { cloth: 2, seeds: 1 },
+      },
+      {
+        id: 'f2-boarded',
+        label: 'Boarded Doorway & Debris',
+        rect: { left: 25.1, top: 21.5, width: 7.3, height: 50 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        requiresTool: 'axe',
+        puzzle: 'tic-tac-toe',
+        reward: { timber: 2, scrap: 1 },
+      },
       LIFT,
-      { id: 'f2-room-2a', label: 'Sunlit Room 2A', rect: { left: 69.2, top: 21.5, width: 5.5, height: 50 }, kind: 'scavenge' },
-      { id: 'f2-door-2b', label: 'Cracked Door 2B', rect: { left: 82.5, top: 7.8, width: 10.4, height: 83 }, kind: 'scavenge' },
+      {
+        id: 'f2-room-2a',
+        label: 'Sunlit Room 2A',
+        rect: { left: 69.2, top: 21.5, width: 5.5, height: 50 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'dots-and-lines',
+        reward: { timber: 1, food: 1 },
+      },
+      {
+        id: 'f2-door-2b',
+        label: 'Cracked Door 2B',
+        rect: { left: 82.5, top: 7.8, width: 10.4, height: 83 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'dots-and-lines',
+        reward: { timber: 2, cloth: 1 },
+      },
     ],
   },
   3: {
@@ -87,8 +183,24 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
     name: 'Floor 3 · Utility Corridor',
     backdrop: CUTSCENE_ASSETS.terraceFloor3,
     hotspots: [
-      { id: 'f3-broken-door', label: 'Unhinged Door', rect: { left: 10.9, top: 22, width: 13.1, height: 66.5 }, kind: 'scavenge' },
-      { id: 'f3-room-3a', label: 'Utility Door 3A', rect: { left: 25.6, top: 21.5, width: 5.3, height: 49.5 }, kind: 'scavenge' },
+      {
+        id: 'f3-broken-door',
+        label: 'Unhinged Door',
+        rect: { left: 10.9, top: 22, width: 13.1, height: 66.5 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'dots-and-lines',
+        reward: { timber: 2, scrap: 1 },
+      },
+      {
+        id: 'f3-room-3a',
+        label: 'Utility Door 3A',
+        rect: { left: 25.6, top: 21.5, width: 5.3, height: 49.5 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'tic-tac-toe',
+        reward: { scrap: 2, timber: 1 },
+      },
       LIFT,
       {
         id: 'f3-fusebox',
@@ -96,16 +208,23 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         rect: { left: 71.6, top: 26, width: 9.4, height: 24 },
         kind: 'scavenge',
         hasSparks: true,
-        puzzle: {
-          game: 'connect-wires',
-          title: 'Floor 3 · Fuse Box',
-          reward: { scrap: 3 },
-          repairedLabel: 'Repaired Fuse Box',
-          doneNotice: 'Fuse box repaired! Salvaged +3 Metal Scrap.',
-          repairedNotice: 'The wiring hums quietly—already repaired.',
-        },
+        resetRule: 'rain',
+        puzzle: 'connect-wires',
+        reward: { scrap: 3 },
+        puzzleTitle: 'Floor 3 · Fuse Box',
+        repairedLabel: 'Repaired Fuse Box',
+        doneNotice: 'Fuse box repaired! Salvaged +3 Metal Scrap.',
+        repairedNotice: 'The wiring hums quietly—already repaired.',
       },
-      { id: 'f3-locker', label: 'Metal Utility Locker', rect: { left: 87.1, top: 18.9, width: 12.9, height: 81 }, kind: 'scavenge' },
+      {
+        id: 'f3-locker',
+        label: 'Metal Utility Locker',
+        rect: { left: 87.1, top: 18.9, width: 12.9, height: 81 },
+        kind: 'scavenge',
+        resetRule: 'daily',
+        puzzle: 'tic-tac-toe',
+        reward: { scrap: 2, stone: 1 },
+      },
     ],
   },
   4: {
@@ -113,12 +232,46 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
     name: 'Floor 4 · Skylight Landing',
     backdrop: CUTSCENE_ASSETS.terraceFloor4,
     hotspots: [
-      { id: 'f4-broken-door', label: 'Splintered Doorway', rect: { left: 11.3, top: 8.5, width: 10.5, height: 80 }, kind: 'scavenge' },
-      { id: 'f4-room-4a', label: 'Dark Hallway 4A', rect: { left: 25.8, top: 22.8, width: 5.1, height: 45 }, kind: 'scavenge' },
+      {
+        id: 'f4-broken-door',
+        label: 'Splintered Doorway',
+        rect: { left: 11.3, top: 8.5, width: 10.5, height: 80 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'dots-and-lines',
+        reward: { timber: 2, seeds: 1 },
+      },
+      {
+        id: 'f4-room-4a',
+        label: 'Dark Hallway 4A',
+        rect: { left: 25.8, top: 22.8, width: 5.1, height: 45 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'dots-and-lines',
+        reward: { scrap: 1, stone: 1, cloth: 1 },
+      },
       LIFT,
-      { id: 'f4-boarded', label: 'Boarded Studio Doors', rect: { left: 68.3, top: 9.1, width: 25.4, height: 55 }, kind: 'scavenge' },
+      {
+        id: 'f4-boarded',
+        label: 'Boarded Studio Doors',
+        rect: { left: 68.3, top: 9.1, width: 25.4, height: 55 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        requiresTool: 'axe',
+        puzzle: 'tic-tac-toe',
+        reward: { timber: 2, cloth: 2 },
+      },
       /* Listed after the boarded doors so the trunk & bookshelf sit on top where they overlap */
-      { id: 'f4-trunk', label: 'Dusty Steamer Trunk', rect: { left: 74.1, top: 77.5, width: 12.7, height: 16.3 }, kind: 'scavenge' },
+      {
+        id: 'f4-trunk',
+        label: 'Dusty Steamer Trunk',
+        rect: { left: 74.1, top: 77.5, width: 12.7, height: 16.3 },
+        kind: 'scavenge',
+        resetRule: 'daily',
+        puzzle: 'dots-and-lines',
+        reward: { cloth: 2, food: 1 },
+      },
+      /* Reserved for Jigsaw Puzzle */
       { id: 'f4-bookshelf', label: 'Hallway Bookshelf', rect: { left: 86.1, top: 53.4, width: 13.9, height: 46.6 }, kind: 'scavenge' },
     ],
   },

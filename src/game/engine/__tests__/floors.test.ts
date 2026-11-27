@@ -81,7 +81,7 @@ describe('liftRideTimeline', () => {
 describe('building floor config', () => {
   const floors = Object.values(BUILDING_FLOORS);
   const expectedIds: Record<DownstairsFloorId, string[]> = {
-    1: ['apartment-1a', 'lift', 'apartment-1b', 'side-doorway'],
+    1: ['f1-apt-1a', 'lift', 'f1-apt-1b', 'f1-side-door'],
     2: ['f2-cupboard', 'f2-boarded', 'lift', 'f2-room-2a', 'f2-door-2b'],
     3: ['f3-broken-door', 'f3-room-3a', 'lift', 'f3-fusebox', 'f3-locker'],
     4: ['f4-broken-door', 'f4-room-4a', 'lift', 'f4-boarded', 'f4-trunk', 'f4-bookshelf'],
@@ -118,6 +118,34 @@ describe('building floor config', () => {
   it('only the Floor 3 fuse box sparks', () => {
     const sparking = floors.flatMap((f) => f.hotspots.filter((h) => h.hasSparks).map((h) => h.id));
     expect(sparking).toEqual(['f3-fusebox']);
+  });
+
+  it('wires Connect the Wires, Tic-Tac-Toe, and Dots & Lines with rewards and reset rules across Floors 1–4', () => {
+    const scavenge = floors.flatMap((f) => f.hotspots.filter((h) => h.kind === 'scavenge'));
+    const byId = Object.fromEntries(scavenge.map((h) => [h.id, h]));
+
+    expect(byId['f3-fusebox']).toMatchObject({ puzzle: 'connect-wires', resetRule: 'rain', reward: { scrap: 3 } });
+    expect(byId['f1-apt-1a']).toMatchObject({ puzzle: 'tic-tac-toe', resetRule: 'wind', reward: { timber: 2, cloth: 1 } });
+    expect(byId['f3-locker']).toMatchObject({ puzzle: 'tic-tac-toe', resetRule: 'daily', reward: { scrap: 2, stone: 1 } });
+    expect(byId['f2-cupboard']).toMatchObject({ puzzle: 'dots-and-lines', resetRule: 'daily', reward: { cloth: 2, seeds: 1 } });
+    expect(byId['f4-trunk']).toMatchObject({ puzzle: 'dots-and-lines', resetRule: 'daily', reward: { cloth: 2, food: 1 } });
+    expect(byId['f4-bookshelf'].puzzle).toBeUndefined();
+  });
+
+  it('gates boarded doors behind the future axe while preserving their puzzle metadata', () => {
+    const byId = Object.fromEntries(floors.flatMap((f) => f.hotspots).map((h) => [h.id, h]));
+    expect(byId['f2-boarded']).toMatchObject({
+      requiresTool: 'axe',
+      resetRule: 'wind',
+      puzzle: 'tic-tac-toe',
+      reward: { timber: 2, scrap: 1 },
+    });
+    expect(byId['f4-boarded']).toMatchObject({
+      requiresTool: 'axe',
+      resetRule: 'wind',
+      puzzle: 'tic-tac-toe',
+      reward: { timber: 2, cloth: 2 },
+    });
   });
 
   it('offers every stop on the elevator panel, top to bottom, with the right painting & caption', () => {

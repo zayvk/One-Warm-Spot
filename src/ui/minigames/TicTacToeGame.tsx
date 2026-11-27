@@ -59,7 +59,13 @@ function OMark() {
  * opponent (O) whose skill follows the shelter's mode — Cozy plays casually,
  * Challenge plays sharp. Finishing offers Play Again or Continue; × / Escape cancel.
  */
-export default function TicTacToeGame({ mode, title = 'Tic-Tac-Toe', onComplete, onCancel }: MiniGameProps) {
+export default function TicTacToeGame({
+  mode,
+  title = 'Tic-Tac-Toe',
+  allowRetryOnLoss = true,
+  onComplete,
+  onCancel,
+}: MiniGameProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const [board, setBoard] = useState<Cell[]>(emptyBoard);
   const [cpuTurn, setCpuTurn] = useState(false);
@@ -128,7 +134,14 @@ export default function TicTacToeGame({ mode, title = 'Tic-Tac-Toe', onComplete,
     onComplete({ outcome: status, mode });
   };
 
-  const statusText = finished ? RESULT_TEXT[status] : cpuTurn ? 'Thinking…' : 'Your turn';
+  const lostLocked = status === 'loss' && !allowRetryOnLoss;
+  const statusText = lostLocked
+    ? 'Try again tomorrow'
+    : finished
+      ? RESULT_TEXT[status]
+      : cpuTurn
+        ? 'Thinking…'
+        : 'Your turn';
 
   /* The golden stroke runs a little past the first and last cell of the winning line */
   let strike: { x1: number; y1: number; x2: number; y2: number } | null = null;
@@ -196,9 +209,11 @@ export default function TicTacToeGame({ mode, title = 'Tic-Tac-Toe', onComplete,
 
         {finished && (
           <footer className="ows-mg-footer">
-            <button type="button" className="ows-mg-btn" onMouseEnter={playHover} onClick={playAgain}>
-              Play Again
-            </button>
+            {(allowRetryOnLoss || status === 'draw') && (
+              <button type="button" className="ows-mg-btn" onMouseEnter={playHover} onClick={playAgain}>
+                Play Again
+              </button>
+            )}
             <button type="button" className="ows-mg-btn ows-mg-btn--primary" onMouseEnter={playHover} onClick={finish}>
               Continue
             </button>

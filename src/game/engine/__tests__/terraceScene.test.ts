@@ -1,7 +1,19 @@
-import { describe, expect, it } from 'vitest';
-import { parseTerraceState, freshTerraceState, validateTerraceState } from '../terraceState.ts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  freshTerraceState,
+  isSpotFailedToday,
+  loadTerraceState,
+  parseTerraceState,
+  resetFloorSpotsForNewDay,
+  saveTerraceState,
+  validateTerraceState,
+  withSpotFailedToday,
+} from '../terraceState.ts';
 import { spendResources } from '../progression.ts';
 import { findSpawnProblems, generateTerraceSpawns, regrowTerraceSpawns, seededRng } from '../terraceSpawns.ts';
+import { buildBackup, parseBackupText } from '../backup.ts';
+import { useGameStore } from '../../store/useGameStore.ts';
+import { SAVE_VERSION } from '../saveSystem.ts';
 import type { SlotAssignments } from '../buildSlots.ts';
 import {
   DEFAULT_TERRACE_SPAWNS,
@@ -51,6 +63,7 @@ describe('parseTerraceState', () => {
       slotAssignments: { 'slot-1': null, 'slot-2': null, 'slot-3': null, 'slot-4': null },
       spawns: null,
       repairedSpots: [],
+      failedTodaySpots: [],
     });
   });
 
@@ -270,5 +283,109 @@ describe('Terrace balance', () => {
     for (const [id, n] of Object.entries(needed)) {
       expect(GENEROUS_TEST_POOL[id as ResourceId] + (rooftopYield[id] ?? 0), id).toBeGreaterThanOrEqual(n ?? 0);
     }
+  });
+});
+
+describe('downstairs floor spot resets & failedTodaySpots', () => {
+  const sampleRepaired = [
+    'f3-fusebox',
+    'f1-apt-1a',
+    'f2-room-2a',
+    'f2-cupboard',
+    'f3-locker',
+    'f4-trunk',
+  ];
+
+  it('clears daily containers on Clear while keeping wiring and wind-blown doors fixed', () => {
+    expect(resetFloorSpotsForNewDay(sampleRepaired, 'clear')).toEqual([
+      'f3-fusebox',
+      'f1-apt-1a',
+      'f2-room-2a',
+    ]);
+  });
+
+  it('shorts out rain-reset electrical spots in Rain while keeping wind-only doors open', () => {
+    expect(resetFloorSpotsForNewDay(sampleRepaired, 'rain')).toEqual([
+      'f1-apt-1a',
+      'f2-room-2a',
+    ]);
+  });
+
+  it('slams wind-reset doors shut in Wind while keeping the fuse box repaired', () => {
+    expect(resetFloorSpotsForNewDay(sampleRepaired, 'wind')).toEqual([
+      'f3-fusebox',
+    ]);
+  });
+
+  it('persists failedTodaySpots, migrates older saves to [], and validates strictly in backups', () => {
+    const fresh = freshTerraceState(10);
+    expect(fresh.failedTodaySpots).toEqual([]);
+    expect(isSpotFailedToday(fresh, 'f1-apt-1a')).toBe(false);
+
+    const failed = withSpotFailedToday(fresh, 'f1-apt-1a');
+    expect(isSpotFailedToday(failed, 'f1-apt-1a')).toBe(true);
+    expect(withSpotFailedToday(failed, 'f1-apt-1a')).toBe(failed);
+
+    expect(parseTerraceState(JSON.stringify(failed)).failedTodaySpots).toEqual(['f1-apt-1a']);
+    const { failedTodaySpots: _omit, ...older } = failed;
+    expect(parseTerraceState(JSON.stringify(older)).failedTodaySpots).toEqual([]);
+
+    const save = {
+      version: SAVE_VERSION,
+      day: 2,
+      chosenSite: 'terrace' as const,
+      selectedMode: 'cozy' as const,
+      travelerGender: 'female' as const,
+      resources: { timber: 5, scrap: 2, cloth: 3, stone: 1, seeds: 1, water: 4, food: 1 },
+      unlockedUpgrades: [],
+      kitCollected: true,
+      stats: { maxDaysSurvived: 1, totalUpgradesBuilt: 0, totalExpansionsBuilt: 0 },
+      timestamp: 1,
+    };
+    const roundTrip = parseBackupText(JSON.stringify(buildBackup(save, failed)));
+    expect(roundTrip.ok && roundTrip.terrace?.failedTodaySpots).toEqual(['f1-apt-1a']);
+
+    expect(validateTerraceState({ ...failed, failedTodaySpots: 'f1-apt-1a' })).toBeNull();
+    expect(validateTerraceState({ ...failed, failedTodaySpots: ['f1-apt-1a', 42] })).toBeNull();
+  });
+
+  describe('sleepAtShelter overnight reset integration', () => {
+    const mem = new Map<string, string>();
+    const storageMock = {
+      getItem: (k: string) => mem.get(k) ?? null,
+      setItem: (k: string, v: string) => { mem.set(k, v); },
+      removeItem: (k: string) => { mem.delete(k); },
+      clear: () => { mem.clear(); },
+    };
+
+    beforeEach(() => {
+      mem.clear();
+      vi.stubGlobal('localStorage', storageMock);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('clears failedTodaySpots and applies weather resets on Day N+1 morning', () => {
+      useGameStore.getState().chooseSite('terrace');
+      const seeded = {
+        ...freshTerraceState(12),
+        repairedSpots: ['f3-fusebox', 'f1-apt-1a', 'f2-cupboard'],
+        failedTodaySpots: ['f3-locker', 'f4-trunk'],
+      };
+      saveTerraceState(seeded);
+
+      /* Force weather roll deterministically to rain (0.60 > cozy 50 clear, <= 75 rain) */
+      const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.6);
+      useGameStore.getState().sleepAtShelter();
+      randSpy.mockRestore();
+
+      const after = loadTerraceState();
+      expect(after.failedTodaySpots).toEqual([]);
+      expect(after.repairedSpots).toEqual(['f1-apt-1a']);
+      const latestNotice = useGameStore.getState().notices.at(-1);
+      expect(latestNotice?.body).toContain('Rain shorted out downstairs wiring.');
+    });
   });
 });

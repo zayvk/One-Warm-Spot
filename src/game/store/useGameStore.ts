@@ -47,7 +47,10 @@ import {
 import { morningWaterBonus, rollWeather } from '../engine/weather.ts';
 import {
   clearTerraceState,
+  floorSpotResetRule,
+  readStoredTerraceState,
   regrowStoredTerrace,
+  resetFloorSpotsForNewDay,
   saveTerraceState,
   type TerraceState,
 } from '../engine/terraceState.ts';
@@ -515,6 +518,29 @@ export const useGameStore = create<GameState>()((set, get) => {
       const water = morningWaterBonus(weather, s.unlockedUpgrades);
       /* Each weather shapes the rooftop overnight — rain greens it, wind blows in cartons (persisted before the scene reloads it) */
       const regrowth = s.chosenSite === 'terrace' ? regrowStoredTerrace(weather) : null;
+      let floorResetNote = '';
+      if (s.chosenSite === 'terrace') {
+        const storedTerrace = regrowth?.state ?? readStoredTerraceState();
+        if (storedTerrace) {
+          const nextRepaired = resetFloorSpotsForNewDay(storedTerrace.repairedSpots, weather);
+          const resetIds = storedTerrace.repairedSpots.filter((id) => !nextRepaired.includes(id));
+          if (resetIds.length > 0 || storedTerrace.failedTodaySpots.length > 0) {
+            const nextState: TerraceState = {
+              ...storedTerrace,
+              repairedSpots: nextRepaired,
+              failedTodaySpots: [],
+            };
+            saveTerraceState(nextState);
+            if (regrowth) regrowth.state = nextState;
+          }
+          const hadRainReset = resetIds.some((id) => floorSpotResetRule(id) === 'rain');
+          const hadWindReset = resetIds.some((id) => floorSpotResetRule(id) === 'wind');
+          const notes: string[] = [];
+          if (hadRainReset) notes.push('Rain shorted out downstairs wiring.');
+          if (hadWindReset) notes.push('Strong wind slammed downstairs doors shut.');
+          floorResetNote = notes.join(' ');
+        }
+      }
       set({
         day: outcome.day,
         dayPhase: outcome.dayPhase,
@@ -539,6 +565,7 @@ export const useGameStore = create<GameState>()((set, get) => {
         water > 0
           ? `Your cups caught +${water} ${RESOURCE_MAP.water.emoji}, too.`
           : `Stamina ${outcome.stamina}/100.`;
+      const bodyParts = [rooftopLine || info.morning, floorResetNote, tail].filter(Boolean);
       commitStats(
         { ...s.stats, maxDaysSurvived: Math.max(s.stats.maxDaysSurvived, daysSurvivedOn(outcome.day)) },
         [
@@ -546,7 +573,7 @@ export const useGameStore = create<GameState>()((set, get) => {
             id: ++noticeSeq,
             icon: info.emoji,
             title: `Day ${outcome.day} · Morning`,
-            body: `${rooftopLine || info.morning} ${tail}`,
+            body: bodyParts.join(' '),
             tone: 'morning',
           },
         ],

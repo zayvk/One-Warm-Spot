@@ -64,7 +64,13 @@ function edgeLabel(e: DotsEdge): string {
  * board against a relaxed opponent, Challenge a 5×5-dot board against a tactical one.
  * Finishing offers Play Again or Continue; × / Escape cancel.
  */
-export default function DotsAndBoxesGame({ mode, title = 'Dots & Lines', onComplete, onCancel }: MiniGameProps) {
+export default function DotsAndBoxesGame({
+  mode,
+  title = 'Dots & Lines',
+  allowRetryOnLoss = true,
+  onComplete,
+  onCancel,
+}: MiniGameProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const uid = `dots${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const [game, setGame] = useState<DotsState>(() => createDotsState(mode));
@@ -162,11 +168,12 @@ export default function DotsAndBoxesGame({ mode, title = 'Dots & Lines', onCompl
     onComplete({ outcome: status, mode });
   };
 
+  const lostLocked = status === 'loss' && !allowRetryOnLoss;
   const cpuChaining = cpuTurn && lastMove?.by === 'cpu' && lastMove.completed.length > 0;
   let statusText: string;
   let statusMod: string;
   if (finished) {
-    statusText = RESULT_TEXT[status];
+    statusText = lostLocked ? 'Try again tomorrow' : RESULT_TEXT[status];
     statusMod = status;
   } else if (cpuTurn) {
     statusText = cpuChaining ? `${OPPONENT} takes another turn…` : 'Thinking…';
@@ -290,9 +297,11 @@ export default function DotsAndBoxesGame({ mode, title = 'Dots & Lines', onCompl
             </p>
             {finished && (
               <footer className="ows-mg-footer">
-                <button type="button" className="ows-mg-btn" onMouseEnter={playHover} onClick={playAgain}>
-                  Play Again
-                </button>
+                {(allowRetryOnLoss || status === 'draw') && (
+                  <button type="button" className="ows-mg-btn" onMouseEnter={playHover} onClick={playAgain}>
+                    Play Again
+                  </button>
+                )}
                 <button type="button" className="ows-mg-btn ows-mg-btn--primary" onMouseEnter={playHover} onClick={finish}>
                   Continue
                 </button>

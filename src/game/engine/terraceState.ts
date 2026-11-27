@@ -18,6 +18,7 @@ import {
   type TerraceSpawns,
 } from '../data/scenes/terrace.ts';
 import type { StationId } from '../data/scenes/types.ts';
+import { BUILDING_FLOORS, type FloorResetRule } from '../data/floors.ts';
 import type { Weather } from '../types/game.ts';
 import { PERK_IDS } from '../data/recipes.ts';
 import {
@@ -63,8 +64,10 @@ export interface TerraceState {
   slotAssignments: SlotAssignments;
   /** This run's box & weed layout; `null` = hand-placed defaults (older saves) */
   spawns: TerraceSpawns | null;
-  /** Downstairs scavenging spots fixed this run (e.g. `f3-fusebox`) */
+  /** Downstairs scavenging spots completed/repaired right now (e.g. `f3-fusebox`) */
   repairedSpots: string[];
+  /** Downstairs scavenging spots lost today and locked until tomorrow */
+  failedTodaySpots: string[];
 }
 
 export const STATION_TIER_KEY: Record<StationId, keyof TerraceState> = {
@@ -114,6 +117,7 @@ export function emptyTerraceState(spawns: TerraceSpawns | null = null): TerraceS
     slotAssignments: emptySlotAssignments(),
     spawns,
     repairedSpots: [],
+    failedTodaySpots: [],
   };
 }
 
@@ -200,6 +204,7 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
     if (obj.builtProps !== undefined && !isStringList(obj.builtProps)) return null;
     if (obj.craftedPerks !== undefined && !isStringList(obj.craftedPerks)) return null;
     if (obj.repairedSpots !== undefined && !isStringList(obj.repairedSpots)) return null;
+    if (obj.failedTodaySpots !== undefined && !isStringList(obj.failedTodaySpots)) return null;
     for (const key of ['planterReady', 'barrelReady']) {
       if (obj[key] !== undefined && typeof obj[key] !== 'boolean') return null;
     }
@@ -239,6 +244,7 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
   state.craftedPerks = [...new Set(stringList(obj.craftedPerks).filter((id) => PERK_IDS.has(id)))];
   /* Saves from before the downstairs puzzles have none */
   state.repairedSpots = [...new Set(stringList(obj.repairedSpots))];
+  state.failedTodaySpots = [...new Set(stringList(obj.failedTodaySpots))];
 
   /* Older rooftops have no slot data: built stations go back to their old spots */
   const slots = parseSlotAssignments(obj.slotAssignments, strict);
@@ -344,6 +350,48 @@ export function markStoredSpotRepaired(spotId: string): TerraceState {
   const state = withSpotRepaired(loadTerraceState(), spotId);
   saveTerraceState(state);
   return state;
+}
+
+export function isSpotFailedToday(state: Pick<TerraceState, 'failedTodaySpots'> | null, spotId: string): boolean {
+  return Boolean(state?.failedTodaySpots.includes(spotId));
+}
+
+/** Records a downstairs spot lost today (immutable; locked until tomorrow) */
+export function withSpotFailedToday(state: TerraceState, spotId: string): TerraceState {
+  return isSpotFailedToday(state, spotId) ? state : { ...state, failedTodaySpots: [...state.failedTodaySpots, spotId] };
+}
+
+/** Marks a downstairs spot lost today in the stored rooftop state and persists it */
+export function markStoredSpotFailedToday(spotId: string): TerraceState {
+  const state = withSpotFailedToday(loadTerraceState(), spotId);
+  saveTerraceState(state);
+  return state;
+}
+
+const FLOOR_RESET_RULES: Readonly<Record<string, FloorResetRule | undefined>> = Object.fromEntries(
+  Object.values(BUILDING_FLOORS)
+    .flatMap((f) => f.hotspots)
+    .map((h) => [h.id, h.resetRule]),
+);
+
+export function floorSpotResetRule(spotId: string): FloorResetRule | undefined {
+  return FLOOR_RESET_RULES[spotId];
+}
+
+/**
+ * Overnight reset for downstairs scavenging spots under the new morning's `weather`:
+ * - Always clears `'daily'` containers (cupboards, trunks, lockers)
+ * - Clears `'rain'` wiring spots (e.g. Floor 3 Fuse Box) when `weather === 'rain'`
+ * - Clears `'wind'` door spots when `weather === 'wind'`
+ */
+export function resetFloorSpotsForNewDay(repairedSpots: readonly string[], weather: Weather): string[] {
+  return repairedSpots.filter((id) => {
+    const rule = FLOOR_RESET_RULES[id];
+    if (rule === 'daily') return false;
+    if (weather === 'rain' && rule === 'rain') return false;
+    if (weather === 'wind' && rule === 'wind') return false;
+    return true;
+  });
 }
 
 /**

@@ -342,12 +342,19 @@ Flow:
 - **Feedback:** a correct pair gets a brass glint and a cord glow plus `playBoxChime`; the last one instead plays `playClaim` as the panel's frame lights up. A wrong pair shakes the left terminal, pulses the right post red and plays `playLocked`.
 - **Sizing:** `width = min(520px, 100vw − 260px, (100vh − 120px) × ratio)` with a 180px side column. At ≤ 520px height: `100vw − 230px` and `(100vh − 104px) × ratio` with a 150px column. Checked in-browser at 1024×768 (Cozy) and 667×375 (Challenge, 6 wires, before and after finishing): no card scroll. Reduce Motion drops the ring pulse, glint, red pulse, shake and cord glow.
 
-**Live on Floor 3 (`BuildingFloorScreen.tsx` + `data/floors.ts`):**
-- **Data:** `FloorHotspot.puzzle?: FloorPuzzle { game: 'connect-wires', title, reward, repairedLabel, doneNotice, repairedNotice }`. `f3-fusebox` uses `title: 'Floor 3 · Fuse Box'`, `reward: { scrap: 3 }`, `repairedLabel: 'Repaired Fuse Box'`.
-- **Before repair:** the screen reads `repairedSpots` from the stored rooftop state on mount. Clicking an unrepaired puzzle spot (`playClick`) mounts `<ConnectWiresGame mode={selectedMode} title=… />`.
-- **On a `'win'`:** `markStoredSpotRepaired(id)` saves the spot into `ows_terrace_state`, the reward is added via `addResources` and `_save()`, and a 🔩 `unlock` toast shows *"Fuse box repaired! Salvaged +3 Metal Scrap."*.
-- **After repair:** the spot's sparks stop rendering, its label and aria-label become *"Repaired Fuse Box"*, and clicking it only glows and shows a ✨ toast (*"The wiring hums quietly—already repaired."*). Cancelling changes nothing. Verified in-browser: scrap 3 → 6, sparks gone, label swapped, the stored list updated, and all of it still there after a reload.
-- **Persistence:** `TerraceState.repairedSpots: string[]` is `[]` on a fresh run, so choosing a shelter or resetting clears it. Lenient loading keeps only unique strings and defaults to `[]` for older saves; strict backup validation rejects a non-string-list. The rooftop scene keeps it on every save, since its state comes from `loadTerraceState()` and only one screen is mounted at a time. Helpers: `isSpotRepaired`, `withSpotRepaired` (immutable, idempotent), `markStoredSpotRepaired`.
+**Live across Floors 1–4 (`BuildingFloorScreen.tsx` + `data/floors.ts`):**
+- **Data (`FloorHotspot`):** `puzzle?: 'connect-wires' | 'tic-tac-toe' | 'dots-and-lines'`, `reward?`, `resetRule?: 'rain' | 'wind' | 'daily'`, `requiresTool?: 'axe'`, plus optional `puzzleTitle`, `repairedLabel`, `doneNotice`, `repairedNotice`.
+- **Outcome rules (`allowRetryOnLoss={false}`):**
+  - **Win:** `markStoredSpotRepaired(id)` records the spot in `ows_terrace_state`, `addResources` + `_save()` awards `reward`, and an `unlock` toast announces the loot. `f3-fusebox` stops sparking and reads *"Repaired Fuse Box"*.
+  - **Draw:** keeps **Play Again** visible/enabled inside `TicTacToeGame` / `DotsAndBoxesGame` for immediate replay without locking the spot.
+  - **Loss:** hides **Play Again**, shows *"Try again tomorrow"* with **Continue**, and calls `markStoredSpotFailedToday(id)` (`failedTodaySpots`); clicking the spot again today shows `"Locked for today — try again tomorrow"`.
+  - **Axe gate (`requiresTool: 'axe'`):** `f2-boarded` and `f4-boarded` flare and toast `"Boarded shut with planks — needs an axe to clear (coming soon)."` without launching their pre-configured Tic-Tac-Toe puzzle.
+  - **Bookshelf (`f4-bookshelf`):** kept on `"scavenge puzzle coming soon"` (reserved for Jigsaw Puzzle).
+- **Overnight & weather resets (`resetFloorSpotsForNewDay(repairedSpots, weather)` in `terraceState.ts`, called inside `sleepAtShelter()`):**
+  - Always clears `failedTodaySpots = []` and removes `'daily'` container spots (`f2-cupboard`, `f3-locker`, `f4-trunk`).
+  - On `'rain'`, removes `'rain'` spots (`f3-fusebox` shorts out and sparks again) and notes *"Rain shorted out downstairs wiring."*
+  - On `'wind'`, removes `'wind'` door spots and notes *"Strong wind slammed downstairs doors shut."*
+- **Persistence:** `TerraceState.repairedSpots: string[]` and `failedTodaySpots: string[]` default to `[]` on fresh runs and older saves; strictly validated in backups.
 
 ### The Old Elevator: Floor Picker, Lift Rides & Apartment Floors
 
@@ -359,10 +366,10 @@ Flow:
 
 | Floor | Painting | Hotspots (`id` — label) |
 |---|---|---|
-| 1 · Ground Floor · Lobby | `terrace-lobby.webp` | `apartment-1a` Apartment 1A · `apartment-1b` Apartment 1B · `side-doorway` Open Doorway · `lift` |
-| 2 · Residential Hallway | `terrace-floor-2.webp` | `f2-cupboard` Hallway Cupboard · `f2-boarded` Boarded Doorway & Debris · `f2-room-2a` Sunlit Room 2A · `f2-door-2b` Cracked Door 2B · `lift` |
-| 3 · Utility Corridor | `terrace-floor-3.webp` | `f3-broken-door` Unhinged Door · `f3-room-3a` Utility Door 3A · `f3-fusebox` Sparking Fuse Box (`hasSparks`, live `puzzle`: Connect the Wires → *Repaired Fuse Box*, +3 scrap) · `f3-locker` Metal Utility Locker · `lift` |
-| 4 · Skylight Landing | `terrace-floor-4.webp` | `f4-broken-door` Splintered Doorway · `f4-room-4a` Dark Hallway 4A · `f4-boarded` Boarded Studio Doors · `f4-trunk` Dusty Steamer Trunk · `f4-bookshelf` Hallway Bookshelf · `lift` |
+| 1 · Ground Floor · Lobby | `terrace-lobby.webp` | `f1-apt-1a` Apartment 1A (`tic-tac-toe`, wind) · `f1-apt-1b` Apartment 1B (`tic-tac-toe`, wind) · `f1-side-door` Side Doorway (`dots-and-lines`, wind) · `lift` |
+| 2 · Residential Hallway | `terrace-floor-2.webp` | `f2-cupboard` Hallway Cupboard (`dots-and-lines`, daily) · `f2-boarded` Boarded Doorway & Debris (`requiresTool: 'axe'`, `tic-tac-toe`, wind) · `f2-room-2a` Sunlit Room 2A (`dots-and-lines`, wind) · `f2-door-2b` Cracked Door 2B (`dots-and-lines`, wind) · `lift` |
+| 3 · Utility Corridor | `terrace-floor-3.webp` | `f3-broken-door` Unhinged Door (`dots-and-lines`, wind) · `f3-room-3a` Utility Door 3A (`tic-tac-toe`, wind) · `f3-fusebox` Sparking Fuse Box (`hasSparks`, `connect-wires`, rain, +3 🔩 scrap) · `f3-locker` Metal Utility Locker (`tic-tac-toe`, daily) · `lift` |
+| 4 · Skylight Landing | `terrace-floor-4.webp` | `f4-broken-door` Splintered Doorway (`dots-and-lines`, wind) · `f4-room-4a` Dark Hallway 4A (`dots-and-lines`, wind) · `f4-boarded` Boarded Studio Doors (`requiresTool: 'axe'`, `tic-tac-toe`, wind) · `f4-trunk` Dusty Steamer Trunk (`dots-and-lines`, daily) · `f4-bookshelf` Hallway Bookshelf (reserved for Jigsaw) · `lift` |
 
 **Ride timing (`liftRideTimeline`):**
 - **Length:** `total = 2800 + (floors − 1) × 567ms` — 2.8s for one floor, 4.5s for four.
@@ -638,10 +645,10 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
   - **Reusable mini-game overlay:** one framework triggered from room scavenging hotspots (`safe`, `drawer`, `cupboard`, `under-bed`, `shelf`, …). Rewards feed back cleanly into the main Zustand resource store (`addResources()` + `_save()`); occasional Found Traveler Diary Pages are a later hook.
   - **Shared contract (built):** `src/game/minigames/types.ts` — `MiniGameProps { mode, title?, onComplete(result), onCancel }` and `MiniGameResult { outcome: 'win' | 'draw' | 'loss' | 'cancelled', mode }`. A mini-game never touches resources; the host hotspot maps the outcome to rewards.
   - **Starter puzzle modules — five built:** **Connect the Wires** (✅ **live on Floor 3's fuse box**), plus **Find the Object**, **Jigsaw Puzzle**, **Tic-Tac-Toe** and **Dots & Lines** (✅ built, not wired yet). Next milestone: wire the other four into the remaining scavenging spots the same way (`FloorPuzzle` data on the hotspot, a `game` case in `BuildingFloorScreen`, `repairedSpots` for once-per-run rewards), replacing the "coming soon" toasts.
-  - [x] **Connect the Wires (built, LIVE):** pure engine `src/game/minigames/connectWires.ts` + UI `src/ui/minigames/ConnectWiresGame.tsx`, mounted by `BuildingFloorScreen` for `f3-fusebox` (+3 🔩 scrap once per run, sparks off, *Repaired Fuse Box*).
-  - [x] **Tic-Tac-Toe (built, unmounted):** pure engine `src/game/minigames/ticTacToe.ts` + UI `src/ui/minigames/TicTacToeGame.tsx`. Next: mount it from a floor/apartment hotspot (e.g. replace one "scavenging puzzle coming soon" toast), pass `useGameStore().selectedMode` as `mode`, and award materials on `onComplete`.
-  - [x] **Jigsaw Puzzle (built, unmounted):** pure engine `src/game/minigames/jigsaw.ts` + UI `src/ui/minigames/JigsawGame.tsx` + `JIGSAW_IMAGES` (15 paintings in `public/source/jigsaw/` + 4 shelter scenes). Wire it the same way, e.g. to a "torn note / map / jammed panel" spot such as Floor 4's bookshelf. Its only finished outcome is `'win'`.
-  - [x] **Dots & Lines (built, unmounted):** pure engine `src/game/minigames/dotsAndBoxes.ts` + UI `src/ui/minigames/DotsAndBoxesGame.tsx`. Wire it the same way (e.g. a latch, safe or locker spot such as Floor 3's locker). It can end in `'win'`, `'loss'` or (Challenge only) `'draw'`.
+  - [x] **Connect the Wires (built, LIVE):** pure engine `src/game/minigames/connectWires.ts` + UI `src/ui/minigames/ConnectWiresGame.tsx`, mounted by `BuildingFloorScreen` for `f3-fusebox` (+3 🔩 scrap, sparks off, *Repaired Fuse Box*; shorts out on Rain).
+  - [x] **Tic-Tac-Toe (built, LIVE):** pure engine `src/game/minigames/ticTacToe.ts` + UI `src/ui/minigames/TicTacToeGame.tsx`, wired across Floor 1 (`f1-apt-1a`, `f1-apt-1b`), Floor 3 (`f3-room-3a`, `f3-locker`), and pre-configured on Axe-gated `f2-boarded` / `f4-boarded`, with `allowRetryOnLoss={false}`.
+  - [x] **Dots & Lines (built, LIVE):** pure engine `src/game/minigames/dotsAndBoxes.ts` + UI `src/ui/minigames/DotsAndBoxesGame.tsx`, wired across Floor 1 (`f1-side-door`), Floor 2 (`f2-cupboard`, `f2-room-2a`, `f2-door-2b`), Floor 3 (`f3-broken-door`), and Floor 4 (`f4-broken-door`, `f4-room-4a`, `f4-trunk`), with Draw replay and Loss daily lock.
+  - [x] **Jigsaw Puzzle (built, unmounted):** pure engine `src/game/minigames/jigsaw.ts` + UI `src/ui/minigames/JigsawGame.tsx` + `JIGSAW_IMAGES` (15 paintings in `public/source/jigsaw/` + 4 shelter scenes). Reserved for `f4-bookshelf` (Floor 4). Its only finished outcome is `'win'`.
   - [x] **Find the Object (built, unmounted):** pure engine `src/game/minigames/findTheObject.ts` + art `src/ui/minigames/rummageIcons.tsx` + UI `src/ui/minigames/FindTheObjectGame.tsx`. A natural fit for drawer / cupboard / trunk spots (e.g. Floor 2's Hallway Cupboard, Floor 4's Steamer Trunk). Its only finished outcome is `'win'`.
   - **Cozy guarantee:** no punishing timers or harsh failure states; puzzles can always be retried or left.
   - **Follow-ups:** persist per-room searched spots (ties into the Save schema v5 item below), then switch off `TEST_MODE_GENEROUS_START` and tune scarcity.

@@ -1,20 +1,29 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import {
   BUILDING_FLOORS,
   floorSafeArea,
+  floorSpotDoneNotice,
+  floorSpotRepairedLabel,
+  floorSpotRepairedNotice,
   type BuildingFloorId,
   type DownstairsFloorId,
   type FloorHotspot,
 } from '../game/data/floors.ts';
 import { fitStage, stageLeavesGaps } from '../game/engine/stageFit.ts';
-import { markStoredSpotRepaired, readStoredTerraceState } from '../game/engine/terraceState.ts';
+import {
+  markStoredSpotFailedToday,
+  markStoredSpotRepaired,
+  readStoredTerraceState,
+} from '../game/engine/terraceState.ts';
 import { addResources } from '../game/engine/scavenge.ts';
 import { RESOURCE_MAP } from '../game/data/resources.ts';
 import { playClick, playHover, playLocked, startSiteAmbience } from '../game/audio/soundEngine.ts';
 import type { MiniGameResult } from '../game/minigames/types.ts';
 import ElevatorPanelModal from './ElevatorPanelModal.tsx';
 import ConnectWiresGame from './minigames/ConnectWiresGame.tsx';
+import TicTacToeGame from './minigames/TicTacToeGame.tsx';
+import DotsAndBoxesGame from './minigames/DotsAndBoxesGame.tsx';
 
 /** Floor paintings are 1376×768 (the same stage as the lift) */
 const ART_W = 1376;
@@ -83,9 +92,13 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
   const selectedMode = useGameStore((s) => s.selectedMode);
   const [panelOpen, setPanelOpen] = useState(false);
   const [glowing, setGlowing] = useState<{ id: string; key: number } | null>(null);
-  /* Spots fixed this run (kept in the rooftop's saved state) */
+  /* Spots fixed or failed today (kept in the rooftop's saved state) */
   const [repaired, setRepaired] = useState<readonly string[]>(() => readStoredTerraceState()?.repairedSpots ?? []);
-  const [puzzleSpot, setPuzzleSpot] = useState<FloorHotspot | null>(null);
+  const [failedToday, setFailedToday] = useState<readonly string[]>(
+    () => readStoredTerraceState()?.failedTodaySpots ?? [],
+  );
+  const puzzleSeqRef = useRef(0);
+  const [puzzleSession, setPuzzleSession] = useState<{ spot: FloorHotspot; key: number } | null>(null);
   const data = BUILDING_FLOORS[floor];
   const { w: viewW, h: viewH } = useViewport();
   const stage = useMemo(() => fitStage(viewW, viewH, ART_W, ART_H, floorSafeArea(floor)), [viewW, viewH, floor]);
@@ -114,14 +127,29 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
       openPanel();
       return;
     }
+    if (spot.requiresTool === 'axe') {
+      playLocked();
+      setGlowing({ id: spot.id, key: Date.now() });
+      pushNotice({
+        icon: '🪓',
+        title: 'Boarded shut with planks — needs an axe to clear (coming soon).',
+        tone: 'build',
+      });
+      return;
+    }
     if (spot.puzzle) {
       if (repaired.includes(spot.id)) {
         playClick();
         setGlowing({ id: spot.id, key: Date.now() });
-        pushNotice({ icon: '✨', title: spot.puzzle.repairedNotice, tone: 'build' });
+        pushNotice({ icon: '✨', title: floorSpotRepairedNotice(spot), tone: 'build' });
+      } else if (failedToday.includes(spot.id)) {
+        playLocked();
+        setGlowing({ id: spot.id, key: Date.now() });
+        pushNotice({ icon: '🔒', title: 'Locked for today — try again tomorrow', tone: 'build' });
       } else {
         playClick();
-        setPuzzleSpot(spot);
+        puzzleSeqRef.current += 1;
+        setPuzzleSession({ spot, key: puzzleSeqRef.current });
       }
       return;
     }
@@ -130,19 +158,33 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
     pushNotice({ icon: '🔦', title: `${spot.label} — scavenging puzzle coming soon.`, tone: 'build' });
   };
 
-  const closePuzzle = useCallback(() => setPuzzleSpot(null), []);
+  const closePuzzle = useCallback(() => setPuzzleSession(null), []);
 
-  /* Solving a spot's puzzle repairs it for the rest of the run and pays out its salvage once */
+  /* Solving a spot's puzzle awards its loot and marks it completed; losing locks it for today */
   const onPuzzleComplete = (result: MiniGameResult) => {
-    const spot = puzzleSpot;
-    setPuzzleSpot(null);
-    if (!spot?.puzzle || result.outcome !== 'win' || repaired.includes(spot.id)) return;
-    setRepaired(markStoredSpotRepaired(spot.id).repairedSpots);
-    const store = useGameStore.getState();
-    useGameStore.setState({ resources: addResources(store.resources, spot.puzzle.reward) });
-    store._save();
-    const firstReward = Object.keys(spot.puzzle.reward)[0] as keyof typeof RESOURCE_MAP | undefined;
-    pushNotice({ icon: (firstReward && RESOURCE_MAP[firstReward]?.emoji) || '🔧', title: spot.puzzle.doneNotice, tone: 'unlock' });
+    const spot = puzzleSession?.spot;
+    setPuzzleSession(null);
+    if (!spot?.puzzle) return;
+    if (result.outcome === 'win') {
+      if (repaired.includes(spot.id)) return;
+      setRepaired(markStoredSpotRepaired(spot.id).repairedSpots);
+      if (spot.reward) {
+        const store = useGameStore.getState();
+        useGameStore.setState({ resources: addResources(store.resources, spot.reward) });
+        store._save();
+      }
+      const firstReward = spot.reward ? (Object.keys(spot.reward)[0] as keyof typeof RESOURCE_MAP | undefined) : undefined;
+      pushNotice({
+        icon: (firstReward && RESOURCE_MAP[firstReward]?.emoji) || '🔧',
+        title: floorSpotDoneNotice(spot),
+        tone: 'unlock',
+      });
+      return;
+    }
+    if (result.outcome === 'loss') {
+      setFailedToday(markStoredSpotFailedToday(spot.id).failedTodaySpots);
+      pushNotice({ icon: '🔒', title: 'Locked for today — try again tomorrow', tone: 'build' });
+    }
   };
 
   return (
@@ -195,7 +237,7 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
 
         {data.hotspots.map((spot) => {
           const isRepaired = repaired.includes(spot.id);
-          const label = isRepaired && spot.puzzle ? spot.puzzle.repairedLabel : spot.label;
+          const label = isRepaired && spot.puzzle ? floorSpotRepairedLabel(spot) : spot.label;
           return (
             <button
               /* A fresh key per click restarts the glow animation */
@@ -287,10 +329,34 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
         </span>
       </header>
 
-      {puzzleSpot?.puzzle?.game === 'connect-wires' && (
+      {puzzleSession?.spot.puzzle === 'connect-wires' && (
         <ConnectWiresGame
+          key={`${puzzleSession.spot.id}-${puzzleSession.key}`}
           mode={selectedMode}
-          title={puzzleSpot.puzzle.title}
+          title={puzzleSession.spot.puzzleTitle ?? puzzleSession.spot.label}
+          allowRetryOnLoss={false}
+          onComplete={onPuzzleComplete}
+          onCancel={closePuzzle}
+        />
+      )}
+
+      {puzzleSession?.spot.puzzle === 'tic-tac-toe' && (
+        <TicTacToeGame
+          key={`${puzzleSession.spot.id}-${puzzleSession.key}`}
+          mode={selectedMode}
+          title={puzzleSession.spot.puzzleTitle ?? puzzleSession.spot.label}
+          allowRetryOnLoss={false}
+          onComplete={onPuzzleComplete}
+          onCancel={closePuzzle}
+        />
+      )}
+
+      {puzzleSession?.spot.puzzle === 'dots-and-lines' && (
+        <DotsAndBoxesGame
+          key={`${puzzleSession.spot.id}-${puzzleSession.key}`}
+          mode={selectedMode}
+          title={puzzleSession.spot.puzzleTitle ?? puzzleSession.spot.label}
+          allowRetryOnLoss={false}
           onComplete={onPuzzleComplete}
           onCancel={closePuzzle}
         />

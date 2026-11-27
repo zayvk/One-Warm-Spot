@@ -1969,8 +1969,13 @@ button:disabled {
 }
 
 .ows-mg-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
   width: 30px;
   height: 30px;
+  padding: 0 0 2px;
   border-radius: 50%;
   border: 1px solid rgba(201, 154, 92, 0.55);
   background: rgba(255, 252, 246, 0.8);
@@ -2185,5 +2190,358 @@ button:disabled {
 }
 
 [data-reduce-motion='true'] .ows-ttt-cell {
+  transition: none;
+}
+
+/* ───── Jigsaw Puzzle: recessed parchment board + interlocking-piece tray ───── */
+
+.ows-jig-card {
+  --jig-board: min(420px, calc(100vh - 150px), calc(100vw - 360px));
+  --jig-piece: 72px;
+  --jig-cols: 3;
+  width: auto;
+  max-width: calc(100vw - 24px);
+}
+
+.ows-jig-card--4 {
+  --jig-piece: 58px;
+  --jig-cols: 4;
+}
+
+.ows-jig-progress {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: #6a4a2c;
+  background: rgba(255, 248, 234, 0.9);
+  border: 1px solid rgba(201, 154, 92, 0.45);
+}
+
+.ows-jig-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.ows-jig-board {
+  position: relative;
+  flex: none;
+  width: var(--jig-board);
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 250, 238, 0.9), rgba(239, 224, 198, 0.9) 75%),
+    #efe0c6;
+  box-shadow:
+    inset 0 3px 8px rgba(90, 58, 32, 0.32),
+    inset 0 0 0 1px rgba(120, 84, 48, 0.28),
+    0 0 0 6px #7a4f2c,
+    0 0 0 7px rgba(255, 220, 170, 0.35),
+    0 8px 18px rgba(40, 24, 10, 0.3);
+  margin: 7px;
+  transition: box-shadow 400ms ease;
+}
+
+.ows-jig-board--complete {
+  box-shadow:
+    0 0 0 6px #8a5c30,
+    0 0 0 8px rgba(255, 214, 130, 0.85),
+    0 0 26px 8px rgba(255, 196, 92, 0.55),
+    0 8px 18px rgba(40, 24, 10, 0.3);
+}
+
+.ows-jig-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.ows-jig-slot-outline {
+  fill: rgba(255, 252, 244, 0.25);
+  stroke: rgba(120, 84, 48, 0.42);
+  stroke-width: 1.4;
+  stroke-dasharray: 5 4;
+}
+
+.ows-jig-peek-ghost {
+  opacity: 0.3;
+  filter: sepia(0.3);
+}
+
+.ows-jig-piece-back {
+  fill: #e8d6b6;
+}
+
+.ows-jig-piece-edge {
+  fill: none;
+  stroke: rgba(70, 44, 22, 0.45);
+  stroke-width: 1.2;
+}
+
+.ows-jig-shimmer {
+  fill: rgba(255, 226, 150, 0.35);
+  stroke: rgba(240, 186, 70, 0.95);
+  stroke-width: 4;
+  opacity: 0;
+  animation: owsJigShimmer 650ms ease-out;
+}
+
+@keyframes owsJigShimmer {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    stroke-width: 9;
+  }
+}
+
+.ows-jig-reveal {
+  animation: owsFadeOpacity 700ms ease both;
+}
+
+/* Invisible tap targets laid over the board, one per slot */
+.ows-jig-slots {
+  position: absolute;
+  inset: 0;
+  display: grid;
+}
+
+.ows-jig-slot {
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.ows-jig-slot:disabled {
+  cursor: default;
+}
+
+.ows-jig-slot--armed:hover,
+.ows-jig-slot:not(:disabled):focus-visible,
+.ows-jig-slot--hover {
+  outline: none;
+  background: rgba(255, 214, 140, 0.28);
+  box-shadow: inset 0 0 0 2px rgba(214, 162, 64, 0.6);
+}
+
+.ows-jig-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: calc(var(--jig-board) + 14px);
+}
+
+.ows-jig-tray {
+  display: grid;
+  grid-template-columns: repeat(var(--jig-cols), var(--jig-piece));
+  grid-auto-rows: var(--jig-piece);
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.05) 0 3px, rgba(0, 0, 0, 0.04) 3px 7px),
+    linear-gradient(160deg, #8a5c36 0%, #6e4526 60%, #5e3a1f 100%);
+  box-shadow: inset 0 2px 5px rgba(30, 16, 6, 0.45);
+  transition: opacity 200ms ease;
+}
+
+.ows-jig-tray--loading {
+  opacity: 0.5;
+}
+
+.ows-jig-piece {
+  position: relative;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ows-jig-piece:disabled {
+  cursor: default;
+}
+
+.ows-jig-piece:not(:disabled):hover .ows-jig-piece-art,
+.ows-jig-piece:focus-visible .ows-jig-piece-art {
+  filter: drop-shadow(0 0 4px rgba(255, 214, 140, 0.9));
+}
+
+.ows-jig-piece:focus-visible {
+  outline: 2px solid rgba(255, 214, 140, 0.9);
+  outline-offset: -2px;
+}
+
+.ows-jig-piece--selected {
+  background: rgba(255, 226, 160, 0.3);
+  box-shadow: inset 0 0 0 2px rgba(240, 186, 70, 0.95);
+}
+
+.ows-jig-piece--lifted {
+  opacity: 0.3;
+}
+
+.ows-jig-piece-inner {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ows-jig-piece-inner--nudge {
+  animation: owsJigNudge 360ms ease;
+}
+
+@keyframes owsJigNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+}
+
+.ows-jig-piece-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 2px 2px rgba(30, 16, 6, 0.45));
+}
+
+.ows-jig-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ows-jig-caption {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-style: italic;
+  color: #6a5440;
+}
+
+.ows-jig-peek {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 154, 92, 0.65);
+  background: rgba(255, 252, 246, 0.85);
+  color: #5a3a20;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ows-jig-peek[aria-pressed='true'] {
+  color: #fffaf2;
+  border-color: #6e8f61;
+  background: linear-gradient(180deg, #8aad7a 0%, #6e8f61 100%);
+}
+
+.ows-jig-peek:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ows-jig-done {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: calc(var(--jig-cols) * var(--jig-piece) + (var(--jig-cols) - 1) * 6px + 12px);
+  min-height: 120px;
+  text-align: center;
+}
+
+.ows-jig-done .ows-mg-footer {
+  flex-direction: column;
+}
+
+/* The piece following the pointer while dragging */
+.ows-jig-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 80;
+  pointer-events: none;
+}
+
+.ows-jig-ghost .ows-jig-piece-art {
+  filter: drop-shadow(0 8px 10px rgba(30, 16, 6, 0.45));
+}
+
+.ows-jig-ghost--tilt {
+  rotate: 3deg;
+}
+
+@media (max-height: 520px) {
+  .ows-jig-card {
+    --jig-board: min(420px, calc(100vh - 140px), calc(100vw - 360px));
+    --jig-piece: 58px;
+    padding: 10px 12px 12px;
+  }
+
+  .ows-jig-card--4 {
+    --jig-piece: 46px;
+  }
+
+  .ows-jig-card .ows-mg-header {
+    padding-bottom: 6px;
+  }
+
+  .ows-jig-card .ows-mg-status {
+    margin: 6px 0;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .ows-jig-card {
+    --jig-board: calc(100vw - 72px);
+  }
+
+  .ows-jig-body {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+[data-reduce-motion='true'] .ows-jig-shimmer,
+[data-reduce-motion='true'] .ows-jig-piece-inner--nudge,
+[data-reduce-motion='true'] .ows-jig-reveal {
+  animation: none;
+}
+
+[data-reduce-motion='true'] .ows-jig-shimmer {
+  opacity: 0;
+}
+
+[data-reduce-motion='true'] .ows-jig-board,
+[data-reduce-motion='true'] .ows-jig-slot {
   transition: none;
 }

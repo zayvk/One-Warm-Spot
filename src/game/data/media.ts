@@ -175,6 +175,44 @@ export const CUTSCENE_ASSETS = {
   terraceLiftDoor: '/source/cutscenes/terrace-lift-door.webp',
 } as const;
 
+/* ───── Jigsaw Paintings ───── */
+
+export interface JigsawImage {
+  id: string;
+  /** Short cozy caption shown under the finished puzzle */
+  title: string;
+  src: string;
+  /** false = a wide shelter backdrop; the puzzle centre-crops it to a square */
+  square: boolean;
+}
+
+/**
+ * The Jigsaw mini-game's painting pool: 15 dedicated 640×640 illustrations plus a few
+ * centre-cropped shelter scenes for variety. Deliberately absent from every preload
+ * list — the puzzle loads only the one painting it picks.
+ */
+export const JIGSAW_IMAGES: readonly JigsawImage[] = [
+  { id: 'crater', title: 'Overgrown Craters', src: '/source/jigsaw/jigsaw-01-crater.webp', square: true },
+  { id: 'letter', title: 'Faded Letter', src: '/source/jigsaw/jigsaw-02-letter.webp', square: true },
+  { id: 'campfire', title: 'Twilight Campfire', src: '/source/jigsaw/jigsaw-03-campfire.webp', square: true },
+  { id: 'couple', title: 'Hand in Hand', src: '/source/jigsaw/jigsaw-04-couple.webp', square: true },
+  { id: 'bed', title: 'Sunlit Bedroom', src: '/source/jigsaw/jigsaw-05-bed.webp', square: true },
+  { id: 'clock', title: 'Stopped Clock', src: '/source/jigsaw/jigsaw-06-clock.webp', square: true },
+  { id: 'map', title: 'Old Road Map', src: '/source/jigsaw/jigsaw-07-map.webp', square: true },
+  { id: 'radio', title: 'Quiet Radio', src: '/source/jigsaw/jigsaw-08-radio.webp', square: true },
+  { id: 'windowsill', title: 'Windowsill Garden', src: '/source/jigsaw/jigsaw-09-windowsill.webp', square: true },
+  { id: 'telescope', title: 'Stargazing Rooftop', src: '/source/jigsaw/jigsaw-10-telescope.webp', square: true },
+  { id: 'bicycle', title: 'Rusted Bicycle', src: '/source/jigsaw/jigsaw-11-bicycle.webp', square: true },
+  { id: 'bookshelf', title: 'Mossy Bookshelf', src: '/source/jigsaw/jigsaw-12-bookshelf.webp', square: true },
+  { id: 'bridge', title: 'Willow Bridge', src: '/source/jigsaw/jigsaw-13-bridge.webp', square: true },
+  { id: 'tea', title: 'Afternoon Tea', src: '/source/jigsaw/jigsaw-14-tea.webp', square: true },
+  { id: 'conservatory', title: 'Glass Conservatory', src: '/source/jigsaw/jigsaw-15-conservatory.webp', square: true },
+  { id: 'scene-terrace', title: 'Old Apartment Terrace', src: BG_SHELTERS.terrace.src, square: false },
+  { id: 'scene-valley', title: 'Quiet Valley', src: BG_VALLEY.src, square: false },
+  { id: 'scene-tree', title: 'Abandoned Treehouse', src: BG_SHELTERS.tree.src, square: false },
+  { id: 'scene-pipe', title: 'Giant Storm Pipe', src: BG_SHELTERS.pipe.src, square: false },
+];
+
 /** All background URLs for preloading */
 export const ALL_BG_URLS: string[] = [
   BG_TITLE.src,

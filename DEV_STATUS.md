@@ -85,7 +85,8 @@ One-Warm-Spot/
     │   │   ├── ticTacToe.ts     # Pure Tic-Tac-Toe rules (applyMove, evaluateBoard, findWinningMove) + chooseCpuMove(board, mode, rng?) Cozy / Challenge AI (memoized minimax)
     │   │   ├── jigsaw.ts        # Pure Jigsaw engine: interlocking edges, buildPiecePath SVG cutter, pickJigsawImage, createJigsawState / placePiece / isSolved (seedable)
     │   │   ├── dotsAndBoxes.ts  # Pure Dots & Lines (Dots and Boxes) engine: applyEdgeMove (extra turn on a closed box), dotsStatus, chooseDotsCpuMove(state, mode, rng?) Cozy / Challenge AI
-    │   │   └── __tests__/       # ticTacToe.test.ts, jigsaw.test.ts, dotsAndBoxes.test.ts
+    │   │   ├── findTheObject.ts # Pure Find the Object "Rummage Pile" engine: 18-item RUMMAGE_ITEMS catalog, createRummageState, movePileItem / nudgeClutterItem / collectTargetItem, getNextHintTargetId (seedable)
+    │   │   └── __tests__/       # ticTacToe.test.ts, jigsaw.test.ts, dotsAndBoxes.test.ts, findTheObject.test.ts
     │   ├── audio/
     │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9 site soundscapes, rooftop weather layer (setWeatherAmbience), shelter + lift foley (incl. playHarvest / playCook / playSew), mini-game playBoxChime
     │   ├── store/
@@ -104,6 +105,8 @@ One-Warm-Spot/
         ├── minigames/TicTacToeGame.tsx # Parchment Tic-Tac-Toe card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
         ├── minigames/JigsawGame.tsx # Interlocking-piece Jigsaw card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
         ├── minigames/DotsAndBoxesGame.tsx # Hand-inked Dots & Lines card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
+        ├── minigames/FindTheObjectGame.tsx # Wooden rummage-drawer card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
+        ├── minigames/rummageIcons.tsx # Hand-inked SVG art for the 18 rummage items (RummageArt in the pile, RummageIcon for the checklist) — 0 image files
         ├── TerraceLiftCutscene.tsx   # Lift ride between any two stops (fromFloor → toFloor): push-in / step-in, ticking indicator, destination painting + caption; the arrival is the 1 → R ride
         ├── LiftRideScreen.tsx        # Full-screen shell for in-building rides (fade-out, Skip button / click / Space-Enter-Escape)
         ├── ElevatorPanelModal.tsx    # Antique brass floor picker (R, 4, 3, 2, 1; current floor lit & disabled; Cancel / outside click / Escape)
@@ -259,7 +262,7 @@ Flow:
 
 **HUD:** `.ows-sky-chip` in the shelter header (☀️ Clear / 🌧️ Rain / 🍃 Wind) with a hover/focus tooltip of its effect. To keep the header clear of the centred pouch: the shelter name shows only above 1360px, the chip drops its label at ≤ 840px and the emblem hides at ≤ 760px.
 
-### Scavenging Mini-Games (framework + Tic-Tac-Toe + Jigsaw + Dots & Lines)
+### Scavenging Mini-Games (framework + all four: Tic-Tac-Toe, Jigsaw, Dots & Lines, Find the Object)
 
 **Contract (`src/game/minigames/types.ts`, no React):** every puzzle component takes `MiniGameProps { mode: GameMode; title?: string; onComplete(result: MiniGameResult); onCancel() }` and reports `MiniGameResult { outcome: 'win' | 'draw' | 'loss' | 'cancelled'; mode }`. Difficulty follows the active shelter's `selectedMode`. The puzzle never touches resources — the host hotspot decides the reward.
 
@@ -300,6 +303,29 @@ Flow:
 - **Sound:** `playClick` per line and `playBoxChime` (new, a crisp two-note chime) per closed box; on finish, `playClaim` for a win and `playLocked` for a loss.
 - **Finish and keyboard:** when finished, **Play Again** (fresh board) or **Continue** (`onComplete({ outcome, mode })`). × / Escape → `onCancel`. Enter / Space draw the focused line, and focus returns to the board when your turn comes back.
 - **Sizing:** `--dots-board = min(330px, 100vw − 56px, 100vh − 210px)`. At ≤ 520px height the board is `100vh − 140px` with the legend and buttons in a 150px column beside it. Checked in-browser at 667×375 and 844×390 (both modes, including the finished footer), 1024×768 and 1440×900: no card scroll.
+
+**Find the Object engine (`src/game/minigames/findTheObject.ts`, pure, seedable via `rng`):**
+- **Catalog:** `RUMMAGE_ITEMS`, 18 items `{ id, name, width, height }`, sized as fractions of the tray height. Each comes from a base art box (`art(w, h)`, thousandths of the tray height) × `RUMMAGE_ART_SCALE` (1.5), so the art and hit sizes share one source. The tray is `TRAY_ASPECT` 1.6 : 1, and item centres stay inside `TRAY_BOUNDS` (x 0.12–0.88, y 0.16–0.84).
+- **`createRummageState(mode, rng?)`** → `{ mode, items: PileItem[], targetIds }`. Each `PileItem` is `{ instanceId, itemId, x, y, rotation, zIndex, isTarget, found }`. The rules come from `RUMMAGE_RULES`:
+  - Cozy: 3 targets + 13 clutter = 16, with 1–2 covering pieces per target at 0.5–0.75 of its size away, targets tilted ±18°, clutter ±30°, and 3 scattered pieces tucked under the targets.
+  - Challenge: 5 targets + 30 clutter = 35, with 3–4 covers per target sitting only 0.05–0.3 of its size away (nearly on top), targets tilted ±50°, clutter ±75°, and just 1 piece underneath. In-browser, clearing a Challenge pile by tapping took 20–54 taps, against about 4 for Cozy.
+  - Target kinds are unique and excluded from the clutter pool, so there are no decoys. Clutter uses every remaining kind once before repeating (Challenge repeats, since only 13 kinds remain).
+  - Targets spread at least 0.3 tray heights apart. Layers run bottom-up: tucked-under pieces, then targets, then a shuffle of covers and the rest, all with unique `zIndex`.
+- **`movePileItem(state, id, x, y)`:** clutter only. It clamps to `TRAY_BOUNDS` and lifts the piece to `max + 1`, unless it's already alone on top. Targets, unknown ids and non-finite coordinates return the same state.
+- **`nudgeClutterItem(state, id, rng?)`:** slides the piece `NUDGE_DISTANCE` (0.17 tray heights) toward the nearest tray edge that still has room, with a little perpendicular wobble and tilt, clamped and lifted.
+- **`collectTargetItem(state, id)`** → `{ state, collected, complete }`. Clutter, unknown ids and already-found targets give `collected: false` and leave the state unchanged.
+- **Also:** `isRummageComplete`, `countFound`, and `getNextHintTargetId` (the first unfound target in checklist order, or `null`).
+
+**Art (`src/ui/minigames/rummageIcons.tsx`):** 18 hand-inked SVG drawings with espresso outlines in the sage / terracotta / brass / wood / parchment / tin palette. `RummageArt` draws an item in its base box (used in the pile); `RummageIcon` wraps it in a padded mini `<svg>` for the checklist. No image files.
+
+**UI (`src/ui/minigames/FindTheObjectGame.tsx`, not mounted yet):** reuses the `.ows-mg-*` card (`.ows-rum-card`).
+- **Header and checklist:** title (default *"Find the Object"*), a `2 / 3` found pill, the mode badge and ×. Beside the drawer, a status line (*"Drag or tap clutter aside, then tap what you're looking for"* → *"Found the Brass Key!"* → *"Found everything!"*) sits above the checklist: mini icon + name, ticked with a sage check and line-through once found.
+- **Drawer:** a recessed wood-grain `.ows-rum-tray` holding a 1600×1000 SVG. Items are drawn in `zIndex` order, positioned with a CSS `transform` (translate + rotate, with a 260ms ease so nudges glide) and a soft drop shadow.
+- **Controls:** each item is a `role="button"` `<g>` (Enter / Space act like a tap) with pointer capture. A drag of 6px or more moves clutter live via `movePileItem` (`playRummage` on grab); a tap nudges clutter (`playRummage`) or collects a target. Every item uses the same `grab` cursor, so hovering can't give targets away.
+- **Feedback:** a collected target pops (scales up and fades) with a golden glint ring and `playBoxChime`, and the final one plays `playClaim`. Cozy's **Hint** button rings the next unfound target in a breathing gold circle for 1.6s; Challenge has no Hint.
+- **Finish:** the side column swaps the Hint for **Play Again** (a fresh pile) and **Continue** (`onComplete({ outcome: 'win', mode })`). × / Escape → `onCancel`.
+- **Sizing:** `--rum-tray-w = min(600px, 100vw − 280px, (100vh − 120px) × 1.6)` with a 200px side column. At ≤ 520px height: `100vw − 260px` and `(100vh − 110px) × 1.6` with a 170px column, and Play Again / Continue sit side by side so Challenge's five-row checklist still fits. Checked in-browser at 667×375 and 844×390 (both modes), 1024×768 and 1440×900, before and after finishing: no card scroll, and every pile was cleared just by tapping.
+- **Reduce Motion:** no nudge glide, pop, glint or ring pulse; found items simply disappear, and the hint ring is static.
 
 ### The Old Elevator: Floor Picker, Lift Rides & Apartment Floors
 
@@ -443,6 +469,12 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
     - **Outcomes:** win / loss / draw / playing; Cozy never ties while Challenge can.
     - **Challenge AI:** always closes a box (the double when available); prefers a safe line whenever one exists; when every line gives something away, picks a minimum-`sacrificeCost` line; `sacrificeCost` counts a whole 3-box corridor; seeded determinism; refuses a full board.
     - **Cozy AI:** only picks open lines; takes free boxes between 35% and 75% of the time; a casual box-grabbing player wins > 70% vs Cozy, < 15% vs Challenge, and over 3× less often against the Challenge AI on the same 3×3 board.
+  - `findTheObject.test.ts` (`src/game/minigames/__tests__`):
+    - **Catalog:** 18 distinct ids and names with sensible sizes.
+    - **Pile:** across 100–200 seeds per mode,     Cozy has exactly 3 / 16 and Challenge 5 / 35 items, unique instance ids, and nothing pre-found. Targets are unique and never appear as clutter; every item sits inside `TRAY_BOUNDS` with a unique `zIndex`. Cozy clutter is all-different (13 kinds) while Challenge uses all 13 remaining kinds.
+        - **Burial:** every target has at least one overlapping piece above it; Challenge averages ≥ 3 covers per target, more than Cozy, with > 1.5× the clutter tilt; targets sit in the lower layers (> 25 Challenge pieces above them). Seeded determinism.
+    - **Moving:** `movePileItem` moves immutably, lifts to the top once (no endless climbing), clamps to both corners, and ignores targets, unknown ids and NaN. `nudgeClutterItem` stays in bounds, lifts the piece and travels at most about `NUDGE_DISTANCE`; a piece near the left wall goes left, one pinned in a corner comes back out; it ignores targets and unknown ids.
+    - **Collecting:** clutter, unknown ids and repeats are rejected with the state unchanged; collecting every target in any order completes the pile; `getNextHintTargetId` walks the checklist and returns `null` once everything is found.
   - `resumeLocation.test.ts` — every screen maps to its refresh destination (arrival → rooftop, ride → its destination), round-trips, Title fallback without a claimed shelter (floors need the Terrace), damaged data ignored.
 - **Lint:** `npx oxlint src` (0 warnings).
 - **E2E:** `npm run test:e2e` (`playwright test`) — 28 scenarios driving the real game in **system Chrome** (`channel: 'chrome'`; `npx playwright install` is blocked by the corporate TLS proxy, so no bundled browser is downloaded). Playwright starts its own `vite` dev server on port 5180. Every test fails on any page error or `console.error`. Canvas clicks map normalized scene coords through the same `fitStage()` the scene uses; state is asserted from `localStorage`. Reports land in `playwright-report/` / `test-results/` (git-ignored).
@@ -577,11 +609,11 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
   - **Rooms:** illustrated apartment interiors and scavenging spots reached from the shipped building floors (`BUILDING_FLOORS` hotspots with `kind: 'scavenge'` in `data/floors.ts`, rendered by `BuildingFloorScreen.tsx`), replacing their "scavenging puzzle coming soon" toast.
   - **Reusable mini-game overlay:** one framework triggered from room scavenging hotspots (`safe`, `drawer`, `cupboard`, `under-bed`, `shelf`, …). Rewards feed back cleanly into the main Zustand resource store (`addResources()` + `_save()`); occasional Found Traveler Diary Pages are a later hook.
   - **Shared contract (built):** `src/game/minigames/types.ts` — `MiniGameProps { mode, title?, onComplete(result), onCancel }` and `MiniGameResult { outcome: 'win' | 'draw' | 'loss' | 'cancelled', mode }`. A mini-game never touches resources; the host hotspot maps the outcome to rewards.
-  - **Planned starter puzzle modules:** **Find the Object** *(the last one still to build)*, **Jigsaw Puzzle** *(✅ built, not wired)*, **Tic-Tac-Toe** *(✅ built, not wired — see below)*, and **Dots & Lines** *(✅ built, not wired)*.
+  - **Starter puzzle modules — all four built (✅ not wired yet):** **Find the Object**, **Jigsaw Puzzle**, **Tic-Tac-Toe** and **Dots & Lines**. Next milestone: wire them into the four apartment floors' scavenging spots, replacing the "coming soon" toasts.
   - [x] **Tic-Tac-Toe (built, unmounted):** pure engine `src/game/minigames/ticTacToe.ts` + UI `src/ui/minigames/TicTacToeGame.tsx`. Next: mount it from a floor/apartment hotspot (e.g. replace one "scavenging puzzle coming soon" toast), pass `useGameStore().selectedMode` as `mode`, and award materials on `onComplete`.
   - [x] **Jigsaw Puzzle (built, unmounted):** pure engine `src/game/minigames/jigsaw.ts` + UI `src/ui/minigames/JigsawGame.tsx` + `JIGSAW_IMAGES` (15 paintings in `public/source/jigsaw/` + 4 shelter scenes). Wire it the same way, e.g. to a "torn note / map / jammed panel" spot such as Floor 4's bookshelf or Floor 3's fuse box. Its only finished outcome is `'win'`.
   - [x] **Dots & Lines (built, unmounted):** pure engine `src/game/minigames/dotsAndBoxes.ts` + UI `src/ui/minigames/DotsAndBoxesGame.tsx`. Wire it the same way (e.g. a latch, safe or locker spot such as Floor 3's locker). It can end in `'win'`, `'loss'` or (Challenge only) `'draw'`.
-  - [ ] **Find the Object:** the last planned mini-game — not started.
+  - [x] **Find the Object (built, unmounted):** pure engine `src/game/minigames/findTheObject.ts` + art `src/ui/minigames/rummageIcons.tsx` + UI `src/ui/minigames/FindTheObjectGame.tsx`. A natural fit for drawer / cupboard / trunk spots (e.g. Floor 2's Hallway Cupboard, Floor 4's Steamer Trunk). Its only finished outcome is `'win'`.
   - **Cozy guarantee:** no punishing timers or harsh failure states; puzzles can always be retried or left.
   - **Follow-ups:** persist per-room searched spots (ties into the Save schema v5 item below), then switch off `TEST_MODE_GENEROUS_START` and tune scarcity.
 
@@ -610,7 +642,7 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - **Rest fast-forward:** resting at the shelter moves day → dusk → night immediately (+25 Stamina) — a cozy "skip ahead", so nobody has to wait out the real-time clock.
 - **Sit pause after lighting the fire:** ~0.6s where clicks are ignored so the sit-down is visible.
 - **Generous start pool:** `TEST_MODE_GENEROUS_START` stays on during the build phase; switch off and tune scarcity once more gathering exists.
-- **Downstairs placeholders:** every floor scavenging spot shows "puzzle coming soon" until the mini-game framework lands (see Planned / Next Milestones).
+- **Downstairs placeholders:** every floor scavenging spot shows "puzzle coming soon" until the mini-games are wired in (all four are built and unmounted — see Planned / Next Milestones).
 
 ### 🗺️ Backlog
 

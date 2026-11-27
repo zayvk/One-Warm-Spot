@@ -1541,6 +1541,19 @@ export function playWaterChime(): void {
   puff(c, target, t + 0.05, 0.05, 0.3, 900, 3400, 1200);
 }
 
+/** A crisp little two-note chime when a mini-game box is closed */
+export function playBoxChime(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  const pv = pitchVar();
+
+  [[784, 0], [1046, 0.07]].forEach(([freq, off]) => {
+    tone(c, target, t + off, { freq: freq * pv, vol: 0.075, decay: 0.28, attack: 0.003 });
+  });
+}
+
 /* ═══════════════════════════════════════════
    Terrace Lift Arrival Foley
    ═══════════════════════════════════════════ */

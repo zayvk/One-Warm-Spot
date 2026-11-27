@@ -2545,3 +2545,224 @@ button:disabled {
 [data-reduce-motion='true'] .ows-jig-slot {
   transition: none;
 }
+
+/* ───── Dots & Lines: hand-inked lines on a parchment grid ───── */
+
+.ows-mg-status--extra {
+  color: #8a5a12;
+  font-weight: 700;
+}
+
+.ows-dots-card {
+  --dots-board: min(330px, calc(100vw - 56px), calc(100vh - 210px));
+  width: min(400px, calc(100vw - 24px));
+}
+
+.ows-dots-score {
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 248, 234, 0.9);
+  border: 1px solid rgba(201, 154, 92, 0.45);
+  color: #7a6a58;
+}
+
+.ows-dots-score__you {
+  color: #a95a36;
+  font-weight: 700;
+}
+
+.ows-dots-score__cpu {
+  color: #5f7f54;
+  font-weight: 700;
+}
+
+.ows-dots-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ows-dots-board {
+  width: var(--dots-board);
+  aspect-ratio: 1;
+  margin: 6px;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 252, 242, 0.95), rgba(242, 228, 202, 0.95) 78%),
+    #f1e3c8;
+  box-shadow:
+    inset 0 2px 6px rgba(90, 58, 32, 0.22),
+    inset 0 0 0 1px rgba(120, 84, 48, 0.25),
+    0 0 0 5px #7a4f2c,
+    0 0 0 6px rgba(255, 220, 170, 0.35),
+    0 6px 14px rgba(40, 24, 10, 0.28);
+}
+
+.ows-dots-board svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+}
+
+.ows-dots-side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+}
+
+.ows-dots-dot {
+  fill: #3a281b;
+  pointer-events: none;
+}
+
+.ows-dots-edge {
+  cursor: pointer;
+  outline: none;
+}
+
+.ows-dots-edge[aria-disabled='true'] {
+  cursor: default;
+}
+
+.ows-dots-hit {
+  fill: transparent;
+}
+
+/* Soft dotted ink preview of the line under the pointer */
+.ows-dots-preview {
+  stroke: rgba(176, 97, 61, 0.7);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 13;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.ows-dots-edge:not([aria-disabled='true']):hover .ows-dots-preview,
+.ows-dots-edge:not([aria-disabled='true']):focus-visible .ows-dots-preview {
+  opacity: 1;
+}
+
+.ows-dots-edge:focus-visible .ows-dots-hit {
+  fill: rgba(255, 214, 140, 0.22);
+}
+
+.ows-dots-line {
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  pointer-events: none;
+  animation: owsTttDraw 200ms ease-out forwards;
+}
+
+.ows-dots-line--player {
+  stroke: #b0613d;
+}
+
+.ows-dots-line--cpu {
+  stroke: #6e8f61;
+}
+
+/* The opponent's latest line glows softly so a chain is easy to follow */
+.ows-dots-line--fresh {
+  filter: drop-shadow(0 0 4px rgba(255, 200, 110, 0.95));
+}
+
+.ows-dots-claim {
+  pointer-events: none;
+}
+
+.ows-dots-box {
+  animation: owsFadeOpacity 260ms ease both;
+}
+
+.ows-dots-claim--player .ows-dots-box {
+  fill: rgba(200, 120, 80, 0.17);
+}
+
+.ows-dots-claim--cpu .ows-dots-box {
+  fill: rgba(110, 143, 97, 0.2);
+}
+
+.ows-dots-mark {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: owsTttDraw 240ms ease-out 80ms forwards;
+}
+
+.ows-dots-mark--late {
+  animation-delay: 180ms;
+}
+
+.ows-dots-claim--player .ows-dots-mark {
+  stroke: #b0613d;
+}
+
+.ows-dots-claim--cpu .ows-dots-mark {
+  stroke: #6e8f61;
+}
+
+/* Short landscape screens: board on the left, legend & buttons beside it */
+@media (max-height: 520px) {
+  .ows-dots-card {
+    --dots-board: min(330px, calc(100vh - 140px));
+    width: auto;
+    padding: 10px 12px 12px;
+  }
+
+  .ows-dots-card .ows-mg-header {
+    padding-bottom: 6px;
+  }
+
+  .ows-dots-card .ows-mg-status {
+    margin: 6px 0;
+    font-size: 0.9rem;
+  }
+
+  .ows-dots-body {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .ows-dots-side {
+    width: 150px;
+    gap: 4px;
+  }
+
+  .ows-dots-side .ows-mg-legend {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .ows-dots-side .ows-mg-footer {
+    flex-direction: column;
+  }
+}
+
+[data-reduce-motion='true'] .ows-dots-line,
+[data-reduce-motion='true'] .ows-dots-mark {
+  animation: none;
+  stroke-dashoffset: 0;
+}
+
+[data-reduce-motion='true'] .ows-dots-box {
+  animation: none;
+}
+
+[data-reduce-motion='true'] .ows-dots-preview {
+  transition: none;
+}

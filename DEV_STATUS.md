@@ -84,9 +84,10 @@ One-Warm-Spot/
     │   │   ├── types.ts         # Shared mini-game contract: MiniGameOutcome ('win'|'draw'|'loss'|'cancelled'), MiniGameResult, MiniGameProps
     │   │   ├── ticTacToe.ts     # Pure Tic-Tac-Toe rules (applyMove, evaluateBoard, findWinningMove) + chooseCpuMove(board, mode, rng?) Cozy / Challenge AI (memoized minimax)
     │   │   ├── jigsaw.ts        # Pure Jigsaw engine: interlocking edges, buildPiecePath SVG cutter, pickJigsawImage, createJigsawState / placePiece / isSolved (seedable)
-    │   │   └── __tests__/       # ticTacToe.test.ts, jigsaw.test.ts
+    │   │   ├── dotsAndBoxes.ts  # Pure Dots & Lines (Dots and Boxes) engine: applyEdgeMove (extra turn on a closed box), dotsStatus, chooseDotsCpuMove(state, mode, rng?) Cozy / Challenge AI
+    │   │   └── __tests__/       # ticTacToe.test.ts, jigsaw.test.ts, dotsAndBoxes.test.ts
     │   ├── audio/
-    │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9 site soundscapes, rooftop weather layer (setWeatherAmbience), shelter + lift foley (incl. playHarvest / playCook / playSew)
+    │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9 site soundscapes, rooftop weather layer (setWeatherAmbience), shelter + lift foley (incl. playHarvest / playCook / playSew), mini-game playBoxChime
     │   ├── store/
     │   │   └── useGameStore.ts  # Zustand store (day/vitality, resources, cookRecipe, strengthDriftFactor, upgrades, scavenging, relics, stats, notices)
     │   └── renderer/
@@ -102,6 +103,7 @@ One-Warm-Spot/
         ├── keepInView.ts             # useKeepInView(): floating prop menus / station popover stay on screen below the pouch (scroll if taller than the room)
         ├── minigames/TicTacToeGame.tsx # Parchment Tic-Tac-Toe card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
         ├── minigames/JigsawGame.tsx # Interlocking-piece Jigsaw card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
+        ├── minigames/DotsAndBoxesGame.tsx # Hand-inked Dots & Lines card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
         ├── TerraceLiftCutscene.tsx   # Lift ride between any two stops (fromFloor → toFloor): push-in / step-in, ticking indicator, destination painting + caption; the arrival is the 1 → R ride
         ├── LiftRideScreen.tsx        # Full-screen shell for in-building rides (fade-out, Skip button / click / Space-Enter-Escape)
         ├── ElevatorPanelModal.tsx    # Antique brass floor picker (R, 4, 3, 2, 1; current floor lit & disabled; Cancel / outside click / Escape)
@@ -257,7 +259,7 @@ Flow:
 
 **HUD:** `.ows-sky-chip` in the shelter header (☀️ Clear / 🌧️ Rain / 🍃 Wind) with a hover/focus tooltip of its effect. To keep the header clear of the centred pouch: the shelter name shows only above 1360px, the chip drops its label at ≤ 840px and the emblem hides at ≤ 760px.
 
-### Scavenging Mini-Games (framework + Tic-Tac-Toe + Jigsaw)
+### Scavenging Mini-Games (framework + Tic-Tac-Toe + Jigsaw + Dots & Lines)
 
 **Contract (`src/game/minigames/types.ts`, no React):** every puzzle component takes `MiniGameProps { mode: GameMode; title?: string; onComplete(result: MiniGameResult); onCancel() }` and reports `MiniGameResult { outcome: 'win' | 'draw' | 'loss' | 'cancelled'; mode }`. Difficulty follows the active shelter's `selectedMode`. The puzzle never touches resources — the host hotspot decides the reward.
 
@@ -277,6 +279,27 @@ Flow:
 - **Controls:** pointer drag starts after 6px, captures the pointer and floats a `position: fixed` piece at board scale (moved through a ref, not re-renders). Dropping within 0.55 of a cell of the home slot snaps it in; otherwise the slot under the pointer is tried. A plain tap selects a piece (the click that follows a drag is suppressed) and tapping a slot places it.
 - **Feedback:** a correct drop plays `playClick` and a gold shimmer; the last piece plays `playClaim` and fades in the whole painting over the cuts with a golden glow. A wrong drop shakes the piece. Once solved, the side column swaps the tray for the caption plus **Play Again** (a fresh painting; a module-level recent list rotates through the whole pool) and **Continue** (`onComplete({ outcome: 'win', mode })`). × / Escape → `onCancel`.
 - **Sizing:** `--jig-board = min(420px, 100vh − 150px, 100vw − 360px)`. Challenge uses a 4-column tray, so all 16 pieces fit without scrolling. At ≤ 520px height the board is `100vh − 140px` with 58px / 46px pieces, which fits 667×375 and 844×390 landscape phones with no card scroll (checked in-browser at 667×375, 844×390 and 1024×768). Reduce Motion drops the shimmer, shake and reveal fade.
+
+**Dots & Lines engine (`src/game/minigames/dotsAndBoxes.ts`, pure, seedable via `rng`):** `dotsGridSize(mode)` → 4 dots per side (Cozy: 3×3 = 9 boxes, 24 lines, never a tie) or 5 (Challenge: 4×4 = 16 boxes, 40 lines).
+- **State:** `DotsState { size, h, v, boxes, turn, playerScore, cpuScore, lastMove }`. `h[row][col]` joins dot (row, col)–(row, col+1); `v[row][col]` joins dot (row, col)–(row+1, col). The player always starts.
+- **Moves:** `applyEdgeMove(state, edge)` → `{ state, completedBoxes } | null`. Out-of-range, malformed or already-drawn lines return `null`, and the state is never mutated. Closing 1 or 2 boxes scores them for the mover and keeps the turn; otherwise the turn passes.
+- **Outcome:** `dotsStatus()` → `'playing' | 'win' | 'loss' | 'draw'` from the player's view, once every box is claimed.
+- **Helpers:** `allEdges`, `availableEdges`, `edgeBoxes`, `boxSides`, `boxesClosedBy`, `isSafeEdge` (draws no box's third side), `sacrificeCost` (boxes the opponent can then sweep by greedily taking every closable box).
+- **`chooseDotsCpuMove(state, 'cozy', rng?)`:** closes an available box only `COZY_TAKE_CHANCE` (45%) of the time; otherwise draws any open line, which now and then opens a chain for the player.
+- **`chooseDotsCpuMove(state, 'challenge', rng?)`:** always closes a box (preferring a double), else a random safe line, else the line with the smallest `sacrificeCost`. No double-dealing, so a player who controls the endgame can still win.
+- **Measured over 400 seeded games:**
+  - A casual player (always takes a free box, else random) wins ~87% on Cozy vs ~3% on Challenge.
+  - A careful player (also avoids giving away a third side) wins ~97% on Cozy and ~18% (+8% draws) on Challenge.
+  - A player who also sacrifices the smallest chain wins ~60% on Challenge.
+
+**UI (`src/ui/minigames/DotsAndBoxesGame.tsx`, not mounted yet):** reuses the `.ows-mg-*` card (`.ows-dots-card`, 400px wide).
+- **Header and status:** title (default *"Dots & Lines"*), a `You 3 · 1 Camp` score pill, the mode badge and ×. The status line reads *"Your turn — draw a line"*, *"Extra turn!"* (1.2s after you close a box), *"Thinking…"* / *"Camp takes another turn…"*, then *"You won!"* / *"A quiet draw"* / *"Almost — try again"*.
+- **Board:** one SVG (box = 100 units) on a framed parchment `.ows-dots-board` with espresso ink dots. Claimed lines draw in (terracotta for you, sage for the camp), and the camp's latest line glows. Claimed boxes get a soft wash plus a drawn X / O.
+- **Hit areas:** every open line is a `role="button"` `<g>` whose hit area is the diamond between its two dots and the neighbouring box centres. The diamonds tile the board, so any tap lands on the nearest line. Each shows a dotted ink preview on hover or focus.
+- **Turn flow:** the camp plays from a timer effect, one line per beat — 340ms, or 110ms under Reduce Motion, which also skips the draw-in animations — so chains play out step by step.
+- **Sound:** `playClick` per line and `playBoxChime` (new, a crisp two-note chime) per closed box; on finish, `playClaim` for a win and `playLocked` for a loss.
+- **Finish and keyboard:** when finished, **Play Again** (fresh board) or **Continue** (`onComplete({ outcome, mode })`). × / Escape → `onCancel`. Enter / Space draw the focused line, and focus returns to the board when your turn comes back.
+- **Sizing:** `--dots-board = min(330px, 100vw − 56px, 100vh − 210px)`. At ≤ 520px height the board is `100vh − 140px` with the legend and buttons in a 150px column beside it. Checked in-browser at 667×375 and 844×390 (both modes, including the finished footer), 1024×768 and 1440×900: no card scroll.
 
 ### The Old Elevator: Floor Picker, Lift Rides & Apartment Floors
 
@@ -414,6 +437,12 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
   - `stageFit.test.ts` — no safe area = plain centred cover; 16:9 windows identical to cover with no gaps; the Terrace safe area stays fully on screen from phone portrait to 3440×1440; ultrawide slides the framing instead of shrinking; gaps only on extreme shapes; the middle of every floor hotspot stays on screen on all 4 floors at every shape.
   - `ticTacToe.test.ts` (`src/game/minigames/__tests__`) — all 8 lines detected for either side, real-game rows/columns/diagonals, draw vs still playing; `applyMove` immutability and refusal of occupied / off-board / fractional cells and moves after the game ends; `findWinningMove`. Challenge, across every reachable position: always takes an immediate win, always blocks an immediate player win; beats a random player (< 5% player wins), never loses to a perfect player while still conceding the odd fork; seeded determinism. Cozy: only ever picks open cells; far more forgiving (a perfect player wins > 70% and > 3× as often as vs Challenge; a random player wins > 4× as often); still takes a win/block about a quarter of the time; refuses a full board.
   - `jigsaw.test.ts` (`src/game/minigames/__tests__`) — across 40 seeds per size, 3×3 and 4×4 edges are flat on every outer border and complementary on every inner seam (both tabs and blanks appear); `buildPiecePath` draws flat edges as straight lines and tabs/blanks outside/inside the cell; Cozy → 3×3, Challenge → 4×4; across 200 seeds per mode the tray holds all N² pieces, is never in board order and the board starts empty / unsolved (even with an rng that would leave the shuffle in order); seeded determinism; `placePiece` locks a correct piece immutably, leaves a wrong drop untouched, refuses moving a locked piece / filled or out-of-range slots / unknown pieces, and `isSolved` flips only on the final piece; the image pool (15 squares + bonus scenes, unique ids, `/source/…webp`); `pickJigsawImage` never returns an excluded id while others remain, reopens the pool minus the latest when all are excluded, and copes with a one-painting pool or an rng of ~1.
+  - `dotsAndBoxes.test.ts` (`src/game/minigames/__tests__`):
+    - **Board:** exact line / box counts (24 / 9 and 40 / 16) with unique lines.
+    - **Moves:** a non-closing line passes the turn immutably; closing 1 box and closing 2 boxes at once score correctly and keep the turn; drawn, out-of-range, fractional and malformed lines are rejected without mutation; full games claim every line and box and the score matches the boxes.
+    - **Outcomes:** win / loss / draw / playing; Cozy never ties while Challenge can.
+    - **Challenge AI:** always closes a box (the double when available); prefers a safe line whenever one exists; when every line gives something away, picks a minimum-`sacrificeCost` line; `sacrificeCost` counts a whole 3-box corridor; seeded determinism; refuses a full board.
+    - **Cozy AI:** only picks open lines; takes free boxes between 35% and 75% of the time; a casual box-grabbing player wins > 70% vs Cozy, < 15% vs Challenge, and over 3× less often against the Challenge AI on the same 3×3 board.
   - `resumeLocation.test.ts` — every screen maps to its refresh destination (arrival → rooftop, ride → its destination), round-trips, Title fallback without a claimed shelter (floors need the Terrace), damaged data ignored.
 - **Lint:** `npx oxlint src` (0 warnings).
 - **E2E:** `npm run test:e2e` (`playwright test`) — 28 scenarios driving the real game in **system Chrome** (`channel: 'chrome'`; `npx playwright install` is blocked by the corporate TLS proxy, so no bundled browser is downloaded). Playwright starts its own `vite` dev server on port 5180. Every test fails on any page error or `console.error`. Canvas clicks map normalized scene coords through the same `fitStage()` the scene uses; state is asserted from `localStorage`. Reports land in `playwright-report/` / `test-results/` (git-ignored).
@@ -548,9 +577,11 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
   - **Rooms:** illustrated apartment interiors and scavenging spots reached from the shipped building floors (`BUILDING_FLOORS` hotspots with `kind: 'scavenge'` in `data/floors.ts`, rendered by `BuildingFloorScreen.tsx`), replacing their "scavenging puzzle coming soon" toast.
   - **Reusable mini-game overlay:** one framework triggered from room scavenging hotspots (`safe`, `drawer`, `cupboard`, `under-bed`, `shelf`, …). Rewards feed back cleanly into the main Zustand resource store (`addResources()` + `_save()`); occasional Found Traveler Diary Pages are a later hook.
   - **Shared contract (built):** `src/game/minigames/types.ts` — `MiniGameProps { mode, title?, onComplete(result), onCancel }` and `MiniGameResult { outcome: 'win' | 'draw' | 'loss' | 'cancelled', mode }`. A mini-game never touches resources; the host hotspot maps the outcome to rewards.
-  - **Planned starter puzzle modules:** **Find the Object**, **Jigsaw Puzzle** *(✅ built, not wired)*, **Tic-Tac-Toe** *(✅ built, not wired — see below)*, and **Dots & Lines** (spec TBD).
+  - **Planned starter puzzle modules:** **Find the Object** *(the last one still to build)*, **Jigsaw Puzzle** *(✅ built, not wired)*, **Tic-Tac-Toe** *(✅ built, not wired — see below)*, and **Dots & Lines** *(✅ built, not wired)*.
   - [x] **Tic-Tac-Toe (built, unmounted):** pure engine `src/game/minigames/ticTacToe.ts` + UI `src/ui/minigames/TicTacToeGame.tsx`. Next: mount it from a floor/apartment hotspot (e.g. replace one "scavenging puzzle coming soon" toast), pass `useGameStore().selectedMode` as `mode`, and award materials on `onComplete`.
   - [x] **Jigsaw Puzzle (built, unmounted):** pure engine `src/game/minigames/jigsaw.ts` + UI `src/ui/minigames/JigsawGame.tsx` + `JIGSAW_IMAGES` (15 paintings in `public/source/jigsaw/` + 4 shelter scenes). Wire it the same way, e.g. to a "torn note / map / jammed panel" spot such as Floor 4's bookshelf or Floor 3's fuse box. Its only finished outcome is `'win'`.
+  - [x] **Dots & Lines (built, unmounted):** pure engine `src/game/minigames/dotsAndBoxes.ts` + UI `src/ui/minigames/DotsAndBoxesGame.tsx`. Wire it the same way (e.g. a latch, safe or locker spot such as Floor 3's locker). It can end in `'win'`, `'loss'` or (Challenge only) `'draw'`.
+  - [ ] **Find the Object:** the last planned mini-game — not started.
   - **Cozy guarantee:** no punishing timers or harsh failure states; puzzles can always be retried or left.
   - **Follow-ups:** persist per-room searched spots (ties into the Save schema v5 item below), then switch off `TEST_MODE_GENEROUS_START` and tune scarcity.
 

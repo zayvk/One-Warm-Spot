@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SCAVENGE_ZONES, SCAVENGE_ZONE_MAP } from '../game/data/scavengeZones.ts';
-import { MODE_RULES, WEATHER_INFO } from '../game/data/modes.ts';
+import { MODE_RULES } from '../game/data/modes.ts';
 import { RESOURCE_MAP } from '../game/data/resources.ts';
-import { UPGRADE_MAP } from '../game/data/upgrades.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { computeCozyIndex } from '../game/engine/progression.ts';
 import { cozyBonus, getScavengeBlock, type ScavengeResult } from '../game/engine/scavenge.ts';
@@ -24,7 +23,6 @@ function yieldRange(y: ScavengeZone['yields'][number], k: number): string | null
 /** Right slide-out for daytime scavenging trips to the 4 nearby valley spots */
 export default function ScavengePanel({ onClose }: ScavengePanelProps) {
   const timeOfDay = useGameStore((s) => s.timeOfDay);
-  const weather = useGameStore((s) => s.weather);
   const energy = useGameStore((s) => s.energy);
   const built = useGameStore((s) => s.unlockedUpgrades);
   const mode = useGameStore((s) => s.selectedMode);
@@ -41,7 +39,7 @@ export default function ScavengePanel({ onClose }: ScavengePanelProps) {
   }, [onClose]);
 
   const rules = MODE_RULES[mode];
-  const block = getScavengeBlock(timeOfDay, weather, built, energy, mode);
+  const block = getScavengeBlock(timeOfDay, energy, mode);
   const bonus = cozyBonus(computeCozyIndex(built));
 
   const handleGo = (zone: ScavengeZone) => {
@@ -86,15 +84,6 @@ export default function ScavengePanel({ onClose }: ScavengePanelProps) {
         {block && (
           <p className="ows-calm-note" role="status">
             {block === 'dark' && '🌙 The valley grows dim—rest by the lantern until morning.'}
-            {block === 'storm' && (
-              <>
-                {WEATHER_INFO.storm.emoji} A dust squall is sweeping the valley this morning.
-                Scavenging reopens in the afternoon — a cozy excuse to craft or rest indoors.
-                <span style={{ display: 'block', marginTop: '4px', fontSize: '0.76rem' }}>
-                  Tip: “{UPGRADE_MAP['shell-2'].name}” lets you brave stormy mornings.
-                </span>
-              </>
-            )}
             {block === 'tired' &&
               `😴 Too tired for a trip — rest a while first (each trip needs ⚡${rules.scavengeEnergy}).`}
           </p>

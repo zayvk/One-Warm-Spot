@@ -3,19 +3,23 @@
 import {
   DEFAULT_TERRACE_SPAWNS,
   TERRACE_BOX_IDS,
-  TERRACE_BOX_VARIANTS,
+  TERRACE_CARDBOARD_IDS,
+  TERRACE_CRATE_IDS,
+  TERRACE_CRATE_VARIANTS,
   TERRACE_SPAWN_RULES,
   TERRACE_WEED_IDS,
   TERRACE_WEED_VARIANTS,
+  WIND_CARDBOARD_VARIANTS,
   terraceScene,
   terraceVariantConfig,
   isBoxVariant,
-  type TerraceBoxVariant,
+  type TerraceCrateVariant,
   type TerracePropSpawn,
   type TerracePropVariant,
   type TerraceSpawns,
   type TerraceWeedVariant,
 } from '../data/scenes/terrace.ts';
+import type { Weather } from '../types/game.ts';
 
 export type Rng = () => number;
 
@@ -94,26 +98,23 @@ function crowds(a: TerracePropSpawn, b: TerracePropSpawn): boolean {
 }
 
 /**
- * Every rule a layout must satisfy: all 9 props present, inside the open floor,
+ * Every rule a layout must satisfy: both wooden crates and all 6 weeds present (cartons
+ * are optional — present only while on the roof), every prop inside the open floor,
  * clear of walls, fixed structures and the entry path, and never crowding each other.
  * Returns human-readable problems (empty = valid).
  */
 export function findSpawnProblems(spawns: TerraceSpawns): string[] {
   const problems: string[] = [];
-  const ids = [...TERRACE_BOX_IDS, ...TERRACE_WEED_IDS];
+  for (const id of [...TERRACE_CRATE_IDS, ...TERRACE_WEED_IDS]) {
+    if (!spawns[id]) problems.push(`${id} is missing`);
+  }
+  const ids = SPAWN_IDS.filter((id) => spawns[id]);
   for (const id of ids) {
-    const s = spawns[id];
-    if (!s) {
-      problems.push(`${id} is missing`);
-      continue;
-    }
-    if (!isSpawnClear(s)) problems.push(`${id} overlaps scenery or leaves the floor`);
+    if (!isSpawnClear(spawns[id])) problems.push(`${id} overlaps scenery or leaves the floor`);
   }
   for (let i = 0; i < ids.length; i++) {
     for (let j = i + 1; j < ids.length; j++) {
-      const a = spawns[ids[i]];
-      const b = spawns[ids[j]];
-      if (a && b && crowds(a, b)) {
+      if (crowds(spawns[ids[i]], spawns[ids[j]])) {
         problems.push(`${ids[i]} crowds ${ids[j]}`);
       }
     }
@@ -170,16 +171,22 @@ function placeProp({ variant, others, rng, scale, flipX }: PlaceOptions): Terrac
   return best ?? fallback;
 }
 
+/** Cartons on the roof at the start of a run */
+export const STARTING_CARDBOARD = { min: 1, max: 2 } as const;
+
 function tryLayout(rng: Rng): TerraceSpawns | null {
   const placed: TerracePropSpawn[] = [];
   const spawns: TerraceSpawns = {};
 
-  const boxVariants = shuffle(Object.keys(TERRACE_BOX_VARIANTS) as TerraceBoxVariant[], rng);
+  const crateVariants = shuffle(Object.keys(TERRACE_CRATE_VARIANTS) as TerraceCrateVariant[], rng);
+  const cartons = STARTING_CARDBOARD.min + Math.floor(rng() * (STARTING_CARDBOARD.max - STARTING_CARDBOARD.min + 1));
+  const cardboardVariants = shuffle(WIND_CARDBOARD_VARIANTS, rng).slice(0, cartons);
   const weedKinds = Object.keys(TERRACE_WEED_VARIANTS) as TerraceWeedVariant[];
   const weedVariants = shuffle([...weedKinds, ...weedKinds], rng);
 
   const plan = [
-    ...TERRACE_BOX_IDS.map((id, i) => ({ id, variant: boxVariants[i] as TerracePropVariant })),
+    ...TERRACE_CRATE_IDS.map((id, i) => ({ id, variant: crateVariants[i] as TerracePropVariant })),
+    ...cardboardVariants.map((variant, i) => ({ id: TERRACE_CARDBOARD_IDS[i], variant: variant as TerracePropVariant })),
     ...TERRACE_WEED_IDS.map((id, i) => ({ id, variant: weedVariants[i] as TerracePropVariant })),
   ];
 
@@ -193,9 +200,10 @@ function tryLayout(rng: Rng): TerraceSpawns | null {
 }
 
 /**
- * Fresh randomized Terrace layout: 3 boxes (one of each sprite, biased toward
- * edges & corners) and 6 weeds (two of each sprite), with 0.92–1.08× scale and
- * random flips. Falls back to the hand-placed layout if no fit is found.
+ * Fresh randomized Terrace layout: the 2 heavy wooden crates (one of each crate sprite)
+ * and 1–2 light cardboard cartons, biased toward edges & corners, plus 6 weeds (two of
+ * each sprite), with 0.92–1.08× scale and random flips. Falls back to the hand-placed
+ * layout if no fit is found.
  */
 export function generateTerraceSpawns(seed: number = Math.floor(Math.random() * 2 ** 32)): TerraceSpawns {
   const rng = seededRng(seed);
@@ -236,10 +244,18 @@ export function repairTerraceSpawns(spawns: TerraceSpawns, rng: Rng = Math.rando
 
 /* ── Overnight regrowth ── */
 
-/** Cleared weeds that sprout back each morning (at most the cleared count) */
-export const WEEDS_REGROWN_PER_NIGHT = { min: 1, max: 2 } as const;
-/** A searched box is replaced by a fresh one every this many days (on day % N === 0) */
-export const BOX_REFRESH_EVERY_DAYS = 2;
+/**
+ * Cleared weed patches that sprout back each morning, by the night's weather
+ * (never more than were cleared): calm → 1, rain → 2–3, wind → none.
+ */
+export const WEEDS_REGROWN: Readonly<Record<Weather, { min: number; max: number }>> = {
+  clear: { min: 1, max: 1 },
+  rain: { min: 2, max: 3 },
+  wind: { min: 0, max: 0 },
+};
+/** Light cartons the wind blows onto the roof on a windy morning (only then; up to 3 on the roof) */
+export const CARDBOARD_BLOWN_IN = { min: 1, max: 2 } as const;
+export const MAX_CARDBOARD = TERRACE_CARDBOARD_IDS.length;
 
 /** The slice of rooftop state regrowth reads and rewrites */
 export interface RegrowableRooftop {
@@ -249,9 +265,10 @@ export interface RegrowableRooftop {
 }
 
 export interface RegrowOutcome<T extends RegrowableRooftop> {
-  /** Rooftop after the night (the same object if nothing regrew) */
+  /** Rooftop after the night (the same object if nothing changed) */
   state: T;
   regrownWeeds: string[];
+  /** Cardboard cartons the wind blew in */
   refreshedBoxes: string[];
 }
 
@@ -260,25 +277,26 @@ function pick<T>(items: readonly T[], rng: Rng): T {
 }
 
 /**
- * A new morning on the rooftop (`day` = the day just begun):
- * - 1–2 cleared weeds sprout back at brand-new spots with fresh art, size & flip;
- * - on every 2nd day one searched box is replaced by a fresh one at a new edge spot.
- * New spots use the same collision-safe, perimeter-hugging placement as fresh layouts,
- * so the 3-box / 6-weed caps hold and nothing ever overlaps stations or other props.
+ * A new morning on the rooftop, shaped only by the night's `weather`:
+ * - **clear:** 1 cleared weed patch sprouts back (if any were cleared); no boxes;
+ * - **rain:** 2–3 cleared weed patches sprout back; no boxes;
+ * - **wind:** 1–2 light cardboard cartons blow in (up to 3 on the roof); no weeds.
+ * Wooden crates are never moved or replaced. New spots (fresh art, size & flip) use the
+ * same collision-safe, perimeter-hugging placement as fresh layouts, so nothing ever
+ * overlaps stations or other props and the 6-weed / 3-carton caps hold by construction.
  */
 export function regrowTerraceSpawns<T extends RegrowableRooftop>(
   state: T,
-  day: number,
+  weather: Weather = 'clear',
   rng: Rng = Math.random,
 ): RegrowOutcome<T> {
   const spawns: TerraceSpawns = structuredClone(state.spawns ?? DEFAULT_TERRACE_SPAWNS);
-  const cleared = state.clearedWeeds.filter((id) => (TERRACE_WEED_IDS as readonly string[]).includes(id));
-  const searched = state.searchedBoxes.filter((id) => (TERRACE_BOX_IDS as readonly string[]).includes(id));
+  const cleared = state.clearedWeeds.filter((id) => (TERRACE_WEED_IDS as readonly string[]).includes(id) && spawns[id]);
   const regrownWeeds: string[] = [];
   const refreshedBoxes: string[] = [];
 
-  /* The moving prop's old spot is freed; every other spawn (even a cleared one) stays reserved */
-  const relocate = (id: string, variant: TerracePropVariant): boolean => {
+  /* The moving prop's old spot is freed; every other spawn (even a cleared weed) stays reserved */
+  const placeAt = (id: string, variant: TerracePropVariant): boolean => {
     const others = Object.entries(spawns).filter(([k]) => k !== id).map(([, s]) => s);
     const spawn = placeProp({ variant, others, rng });
     if (!spawn) return false;
@@ -286,19 +304,23 @@ export function regrowTerraceSpawns<T extends RegrowableRooftop>(
     return true;
   };
 
-  if (cleared.length > 0) {
-    const { min, max } = WEEDS_REGROWN_PER_NIGHT;
-    const count = Math.min(cleared.length, min + Math.floor(rng() * (max - min + 1)));
+  const weeds = WEEDS_REGROWN[weather];
+  if (cleared.length > 0 && weeds.max > 0) {
+    const count = Math.min(cleared.length, weeds.min + Math.floor(rng() * (weeds.max - weeds.min + 1)));
     const weedKinds = Object.keys(TERRACE_WEED_VARIANTS) as TerraceWeedVariant[];
     for (const id of shuffle(cleared, rng).slice(0, count)) {
-      if (relocate(id, pick(weedKinds, rng))) regrownWeeds.push(id);
+      if (placeAt(id, pick(weedKinds, rng))) regrownWeeds.push(id);
     }
   }
 
-  if (searched.length > 0 && day % BOX_REFRESH_EVERY_DAYS === 0) {
-    const id = pick(searched, rng);
-    const boxKinds = Object.keys(TERRACE_BOX_VARIANTS) as TerraceBoxVariant[];
-    if (relocate(id, pick(boxKinds, rng))) refreshedBoxes.push(id);
+  /* A carton is on the roof exactly when its id has a spawn; the wind fills empty carton ids */
+  const emptyCartons = TERRACE_CARDBOARD_IDS.filter((id) => !spawns[id]);
+  if (weather === 'wind' && emptyCartons.length > 0) {
+    const { min, max } = CARDBOARD_BLOWN_IN;
+    const count = Math.min(emptyCartons.length, min + Math.floor(rng() * (max - min + 1)));
+    for (const id of emptyCartons.slice(0, count)) {
+      if (placeAt(id, pick(WIND_CARDBOARD_VARIANTS, rng))) refreshedBoxes.push(id);
+    }
   }
 
   if (regrownWeeds.length === 0 && refreshedBoxes.length === 0) {

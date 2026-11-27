@@ -875,9 +875,69 @@ button:disabled {
 }
 
 /* The emblem stays; the shelter's name would sit under the pouch */
-@media (max-width: 1150px) {
+@media (max-width: 1360px) {
   .ows-shelter-name {
     display: none;
+  }
+}
+
+/* ───── Weather chip (shelter header) ───── */
+
+.ows-sky-chip {
+  position: relative;
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: rgba(61, 56, 50, 0.32);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1.5px solid rgba(255, 252, 246, 0.22);
+  color: rgba(255, 252, 246, 0.92);
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.ows-sky-chip:focus-visible {
+  outline: 2px solid var(--terra-400);
+  outline-offset: 2px;
+}
+
+/* Left-aligned under the chip (it sits near the screen edge) */
+.ows-sky-chip .ows-sky-chip__tooltip {
+  left: 0;
+  transform: translateY(-3px);
+}
+
+.ows-sky-chip:hover .ows-sky-chip__tooltip,
+.ows-sky-chip:focus-visible .ows-sky-chip__tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-reduce-motion='true'] .ows-sky-chip .ows-sky-chip__tooltip {
+  transform: none;
+}
+
+/* Narrow screens: icon only, then drop the emblem, so the header never meets the pouch */
+@media (max-width: 840px) {
+  .ows-sky-chip__label {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .ows-shelter-emblem {
+    display: none;
+  }
+
+  .ows-sky-chip {
+    padding: 0 8px;
   }
 }
 

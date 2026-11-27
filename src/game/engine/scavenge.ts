@@ -4,10 +4,9 @@ import type {
   ResourceId,
   ScavengeZoneId,
   TimeOfDay,
-  Weather,
 } from '../types/game.ts';
 import { SCAVENGE_ZONE_MAP } from '../data/scavengeZones.ts';
-import { MODE_RULES, STORM_SHELTER_UPGRADE } from '../data/modes.ts';
+import { MODE_RULES } from '../data/modes.ts';
 import { RELICS } from '../data/relics.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
 
@@ -31,7 +30,7 @@ export interface ScavengeResult {
 }
 
 /** Why a trip can't start right now (null = good to go) */
-export type ScavengeBlock = 'dark' | 'storm' | 'tired';
+export type ScavengeBlock = 'dark' | 'tired';
 
 function randInt(min: number, max: number, rng: Rng): number {
   return min + Math.floor(rng() * (max - min + 1));
@@ -97,18 +96,13 @@ export function runScavenge(
   return { zoneId, mode, gathered, bonus, story, relic };
 }
 
-/** Scavenging is a daytime activity; storms close the morning unless walls are fortified */
+/** Scavenging is a daytime activity that needs a little energy */
 export function getScavengeBlock(
   timeOfDay: TimeOfDay,
-  weather: Weather,
-  built: readonly string[],
   energy: number,
   mode: GameMode,
 ): ScavengeBlock | null {
   if (timeOfDay === 'dusk' || timeOfDay === 'night') return 'dark';
-  if (weather === 'storm' && timeOfDay === 'morning' && !built.includes(STORM_SHELTER_UPGRADE)) {
-    return 'storm';
-  }
   if (energy < MODE_RULES[mode].scavengeEnergy) return 'tired';
   return null;
 }

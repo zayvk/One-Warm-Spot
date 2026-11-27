@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { parseTerraceState, freshTerraceState, validateTerraceState } from '../terraceState.ts';
 import { spendResources } from '../progression.ts';
-import { findSpawnProblems, generateTerraceSpawns } from '../terraceSpawns.ts';
+import { findSpawnProblems, generateTerraceSpawns, regrowTerraceSpawns, seededRng } from '../terraceSpawns.ts';
 import type { SlotAssignments } from '../buildSlots.ts';
 import {
-  TERRACE_BOX_VARIANTS,
+  DEFAULT_TERRACE_SPAWNS,
+  TERRACE_CARDBOARD_IDS,
+  TERRACE_CARDBOARD_VARIANTS,
+  TERRACE_CRATE_VARIANTS,
   TERRACE_STATIONS,
+  TERRACE_WEED_IDS,
   TERRACE_WEED_VARIANTS,
 } from '../../data/scenes/terrace.ts';
 import { GENEROUS_TEST_POOL } from '../../data/modes.ts';
@@ -29,10 +33,11 @@ describe('spendResources', () => {
 
 describe('parseTerraceState', () => {
   it('upgrades an older rooftop save to base station tiers with the hand-placed layout', () => {
+    /* `boxes-2` was the broken crates in the hand-placed layout: now wooden crate-1, still opened */
     const legacy = JSON.stringify({ fireLit: true, searchedBoxes: ['boxes-2'], clearedWeeds: ['weeds-1'] });
     expect(parseTerraceState(legacy)).toEqual({
       fireLit: true,
-      searchedBoxes: ['boxes-2'],
+      searchedBoxes: ['crate-1'],
       clearedWeeds: ['weeds-1'],
       shelterTier: 1,
       firepitTier: 1,
@@ -138,10 +143,10 @@ describe('parseTerraceState', () => {
 
   it('nudges saved props that now sit on a recomposed station, keeping the rest of the layout', () => {
     const spawns = generateTerraceSpawns(31);
-    const stale = { ...spawns, 'boxes-3': { ...spawns['boxes-3'], x: 0.3, y: 0.58 } };
+    const stale = { ...spawns, 'crate-2': { ...spawns['crate-2'], x: 0.3, y: 0.58 } };
     const restored = parseTerraceState(JSON.stringify({ spawns: stale })).spawns!;
     expect(findSpawnProblems(restored)).toEqual([]);
-    expect(restored['boxes-3']).not.toMatchObject({ x: 0.3, y: 0.58 });
+    expect(restored['crate-2']).not.toMatchObject({ x: 0.3, y: 0.58 });
     expect(restored['weeds-1']).toEqual(spawns['weeds-1']);
   });
 
@@ -149,24 +154,96 @@ describe('parseTerraceState', () => {
     const spawns = generateTerraceSpawns(7);
     const missingOne = { ...spawns };
     delete missingOne['weeds-4'];
-    const badVariant = { ...spawns, 'boxes-1': { ...spawns['boxes-1'], variant: 'weeds-1' } };
-    expect(parseTerraceState(JSON.stringify({ spawns: missingOne })).spawns).toBeNull();
-    expect(parseTerraceState(JSON.stringify({ spawns: badVariant })).spawns).toBeNull();
+    const missingCrate = { ...spawns };
+    delete missingCrate['crate-2'];
+    const badVariant = { ...spawns, 'crate-1': { ...spawns['crate-1'], variant: 'weeds-1' } };
+    /* A wooden crate id can't hold carton art, nor a carton id crate art */
+    const crateAsCarton = { ...spawns, 'crate-1': { ...spawns['crate-1'], variant: 'cardboard-2' } };
+    const cartonAsCrate = { ...spawns, 'cardboard-3': { ...spawns['crate-1'], variant: 'box-double' } };
+    for (const bad of [missingOne, missingCrate, badVariant, crateAsCarton, cartonAsCrate]) {
+      expect(parseTerraceState(JSON.stringify({ spawns: bad })).spawns).toBeNull();
+      expect(validateTerraceState({ ...freshTerraceState(1), spawns: bad })).toBeNull();
+    }
   });
 
   it('starts a fresh run with a newly generated layout for missing or unreadable data', () => {
     for (const raw of [null, '{oops']) {
       const state = parseTerraceState(raw);
       expect(state).toMatchObject({ firepitTier: 1, shelterTier: 1, grillTier: 0, searchedBoxes: [], fireLit: false });
-      expect(Object.keys(state.spawns ?? {})).toHaveLength(9);
+      const ids = Object.keys(state.spawns ?? {});
+      expect(ids).toEqual(expect.arrayContaining(['crate-1', 'crate-2', 'weeds-1', 'weeds-6']));
+      expect(ids.length).toBeGreaterThanOrEqual(9);
+      expect(ids.length).toBeLessThanOrEqual(10);
     }
   });
 });
 
+describe('wooden crates vs. cardboard cartons', () => {
+  it('a searched wooden crate stays on the roof (opened) through save, reload and backups', () => {
+    const state = { ...freshTerraceState(42), searchedBoxes: ['crate-2'] };
+    const reloaded = parseTerraceState(JSON.stringify(state));
+    expect(reloaded.searchedBoxes).toEqual(['crate-2']);
+    expect(reloaded.spawns!['crate-2']).toEqual(state.spawns!['crate-2']);
+    expect(validateTerraceState(JSON.parse(JSON.stringify(state)))).toEqual(state);
+  });
+
+  it('a searched carton is simply gone: its spawn is cleared and its floor is free again', () => {
+    const fresh = freshTerraceState(42);
+    const carton = TERRACE_CARDBOARD_IDS.find((id) => fresh.spawns![id])!;
+    /* e.g. a rooftop saved mid-search, still listing the carton as searched */
+    const raw = JSON.stringify({ ...fresh, searchedBoxes: [carton, 'crate-1'] });
+    const state = parseTerraceState(raw);
+    expect(state.spawns![carton]).toBeUndefined();
+    expect(state.searchedBoxes).toEqual(['crate-1']);
+    expect(findSpawnProblems(state.spawns!)).toEqual([]);
+
+    /* With its spawn gone, the next windy morning can land a fresh carton right back in that id */
+    const blown = regrowTerraceSpawns(state, 'wind', seededRng(5));
+    expect(blown.refreshedBoxes).toContain(carton);
+    expect(findSpawnProblems(blown.state.spawns!)).toEqual([]);
+  });
+
+  it('migrates layouts saved before crates & cartons split, following each box by its art', () => {
+    const fresh = generateTerraceSpawns(9);
+    /* An older generated layout: three `boxes-*` ids with shuffled art, the parcel opened, broken crates opened */
+    const legacySpawns: Record<string, unknown> = {};
+    for (const id of TERRACE_WEED_IDS) legacySpawns[id] = fresh[id];
+    legacySpawns['boxes-1'] = { ...fresh['crate-2'] };
+    legacySpawns['boxes-2'] = { ...DEFAULT_TERRACE_SPAWNS['cardboard-1'] };
+    legacySpawns['boxes-3'] = { ...fresh['crate-1'] };
+    const raw = { fireLit: false, spawns: legacySpawns, searchedBoxes: ['boxes-2', 'boxes-3'], clearedWeeds: [] };
+
+    for (const state of [parseTerraceState(JSON.stringify(raw)), validateTerraceState(raw)!]) {
+      expect(state.spawns!['crate-1']).toMatchObject({ variant: fresh['crate-2'].variant, x: fresh['crate-2'].x });
+      expect(state.spawns!['crate-2']).toMatchObject({ variant: fresh['crate-1'].variant, x: fresh['crate-1'].x });
+      /* The opened parcel became a carton that's already been carried off */
+      expect(TERRACE_CARDBOARD_IDS.filter((id) => state.spawns![id])).toEqual([]);
+      /* boxes-3 (now crate-2) stays opened on the roof */
+      expect(state.searchedBoxes).toEqual(['crate-2']);
+      expect(Object.keys(state.spawns!).some((id) => id.startsWith('boxes-'))).toBe(false);
+    }
+  });
+
+  it('older hand-placed rooftops whose parcel was searched lose just that parcel', () => {
+    const state = parseTerraceState(JSON.stringify({ searchedBoxes: ['boxes-1', 'boxes-3'] }));
+    const expected: Record<string, unknown> = { ...DEFAULT_TERRACE_SPAWNS };
+    delete expected['cardboard-1'];
+    expect(state.spawns).toEqual(expected);
+    expect(state.searchedBoxes).toEqual(['crate-2']);
+    /* Even older saves only knew "the boxes were searched" */
+    expect(parseTerraceState(JSON.stringify({ boxesSearched: true })).spawns!['cardboard-1']).toBeUndefined();
+  });
+});
+
 describe('Terrace balance', () => {
-  /* Every layout uses each box variant once and each weed variant twice */
+  /* Worst case: the two wooden crates, the leanest single carton and each weed variant twice */
   const rooftopYield: Partial<Record<string, number>> = {};
-  for (const v of [...Object.values(TERRACE_BOX_VARIANTS), ...Object.values(TERRACE_WEED_VARIANTS), ...Object.values(TERRACE_WEED_VARIANTS)]) {
+  for (const v of [
+    ...Object.values(TERRACE_CRATE_VARIANTS),
+    TERRACE_CARDBOARD_VARIANTS['cardboard-1'],
+    ...Object.values(TERRACE_WEED_VARIANTS),
+    ...Object.values(TERRACE_WEED_VARIANTS),
+  ]) {
     for (const [id, n] of Object.entries(v.reward)) rooftopYield[id] = (rooftopYield[id] ?? 0) + n;
   }
 

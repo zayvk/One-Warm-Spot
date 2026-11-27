@@ -8,7 +8,7 @@ import {
   type Rng,
 } from '../scavenge.ts';
 import { canAfford } from '../progression.ts';
-import { morningWaterBonus, rollWeather } from '../weather.ts';
+import { mergeMaterials, morningWaterBonus, normalizeWeather, rollWeather, windBoxBonus } from '../weather.ts';
 import { SCAVENGE_ZONES } from '../../data/scavengeZones.ts';
 import { RELICS } from '../../data/relics.ts';
 import { startingResources } from '../../data/modes.ts';
@@ -92,17 +92,14 @@ describe('runScavenge yields', () => {
 
 describe('scavenging availability', () => {
   it.each([
-    ['dusk', 'clear', [], 100, 'cozy', 'dark'],
-    ['night', 'clear', [], 100, 'cozy', 'dark'],
-    ['morning', 'storm', [], 100, 'challenge', 'storm'],
-    ['morning', 'storm', ['shell-1', 'shell-2'], 100, 'challenge', null],
-    ['afternoon', 'storm', [], 100, 'challenge', null],
-    ['morning', 'clear', [], 24, 'cozy', 'tired'],
-    ['morning', 'clear', [], 25, 'cozy', null],
-    ['morning', 'clear', [], 34, 'challenge', 'tired'],
-    ['afternoon', 'rain', [], 35, 'challenge', null],
-  ] as const)('%s · %s · built %j · ⚡%i · %s → %s', (time, weather, built, energy, mode, expected) => {
-    expect(getScavengeBlock(time, weather, built, energy, mode)).toBe(expected);
+    ['dusk', 100, 'cozy', 'dark'],
+    ['night', 100, 'cozy', 'dark'],
+    ['morning', 24, 'cozy', 'tired'],
+    ['morning', 25, 'cozy', null],
+    ['morning', 34, 'challenge', 'tired'],
+    ['afternoon', 35, 'challenge', null],
+  ] as const)('%s · ⚡%i · %s → %s', (time, energy, mode, expected) => {
+    expect(getScavengeBlock(time, energy, mode)).toBe(expected);
   });
 
   it('caps gathered materials at their storage limit', () => {
@@ -127,13 +124,18 @@ describe('Cozy vs. Challenge rules', () => {
     expect(canAfford(UPGRADE_MAP['shell-1'].cost, stock)).toBe(true);
   });
 
-  it('rolls storms far more often in Challenge than in Cozy', () => {
-    const storms = (mode: GameMode) => {
+  it('rolls only clear, rain and wind — Challenge sees a little more weather than Cozy', () => {
+    const rolls = (mode: GameMode) => {
       const rng = seeded(42);
-      return Array.from({ length: 2000 }, () => rollWeather(mode, rng)).filter((w) => w === 'storm').length;
+      return Array.from({ length: 3000 }, () => rollWeather(mode, rng));
     };
-    expect(storms('cozy')).toBeLessThan(100);
-    expect(storms('challenge')).toBeGreaterThan(300);
+    for (const mode of ['cozy', 'challenge'] as const) {
+      const seen = new Set(rolls(mode));
+      expect([...seen].sort()).toEqual(['clear', 'rain', 'wind']);
+    }
+    const clearShare = (mode: GameMode) => rolls(mode).filter((w) => w === 'clear').length / 3000;
+    expect(clearShare('cozy')).toBeGreaterThan(0.45);
+    expect(clearShare('challenge')).toBeLessThan(clearShare('cozy'));
   });
 
   it('soft rain adds 1–2 water, plus 1 with a rain collector; other weather adds none', () => {
@@ -141,5 +143,34 @@ describe('Cozy vs. Challenge rules', () => {
     expect(morningWaterBonus('rain', [], () => 0.99)).toBe(2);
     expect(morningWaterBonus('rain', ['slot-rain-collector'], () => 0.99)).toBe(3);
     expect(morningWaterBonus('clear', ['slot-rain-collector'], () => 0.99)).toBe(0);
+  });
+});
+
+describe('rooftop weather rules', () => {
+  const box = { timber: 3, scrap: 2 };
+
+  it('a windy day adds +1 of one of the box’s own materials (chosen by the rng)', () => {
+    expect(windBoxBonus(box, 'wind', () => 0)).toEqual({ timber: 1 });
+    expect(windBoxBonus(box, 'wind', () => 0.99)).toEqual({ scrap: 1 });
+    expect(mergeMaterials(box, windBoxBonus(box, 'wind', () => 0.99))).toEqual({ timber: 3, scrap: 3 });
+    for (let i = 0; i < 50; i++) {
+      const bonus = windBoxBonus({ scrap: 1, timber: 1, cloth: 1 }, 'wind');
+      expect(Object.values(bonus)).toEqual([1]);
+      expect(['scrap', 'timber', 'cloth']).toContain(Object.keys(bonus)[0]);
+    }
+  });
+
+  it('other weather (or an empty box) gives no wind bonus', () => {
+    expect(windBoxBonus(box, 'clear', () => 0)).toEqual({});
+    expect(windBoxBonus(box, 'rain', () => 0)).toEqual({});
+    expect(windBoxBonus({}, 'wind', () => 0)).toEqual({});
+  });
+
+  it("maps legacy 'breezy' / 'storm' to wind and anything unknown to clear", () => {
+    expect(normalizeWeather('breezy')).toBe('wind');
+    expect(normalizeWeather('storm')).toBe('wind');
+    expect(normalizeWeather('rain')).toBe('rain');
+    expect(normalizeWeather('meteor')).toBe('clear');
+    expect(normalizeWeather(undefined)).toBe('clear');
   });
 });

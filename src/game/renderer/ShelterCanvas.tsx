@@ -101,6 +101,7 @@ export default function ShelterCanvas({
   const lanternLit = useGameStore((s) => s.lanternLit);
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const gender = useGameStore((s) => s.travelerGender);
+  const weather = useGameStore((s) => s.weather);
   const sceneRevision = useGameStore((s) => s.sceneRevision);
   /* Which scene revision has revealed its stage (drives the loading emblem) */
   const [readyRevision, setReadyRevision] = useState(-1);
@@ -166,10 +167,11 @@ export default function ShelterCanvas({
       cozyIndex: computeCozyIndex(built),
       reduceMotion,
       gender,
+      weather,
     };
     stateRef.current = next;
     sceneRef.current?.setState(next);
-  }, [siteId, timeOfDay, dayPhase, built, lanternLit, reduceMotion, gender]);
+  }, [siteId, timeOfDay, dayPhase, built, lanternLit, reduceMotion, gender, weather]);
 
   /* Mount / unmount the PixiJS app */
   useEffect(() => {

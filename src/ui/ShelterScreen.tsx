@@ -9,7 +9,8 @@ import { getSceneConfig } from '../game/data/scenes/index.ts';
 import type { StationId } from '../game/data/scenes/types.ts';
 import { stationTierConfig } from '../game/engine/stations.ts';
 import { unplacedStations } from '../game/engine/buildSlots.ts';
-import { playClick, playHover, startSiteAmbience } from '../game/audio/soundEngine.ts';
+import { playClick, playHover, setWeatherAmbience, startSiteAmbience } from '../game/audio/soundEngine.ts';
+import { WEATHER_INFO } from '../game/data/modes.ts';
 import type { ResourceId } from '../game/types/game.ts';
 import PropActionMenu, { SlotBuildMenu, type StationMenuAction } from './PropActionMenu.tsx';
 import StationPopover, { type PopoverStation } from './StationPopover.tsx';
@@ -31,6 +32,7 @@ const POUCH_IDS: ResourceId[] = ['timber', 'cloth', 'seeds', 'water', 'scrap', '
 export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenProps) {
   const chosenSite = useGameStore((s) => s.chosenSite);
   const dayPhase = useGameStore((s) => s.dayPhase);
+  const weather = useGameStore((s) => s.weather);
   const resources = useGameStore((s) => s.resources);
 
   const [pulsing, setPulsing] = useState<Partial<Record<ResourceId, boolean>>>({});
@@ -106,6 +108,13 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
     return () => startSiteAmbience(null);
   }, [chosenSite]);
 
+  /* Rain patter / wind gusts over the open rooftop; silent indoors (this screen unmounts downstairs) */
+  const outdoorWeather = chosenSite === 'terrace' ? weather : 'clear';
+  useEffect(() => {
+    setWeatherAmbience(outdoorWeather);
+  }, [outdoorWeather]);
+  useEffect(() => () => setWeatherAmbience(null), []);
+
   /* Real-time 3-phase clock (1s steps; pauses when tab is hidden or settings open) */
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -174,6 +183,7 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
           ← Title
         </button>
         <img
+          className="ows-shelter-emblem"
           src={UI_ASSETS.logoEmblem}
           alt=""
           width={26}
@@ -194,6 +204,18 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
           }}
         >
           {siteName}
+        </span>
+        {/* Today's weather and what it does on the rooftop (hover / focus) */}
+        <span
+          className="ows-sky-chip"
+          tabIndex={0}
+          aria-label={`Weather: ${WEATHER_INFO[outdoorWeather].label} — ${WEATHER_INFO[outdoorWeather].hint}`}
+        >
+          <span aria-hidden="true">{WEATHER_INFO[outdoorWeather].emoji}</span>
+          <span className="ows-sky-chip__label">{WEATHER_INFO[outdoorWeather].label}</span>
+          <span className="ows-pouch-tooltip ows-sky-chip__tooltip" role="tooltip">
+            {WEATHER_INFO[outdoorWeather].hint}
+          </span>
         </span>
       </header>
 
@@ -244,6 +266,7 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
             station={menuStation}
             anchor={propMenu.anchor}
             dayPhase={dayPhase}
+            weather={outdoorWeather}
             stationState={stationState}
             resources={resources}
             onAction={handlePropAction}

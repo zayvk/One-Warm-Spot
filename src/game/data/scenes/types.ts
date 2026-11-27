@@ -14,6 +14,10 @@ export interface HotspotConfig {
   propSprite: string;
   /** Sprite after interaction (e.g. cleared boxes) */
   propSpriteAfter?: string;
+  /** Searchables: the prop fades away once searched, freeing its floor (light cardboard cartons) */
+  clearsWhenSearched?: boolean;
+  /** Searchables that stay once searched (wooden crates): hover text for the emptied prop */
+  searchedLabel?: string;
   /** Scale of the prop sprite relative to stage height */
   propScale?: number;
   /** Flip the prop sprite horizontally for organic variety */

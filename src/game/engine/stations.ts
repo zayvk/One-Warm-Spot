@@ -1,11 +1,12 @@
 /* ───── Multi-tier stations: pure tier, harvest, sleep, perk & cooking rules ───── */
 
-import type { ResourceId } from '../types/game.ts';
+import type { ResourceId, Weather } from '../types/game.ts';
 import type { StationConfig, StationId, StationTierConfig } from '../data/scenes/types.ts';
 import type { MendingPerk, Recipe } from '../data/recipes.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
 import { TERRACE_STATIONS } from '../data/scenes/terrace.ts';
 import { canAfford, spendResources } from './progression.ts';
+import { RAIN_BARREL_BONUS } from './weather.ts';
 import {
   clampVitality,
   MAX_VITALITY,
@@ -46,9 +47,10 @@ export function planterHarvest(tier: number): ResourceGains {
   return tier >= 2 ? { food: tier, seeds: 1 } : { food: tier };
 }
 
-/** Rainwater collected: +1/+2/+3 Water by tier */
-export function barrelCollect(tier: number): ResourceGains {
-  return tier < 1 ? {} : { water: tier };
+/** Rainwater collected: +1/+2/+3 Water by tier, +1 more on a rainy day */
+export function barrelCollect(tier: number, weather: Weather = 'clear'): ResourceGains {
+  if (tier < 1) return {};
+  return { water: tier + (weather === 'rain' ? RAIN_BARREL_BONUS : 0) };
 }
 
 /* ── Sleep & mending perks ── */

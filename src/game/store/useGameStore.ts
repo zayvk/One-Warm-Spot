@@ -67,12 +67,24 @@ import type { Recipe } from '../data/recipes.ts';
 
 /* ── Helpers ── */
 
-/** Morning toast line for overnight rooftop regrowth ('' when nothing regrew) */
-function regrowthNote(weeds: number, boxes: number): string {
-  if (weeds > 0 && boxes > 0) return 'Fresh weeds sprouted and a weathered crate turned up overnight.';
-  if (weeds > 0) return 'Fresh weeds sprouted overnight.';
-  if (boxes > 0) return 'A weathered crate turned up by the wall overnight.';
-  return '';
+/**
+ * Morning toast line for what the night's weather did to the rooftop ('' when nothing
+ * changed). Each weather has its own distinct effect: calm → a weed patch, rain → weeds
+ * (and a full barrel), wind → cardboard boxes.
+ */
+function morningRooftopNote(weather: Weather, weeds: number, boxes: number, barrelBuilt: boolean): string {
+  if (weather === 'rain') {
+    if (weeds > 0 && barrelBuilt) return 'Soft rain filled the barrel and sprouted extra weeds overnight.';
+    if (weeds > 0) return 'Soft rain sprouted extra weeds overnight.';
+    return barrelBuilt ? 'Soft rain filled the barrel overnight.' : '';
+  }
+  if (weather === 'wind') {
+    if (boxes === 0) return '';
+    return boxes === 1
+      ? 'Gusty wind carried a fresh cardboard box onto the roof overnight.'
+      : 'Gusty wind carried fresh boxes onto the roof overnight.';
+  }
+  return weeds > 0 ? 'A fresh weed patch sprouted overnight.' : '';
 }
 
 const REDUCE_MOTION_KEY = 'ows_reduce_motion';
@@ -380,13 +392,7 @@ export const useGameStore = create<GameState>()((set, get) => {
 
     goScavenging(zoneId: ScavengeZoneId) {
       const s = get();
-      const block = getScavengeBlock(
-        s.timeOfDay,
-        s.weather,
-        s.unlockedUpgrades,
-        s.energy,
-        s.selectedMode,
-      );
+      const block = getScavengeBlock(s.timeOfDay, s.energy, s.selectedMode);
       if (block) return { ok: false, block };
 
       const result = runScavenge(
@@ -435,9 +441,7 @@ export const useGameStore = create<GameState>()((set, get) => {
       const weatherLine =
         water > 0
           ? `Soft rain overnight — +${water} ${RESOURCE_MAP.water.emoji} collected.`
-          : weather === 'storm'
-            ? 'A dust squall is passing — a cozy morning to craft or rest indoors.'
-            : `Energy restored. ${info.label} skies today.`;
+          : `Energy restored. ${info.morning}`;
       commitStats(
         { ...s.stats, maxDaysSurvived: Math.max(s.stats.maxDaysSurvived, daysSurvivedOn(day)) },
         [
@@ -509,8 +513,8 @@ export const useGameStore = create<GameState>()((set, get) => {
       const outcome = applySleep(s.day, s.strength, comfort, s.stamina);
       const weather = rollWeather(s.selectedMode);
       const water = morningWaterBonus(weather, s.unlockedUpgrades);
-      /* The rooftop gently renews overnight (persisted before the scene reloads it) */
-      const regrowth = s.chosenSite === 'terrace' ? regrowStoredTerrace(outcome.day) : null;
+      /* Each weather shapes the rooftop overnight — rain greens it, wind blows in cartons (persisted before the scene reloads it) */
+      const regrowth = s.chosenSite === 'terrace' ? regrowStoredTerrace(weather) : null;
       set({
         day: outcome.day,
         dayPhase: outcome.dayPhase,
@@ -523,19 +527,26 @@ export const useGameStore = create<GameState>()((set, get) => {
         resources: water > 0 ? addResources(s.resources, { water }) : s.resources,
       });
       const info = WEATHER_INFO[weather];
-      const weatherLine =
+      const rooftopLine = regrowth
+        ? morningRooftopNote(
+            weather,
+            regrowth.regrownWeeds.length,
+            regrowth.refreshedBoxes.length,
+            regrowth.state.barrelTier >= 1,
+          )
+        : '';
+      const tail =
         water > 0
-          ? `Soft rain overnight — +${water} ${RESOURCE_MAP.water.emoji} collected.`
-          : `${info.label} skies greet the rooftop. Stamina ${outcome.stamina}/100.`;
-      const regrowLine = regrowth ? regrowthNote(regrowth.regrownWeeds.length, regrowth.refreshedBoxes.length) : '';
+          ? `Your cups caught +${water} ${RESOURCE_MAP.water.emoji}, too.`
+          : `Stamina ${outcome.stamina}/100.`;
       commitStats(
         { ...s.stats, maxDaysSurvived: Math.max(s.stats.maxDaysSurvived, daysSurvivedOn(outcome.day)) },
         [
           {
             id: ++noticeSeq,
-            icon: '☀️',
+            icon: info.emoji,
             title: `Day ${outcome.day} · Morning`,
-            body: regrowLine ? `${regrowLine} ${weatherLine}` : weatherLine,
+            body: `${rooftopLine || info.morning} ${tail}`,
             tone: 'morning',
           },
         ],

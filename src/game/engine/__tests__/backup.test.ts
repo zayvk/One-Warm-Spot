@@ -24,7 +24,7 @@ describe('backup files', () => {
       ...freshTerraceState(99),
       fireLit: true,
       firepitTier: 2,
-      searchedBoxes: ['boxes-2'],
+      searchedBoxes: ['crate-2'],
       clearedWeeds: ['weeds-1', 'weeds-5'],
       grillTier: 3,
       sewingTier: 1,
@@ -63,6 +63,29 @@ describe('backup files', () => {
     if (!result.ok) return;
     expect(result.terrace).toBeNull();
     expect(result.warnings.join(' ')).toMatch(/starts fresh/);
+  });
+
+  it("loads backups from before Rain & Wind, turning 'breezy' / 'storm' days into wind", () => {
+    for (const legacy of ['breezy', 'storm']) {
+      const result = parseBackupText(JSON.stringify({ ...save, weather: legacy, terraceState: freshTerraceState() }));
+      expect(result.ok, legacy).toBe(true);
+      if (!result.ok) return;
+      expect(result.save.weather).toBe('wind');
+    }
+  });
+
+  it('loads backups from before wooden crates & cardboard cartons split', () => {
+    const old = {
+      ...save,
+      terraceState: { fireLit: false, searchedBoxes: ['boxes-1', 'boxes-2'], clearedWeeds: [], spawns: null },
+    };
+    const result = parseBackupText(JSON.stringify(old));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    /* The searched parcel was carried off; the searched broken crates stay, opened */
+    expect(result.terrace?.searchedBoxes).toEqual(['crate-1']);
+    expect(result.terrace?.spawns?.['cardboard-1']).toBeUndefined();
+    expect(result.terrace?.spawns?.['crate-1']).toBeDefined();
   });
 
   it.each([

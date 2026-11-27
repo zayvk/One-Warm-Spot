@@ -123,6 +123,7 @@ export function unlock(): void {
   unlocked = true;
   applyAmbience();
   applyCampfire();
+  applyWeatherSound();
 }
 
 export function isUnlocked(): boolean {
@@ -147,6 +148,7 @@ export function toggleMute(): void {
   if (masterGain && ctx) rampGain(masterGain.gain, muted ? 0 : 1, 0.2);
   applyAmbience();
   applyCampfire();
+  applyWeatherSound();
 }
 
 export function getMusicVolume(): number {
@@ -178,6 +180,7 @@ export function setSfxVolume(v: number): void {
   if (sfxChannelGain && ctx) rampGain(sfxChannelGain.gain, sfxVolume, 0.05);
   applyAmbience();
   applyCampfire();
+  applyWeatherSound();
 }
 
 /** Convenience helper if a caller adjusts both channels uniformly */
@@ -999,11 +1002,11 @@ function buildSoundscape(inst: AmbienceInstance, c: AudioContext, siteId: SiteId
 
 /* ── Lifecycle ── */
 
-function stopAmbienceInstance(inst: AmbienceInstance): void {
+function stopAmbienceInstance(inst: AmbienceInstance, fade = AMBIENCE_FADE): void {
   inst.alive = false;
   for (const id of inst.timers) clearTimeout(id);
   inst.timers.clear();
-  if (ctx) rampGain(inst.bus.gain, 0, AMBIENCE_FADE);
+  if (ctx) rampGain(inst.bus.gain, 0, fade);
   setTimeout(() => {
     for (const n of inst.nodes) {
       try {
@@ -1018,7 +1021,7 @@ function stopAmbienceInstance(inst: AmbienceInstance): void {
     } catch {
       /* already disconnected */
     }
-  }, AMBIENCE_FADE * 1000 + 150);
+  }, fade * 1000 + 150);
 }
 
 function createAmbience(req: AmbienceRequest, key: string): AmbienceInstance | null {
@@ -1229,6 +1232,114 @@ export function setCampfireAudio(active: boolean, level = 1): void {
   campfireLevel = clamp01(level);
   if (currentCampfire && ctx && active) rampGain(currentCampfire.bus.gain, campfireLevel, 0.6);
   applyCampfire();
+}
+
+/* ═══════════════════════════════════════════
+   Rooftop Weather Ambience (procedural, 0 KB)
+   ─ A separate layer over the shelter soundscape on the SFX channel,
+     crossfading over 500ms whenever the weather changes.
+   ═══════════════════════════════════════════ */
+
+export type WeatherSound = 'clear' | 'rain' | 'wind';
+
+const WEATHER_FADE = 0.5;
+
+let desiredWeatherSound: WeatherSound | null = null;
+let currentWeatherSound: AmbienceInstance | null = null;
+
+/** A tiny soft tap of a raindrop on concrete, a plank or a leaf */
+function rainTap(c: AudioContext, dest: AudioNode, t: number): void {
+  const src = c.createBufferSource();
+  src.buffer = getNoise('pink');
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = rand(1800, 4200);
+  bp.Q.value = rand(3, 7);
+  const g = c.createGain();
+  const dur = rand(0.02, 0.05);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(rand(0.012, 0.034), t + 0.003);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp).connect(g).connect(dest);
+  src.start(t, rand(0, 3));
+  src.stop(t + dur + 0.02);
+}
+
+/** Leaves rustling as a gust passes */
+function rustle(c: AudioContext, dest: AudioNode, t: number): void {
+  const src = c.createBufferSource();
+  src.buffer = getNoise('pink');
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = rand(2400, 4200);
+  bp.Q.value = 1.2;
+  const g = c.createGain();
+  const dur = rand(0.35, 0.7);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(rand(0.008, 0.018), t + dur * 0.4);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp).connect(g).connect(dest);
+  src.start(t, rand(0, 3));
+  src.stop(t + dur + 0.05);
+}
+
+function buildWeatherSound(inst: AmbienceInstance, c: AudioContext, weather: 'rain' | 'wind'): void {
+  if (weather === 'rain') {
+    /* Soft patter (band-passed pink noise, never a bright hiss) over a warm roof-rumble body */
+    addBed(inst, c, { color: 'pink', filter: 'bandpass', freq: 1700, q: 0.55, vol: 0.05, swellRate: 0.06, swellDepth: 0.01 });
+    addBed(inst, c, { color: 'brown', filter: 'lowpass', freq: 520, vol: 0.06, swellRate: 0.04, swellDepth: 0.012 });
+    every(inst, 45, 190, (t) => rainTap(c, inst.bus, t));
+    /* An occasional fat drop from the parapet */
+    every(inst, 1400, 3800, (t) => drip(c, inst.bus, t, rand(900, 1500), rand(0.012, 0.022)));
+    return;
+  }
+  /* Airy gusts: a low-mid breeze swelling and fading on a slow organic cycle (~9s), with a soft rumble */
+  const breeze = addBed(inst, c, {
+    color: 'pink',
+    filter: 'bandpass',
+    freq: 430,
+    q: 0.8,
+    vol: 0.06,
+    swellRate: 0.11,
+    swellDepth: 0.045,
+    sweepRate: 0.07,
+    sweepDepth: 160,
+  });
+  addLfo(inst, c, 0.031, 0.015, [breeze.gain.gain]);
+  addBed(inst, c, { color: 'brown', filter: 'lowpass', freq: 260, vol: 0.045, swellRate: 0.05, swellDepth: 0.02 });
+  every(inst, 2200, 5200, (t) => rustle(c, inst.bus, t));
+}
+
+function applyWeatherSound(): void {
+  const want = desiredWeatherSound;
+  const audible = want === 'rain' || want === 'wind';
+  if (!audible || muted || !unlocked || sfxVolume <= 0) {
+    if (currentWeatherSound) {
+      stopAmbienceInstance(currentWeatherSound, WEATHER_FADE);
+      currentWeatherSound = null;
+    }
+    return;
+  }
+  if (currentWeatherSound?.key === want) return;
+  if (currentWeatherSound) stopAmbienceInstance(currentWeatherSound, WEATHER_FADE);
+
+  const c = getCtx();
+  const bus = c.createGain();
+  bus.gain.value = 0;
+  bus.connect(getSfxTarget());
+  const inst: AmbienceInstance = { key: want, bus, nodes: [], timers: new Set(), alive: true };
+  buildWeatherSound(inst, c, want);
+  rampGain(bus.gain, 1, WEATHER_FADE);
+  currentWeatherSound = inst;
+}
+
+/**
+ * Crossfade the rooftop weather layer: soft rain patter, airy wind gusts, or silence
+ * (`'clear'` / `null` — also used when leaving the rooftop for the indoor floors).
+ */
+export function setWeatherAmbience(weather: WeatherSound | null): void {
+  desiredWeatherSound = weather;
+  applyWeatherSound();
 }
 
 /** Hollow woody knocks as split logs are stacked in the fire pit */

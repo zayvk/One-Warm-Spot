@@ -77,6 +77,14 @@ describe('daily station yields', () => {
   ])('Rain barrel T%i collects %j', (tier, gains) => {
     expect(barrelCollect(tier)).toEqual(gains);
   });
+
+  it('a rainy day adds +1 water to a built barrel (and nothing to an unbuilt one)', () => {
+    expect(barrelCollect(1, 'rain')).toEqual({ water: 2 });
+    expect(barrelCollect(3, 'rain')).toEqual({ water: 4 });
+    expect(barrelCollect(2, 'wind')).toEqual({ water: 2 });
+    expect(barrelCollect(2, 'clear')).toEqual({ water: 2 });
+    expect(barrelCollect(0, 'rain')).toEqual({});
+  });
 });
 
 describe('shelter sleep comfort', () => {

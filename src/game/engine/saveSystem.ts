@@ -7,11 +7,11 @@ import type {
   SiteId,
   TimeOfDay,
   TravelerGender,
-  Weather,
 } from '../types/game.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
 import { LEGACY_TARP_UPGRADE_ID, UPGRADES } from '../data/upgrades.ts';
 import { RELIC_MAP } from '../data/relics.ts';
+import { normalizeWeather, SAVED_WEATHER_VALUES } from './weather.ts';
 import {
   clampPhaseElapsed,
   clampVitality,
@@ -55,7 +55,8 @@ const VALID_MODES: ReadonlySet<string> = new Set<GameMode>(['cozy', 'challenge']
 const VALID_GENDERS: ReadonlySet<string> = new Set<TravelerGender>(['female', 'male']);
 const VALID_TIMES: ReadonlySet<string> = new Set<TimeOfDay>(['morning', 'afternoon', 'dusk', 'night']);
 const VALID_DAY_PHASES: ReadonlySet<string> = new Set<DayPhase>(['day', 'dusk', 'night']);
-const VALID_WEATHER: ReadonlySet<string> = new Set<Weather>(['clear', 'breezy', 'rain', 'storm']);
+/* Legacy 'breezy' / 'storm' stay loadable (migrated to 'wind') */
+const VALID_WEATHER: ReadonlySet<string> = SAVED_WEATHER_VALUES;
 const STAT_KEYS: readonly (keyof PlayerStats)[] = [
   'maxDaysSurvived',
   'totalUpgradesBuilt',
@@ -176,7 +177,8 @@ function plural(n: number, word: string): string {
 /**
  * Normalize a structurally valid (possibly older) save into the current v4
  * shape. v2 → v3: legacy `'tarp-pitched'` flag becomes `shell-1`, day-loop
- * defaults are filled. v3 → v4: `weather: 'clear'`, `discoveredRelics: []`.
+ * defaults are filled. v3 → v4: `weather: 'clear'`, `discoveredRelics: []`. Legacy weather
+ * (`'breezy'` / `'storm'`) becomes `'wind'`.
  * Unknown/orphaned upgrades and relics are dropped and materials are capped
  * at their storage limit; each clean-up is reported in `warnings`.
  */
@@ -220,7 +222,7 @@ export function migrateSave(save: SaveState, warnings: string[] = []): SaveState
     energy: Math.round(Math.min(100, Math.max(0, save.energy ?? 100))),
     stamina: clampVitality(save.stamina ?? 100),
     strength: clampVitality(save.strength ?? 100),
-    weather: save.weather ?? 'clear',
+    weather: normalizeWeather(save.weather),
     chosenSite: save.chosenSite,
     selectedMode: save.selectedMode ?? 'cozy',
     travelerGender: save.travelerGender ?? 'female',

@@ -12,7 +12,7 @@ import {
   Texture,
   type Ticker,
 } from 'pixi.js';
-import type { DayPhase, ResourceId, SiteId, TimeOfDay, TravelerGender } from '../types/game.ts';
+import type { DayPhase, ResourceId, SiteId, TimeOfDay, TravelerGender, Weather } from '../types/game.ts';
 import type {
   AssignableStationId,
   BuildSlotConfig,
@@ -27,7 +27,7 @@ import { BG_SHELTERS, travelerSpriteSrc, travelerWalkFrames, SCENE_STAGES, TRAVE
 import type { TravelerPose } from '../data/media.ts';
 import { RESOURCE_MAP } from '../data/resources.ts';
 import { getSceneConfig } from '../data/scenes/index.ts';
-import { withTerraceSpawns } from '../data/scenes/terrace.ts';
+import { DEFAULT_TERRACE_SPAWNS, withTerraceSpawns } from '../data/scenes/terrace.ts';
 import { MENDING_PERKS, RECIPES, type Recipe } from '../data/recipes.ts';
 import {
   loadTerraceState,
@@ -49,6 +49,8 @@ import type { SleepComfort } from '../engine/dayCycle.ts';
 import type { RegrowOutcome } from '../engine/terraceSpawns.ts';
 import { placeStationInSlot, type SlotAssignments } from '../engine/buildSlots.ts';
 import { fitStage, stageLeavesGaps } from '../engine/stageFit.ts';
+import { mergeMaterials, windBoxBonus } from '../engine/weather.ts';
+import { WeatherLayer, type WeatherFrame } from './weatherLayer.ts';
 
 /** Hotspot type a slot takes on once a station is placed in it */
 const STATION_HOTSPOT_TYPE: Partial<Record<StationId, HotspotConfig['type']>> = {
@@ -91,6 +93,8 @@ export interface ShelterSceneState {
   cozyIndex: number;
   reduceMotion: boolean;
   gender: TravelerGender;
+  /** Today's weather: live rain / wind visuals and the rooftop's weather perks */
+  weather: Weather;
 }
 
 /** Where found materials came from (gathering costs Stamina; daily station yields don't) */
@@ -169,6 +173,12 @@ function hex(c: number): RGB {
 }
 
 const LIGHTING_TWEEN_MS = 1400;
+
+/* Rain: a cool, misty overcast blended into whatever the day phase is doing */
+const OVERCAST_MUL: RGB = [180, 194, 207];
+const OVERCAST_TINT_MIX = 0.45;
+/** Weeds sway gently in the wind (rad), a touch more in each gust */
+const WEED_SWAY = 0.045;
 
 const PHASE_LIGHTING: Record<DayPhase, Lighting> = {
   day: {
@@ -479,6 +489,18 @@ export class ShelterScene {
   private fireFlames: Graphics | null = null;
   private fireGlow: Sprite | null = null;
   private particles: SceneParticle[] = [];
+  /* Live rain / wind (above the props & traveler, below the labels) */
+  private readonly weatherLayer: WeatherLayer;
+  /** Reused every frame (no per-frame allocation) */
+  private readonly weatherFrame: WeatherFrame = {
+    dtMs: 0,
+    elapsedSec: 0,
+    width: 1,
+    height: 1,
+    stage: { x: 0, y: 0, width: 1, height: 1 },
+    nightFactor: 0,
+    floor: { xMin: 0, xMax: 1, yMin: 0, yMax: 1 },
+  };
 
   /* Interaction & Sleep State */
   private interactionLock = false;
@@ -562,6 +584,8 @@ export class ShelterScene {
     this.fireflyLayer.eventMode = 'none';
     this.fxLayer.eventMode = 'none';
     this.labelLayer.eventMode = 'none';
+    this.weatherLayer = new WeatherLayer(this.radial);
+    this.weatherLayer.setWeather(this.sceneWeather(initial), initial.reduceMotion);
 
     /* Stage layer order */
     app.stage.addChild(
@@ -573,6 +597,7 @@ export class ShelterScene {
       this.worldLayer,
       this.warmth,
       this.fxLayer,
+      this.weatherLayer.container,
       this.fireflyLayer,
       this.labelLayer,
     );
@@ -608,9 +633,10 @@ export class ShelterScene {
       this.preloadTravelerPoses(next.gender);
       this.loadTraveler(next.gender, this.currentPose);
     }
-    if (next.dayPhase !== prev.dayPhase || next.siteId !== prev.siteId) {
+    if (next.dayPhase !== prev.dayPhase || next.siteId !== prev.siteId || next.weather !== prev.weather) {
       this.refreshStationLabels();
     }
+    this.weatherLayer.setWeather(this.sceneWeather(next), next.reduceMotion);
     const desired = this.sleepMode ? PHASE_LIGHTING.night : PHASE_LIGHTING[next.dayPhase];
     if (desired !== this.target || next.reduceMotion !== prev.reduceMotion) {
       this.startLightingTween(desired);
@@ -629,6 +655,11 @@ export class ShelterScene {
     this.lightFrom = cloneLighting(this.current);
     this.target = nextTarget;
     this.lightTweenMS = this.state.reduceMotion ? LIGHTING_TWEEN_MS : 0;
+  }
+
+  /** Live weather plays on the open-air Terrace only */
+  private sceneWeather(state: ShelterSceneState): Weather {
+    return state.siteId === 'terrace' ? state.weather : 'clear';
   }
 
   setRewardCallback(cb: RewardCallback): void {
@@ -858,6 +889,7 @@ export class ShelterScene {
     this.floorHit.off('pointerdown', this.handleFloorPointerDown, this);
     this.hotspots = [];
     this.particles = [];
+    this.weatherLayer.destroy();
     this.app.destroy({ removeView: true }, { children: true, texture: false, textureSource: false });
     this.radial.destroy(true);
   }
@@ -1160,15 +1192,17 @@ export class ShelterScene {
 
     for (const id of ids) {
       const cfg = this.sceneConfig?.hotspots.find((h) => h.id === id);
+      if (!cfg) continue;
       const index = this.hotspots.findIndex((h) => h.config.id === id);
-      if (!cfg || index < 0) continue;
-      this.destroyHotspotNode(this.hotspots[index]);
+      /* Weeds reuse their node; a wind-blown carton may land in an id with no node yet */
+      if (index >= 0) this.destroyHotspotNode(this.hotspots[index]);
       let node: HotspotNode | null = null;
       node = this.createHotspotNode(cfg, () => {
         if (node && !node.root.destroyed) this.popIn(node.root);
       });
       node.root.alpha = 0;
-      this.hotspots[index] = node;
+      if (index >= 0) this.hotspots[index] = node;
+      else this.hotspots.push(node);
     }
     this.layout();
   }
@@ -1231,10 +1265,11 @@ export class ShelterScene {
         return this.terrace.planterReady
           ? `Harvest ${cfg.name} · ${formatMaterials(planterHarvest(tier), '+')}`
           : 'Growing — ready tomorrow';
-      case 'barrel':
-        return this.terrace.barrelReady
-          ? `Collect rainwater · ${formatMaterials(barrelCollect(tier), '+')}`
-          : 'Filling — ready tomorrow';
+      case 'barrel': {
+        if (!this.terrace.barrelReady) return 'Filling — ready tomorrow';
+        const water = formatMaterials(barrelCollect(tier, this.state.weather), '+');
+        return this.state.weather === 'rain' ? `Rain-filled — Collect · ${water}` : `Collect rainwater · ${water}`;
+      }
       case 'grill':
         return `Cook at the ${cfg.name}`;
       case 'sewing':
@@ -1293,6 +1328,14 @@ export class ShelterScene {
   }
 
   private onHotspotHover(node: HotspotNode, enter: boolean): void {
+    /* Opened crates are informational: their label, no warm tint or lift */
+    if (this.isEmptiedCrate(node)) {
+      node.hovered = enter;
+      node.label.visible = enter;
+      node.labelPill.visible = enter;
+      if (enter) this.layoutHotspotLabel(node);
+      return;
+    }
     if (!this.isHotspotInteractive(node)) {
       node.hovered = false;
       node.label.visible = false;
@@ -1432,6 +1475,11 @@ export class ShelterScene {
 
   private onHotspotClick(node: HotspotNode): void {
     if (this.interactionLock || !this.entryDone) return;
+    /* An opened wooden crate just reminds you what it's waiting for */
+    if (this.isEmptiedCrate(node)) {
+      this.showFloatingText(node.config.position, 'Needs an axe — coming soon');
+      return;
+    }
     if (!this.isHotspotInteractive(node)) return;
 
     /* Empty build slot: choose which station goes here */
@@ -1534,7 +1582,7 @@ export class ShelterScene {
     this.setPose('search');
     playWaterChime();
     this.after(800, () => {
-      const gains = barrelCollect(this.terrace.barrelTier);
+      const gains = barrelCollect(this.terrace.barrelTier, this.state.weather);
       this.terrace.barrelReady = false;
       saveTerraceState(this.terrace);
       this.onReward?.(gains, 'harvest');
@@ -1670,22 +1718,71 @@ export class ShelterScene {
     playRummage();
 
     this.after(1000, () => {
-      this.disableHotspotInteraction(node);
-      if (!this.terrace.searchedBoxes.includes(node.config.id)) {
-        this.terrace.searchedBoxes.push(node.config.id);
+      const id = node.config.id;
+      if (node.config.clearsWhenSearched) {
+        /* A light carton is emptied and carried off by the breeze: gone, its floor free for the next one */
+        this.disableHotspotInteraction(node);
+        this.fadeOutProp(node);
+        const spawns = this.terrace.spawns ?? structuredClone(DEFAULT_TERRACE_SPAWNS);
+        delete spawns[id];
+        this.terrace.spawns = spawns;
+        this.terrace.searchedBoxes = this.terrace.searchedBoxes.filter((b) => b !== id);
+      } else {
+        /* A heavy wooden crate stays on the roof, opened and empty */
+        this.markCrateEmptied(node);
+        this.showSearchedBox(node);
+        if (!this.terrace.searchedBoxes.includes(id)) this.terrace.searchedBoxes.push(id);
       }
       saveTerraceState(this.terrace);
-      this.showSearchedBox(node);
 
-      if (node.config.reward && this.onReward) {
-        this.onReward(node.config.reward, 'searchable');
-      }
-      if (node.config.reward) {
-        this.showFloatingText(node.config.position, formatMaterials(node.config.reward, '+'));
+      const reward = node.config.reward;
+      if (reward) {
+        /* Windy days blow a little extra into every box */
+        const bonus = windBoxBonus(reward, this.state.weather);
+        this.onReward?.(mergeMaterials(reward, bonus), 'searchable');
+        const bonusText = formatMaterials(bonus, '+');
+        const base = formatMaterials(reward, '+');
+        this.showFloatingText(node.config.position, bonusText ? `${base}  🍃 ${bonusText}` : base);
       }
       this.setPose('idle');
       this.interactionLock = false;
     });
+  }
+
+  /** An opened wooden crate: still solid scenery, hover shows what it's waiting for */
+  private markCrateEmptied(node: HotspotNode): void {
+    node.interacted = true;
+    node.hovered = false;
+    node.label.visible = false;
+    node.labelPill.visible = false;
+    node.root.cursor = 'default';
+    if (node.config.searchedLabel) node.label.text = node.config.searchedLabel;
+    if (node.propSprite) {
+      node.propSprite.tint = 0xffffff;
+      this.applyHotspotSpriteScale(node);
+    }
+  }
+
+  private isEmptiedCrate(node: HotspotNode): boolean {
+    return node.config.type === 'searchable' && node.interacted && !node.config.clearsWhenSearched;
+  }
+
+  /** Fade a prop's art away (instant under Reduce Motion) */
+  private fadeOutProp(node: HotspotNode): void {
+    const sprite = node.propSprite;
+    if (!sprite) return;
+    if (this.state.reduceMotion) {
+      sprite.alpha = 0;
+      return;
+    }
+    const start = performance.now();
+    const fade = () => {
+      if (this.disposed || sprite.destroyed) return;
+      const p = Math.min(1, (performance.now() - start) / 400);
+      sprite.alpha = 1 - p;
+      if (p < 1) requestAnimationFrame(fade);
+    };
+    requestAnimationFrame(fade);
   }
 
   private showSearchedBox(node: HotspotNode): void {
@@ -1710,22 +1807,7 @@ export class ShelterScene {
         this.terrace.clearedWeeds.push(node.config.id);
       }
       saveTerraceState(this.terrace);
-
-      if (node.propSprite) {
-        const sprite = node.propSprite;
-        if (this.state.reduceMotion) {
-          sprite.alpha = 0;
-        } else {
-          const start = performance.now();
-          const fade = () => {
-            if (this.disposed || sprite.destroyed) return;
-            const p = Math.min(1, (performance.now() - start) / 400);
-            sprite.alpha = 1 - p;
-            if (p < 1) requestAnimationFrame(fade);
-          };
-          requestAnimationFrame(fade);
-        }
-      }
+      this.fadeOutProp(node);
 
       if (node.config.reward && this.onReward) {
         this.onReward(node.config.reward, 'weeds');
@@ -2048,8 +2130,8 @@ export class ShelterScene {
 
   private isColliderActive(hs: HotspotNode): boolean {
     if (!hs.config.collider) return false;
-    /* Cleared weed patches free up their floor space */
-    if (hs.config.type === 'weeds' && hs.interacted) return false;
+    /* Cleared weed patches and carried-off cartons free up their floor space */
+    if ((hs.config.type === 'weeds' || hs.config.clearsWhenSearched) && hs.interacted) return false;
     return true;
   }
 
@@ -2307,7 +2389,7 @@ export class ShelterScene {
     for (const boxId of ts.searchedBoxes) {
       const box = this.hotspots.find((h) => h.config.id === boxId);
       if (box) {
-        this.disableHotspotInteraction(box);
+        this.markCrateEmptied(box);
         this.showSearchedBox(box);
       }
     }
@@ -2581,6 +2663,7 @@ export class ShelterScene {
       this.spawnFireEmbers();
     }
     this.updateParticles(dt);
+    this.updateWeather(dt);
 
     if (this.fireGlow && this.fireLit) {
       const prof = this.fireProfile();
@@ -2740,16 +2823,49 @@ export class ShelterScene {
     }
   }
 
+  private updateWeather(dt: number): void {
+    const walk = this.sceneConfig?.walkableArea ?? FALLBACK_WALK_AREA;
+    const f = this.weatherFrame;
+    f.dtMs = dt;
+    f.elapsedSec = this.elapsed;
+    f.width = this.width;
+    f.height = this.height;
+    f.stage = this.stage;
+    f.nightFactor = this.current.nightFactor;
+    f.floor.xMin = walk.xMin + 0.04;
+    f.floor.xMax = walk.xMax - 0.06;
+    f.floor.yMin = walk.yMin + 0.03;
+    f.floor.yMax = walk.yMax;
+    this.weatherLayer.update(f);
+
+    /* Uncut weeds lean with the wind (rooted at their base), a little more in each gust */
+    const gust = this.weatherLayer.gust;
+    const swaying = this.sceneWeather(this.state) === 'wind' && !this.state.reduceMotion;
+    for (const hs of this.hotspots) {
+      if (hs.config.type !== 'weeds' || !hs.propSprite) continue;
+      hs.propSprite.rotation =
+        swaying && !hs.interacted
+          ? WEED_SWAY * (0.3 + gust) * Math.sin(this.elapsed * (1.8 + gust * 1.6) + hs.config.position.x * 9)
+          : 0;
+    }
+  }
+
   private applyLighting(): void {
     const c = this.current;
     const { width: W, height: H } = this;
 
-    this.mulWash.tint = toHex(c.mul);
-    this.mulWash.alpha = c.mulAlpha;
+    /* Rain: cool misty overcast over the phase lighting (softer at night so it stays dark & cozy) */
+    const overcast = this.weatherLayer.overcast;
+    const mix = overcast * OVERCAST_TINT_MIX * (1 - 0.6 * c.nightFactor);
+    this.mulWash.tint =
+      (Math.round(lerp(c.mul[0], OVERCAST_MUL[0], mix)) << 16) |
+      (Math.round(lerp(c.mul[1], OVERCAST_MUL[1], mix)) << 8) |
+      Math.round(lerp(c.mul[2], OVERCAST_MUL[2], mix));
+    this.mulWash.alpha = Math.min(0.85, c.mulAlpha + 0.1 * overcast * (1 - 0.5 * c.nightFactor));
     this.scrWash.tint = toHex(c.scr);
-    this.scrWash.alpha = c.scrAlpha;
+    this.scrWash.alpha = c.scrAlpha * (1 - 0.5 * overcast);
     this.sunGlow.tint = toHex(c.sun);
-    this.sunGlow.alpha = c.sunAlpha;
+    this.sunGlow.alpha = c.sunAlpha * (1 - 0.6 * overcast);
     this.sunGlow.position.set(W * c.sunX, H * c.sunY);
     this.warmth.alpha = this.warmthCurrent;
   }

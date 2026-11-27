@@ -17,8 +17,11 @@ export type TimeOfDay = 'morning' | 'afternoon' | 'dusk' | 'night';
 /** 3-phase real-time day cycle used in the interactive shelter */
 export type DayPhase = 'day' | 'dusk' | 'night';
 
-/** Gentle daily weather, rolled each new morning */
-export type Weather = 'clear' | 'breezy' | 'rain' | 'storm';
+/**
+ * Gentle daily weather, rolled each new morning (Day 1 is always clear).
+ * Older saves may still hold `'breezy'` / `'storm'`; they load as `'wind'`.
+ */
+export type Weather = 'clear' | 'rain' | 'wind';
 
 /** Persistent milestone stats that drive shelter unlocks (kept across new shelters) */
 export interface PlayerStats {

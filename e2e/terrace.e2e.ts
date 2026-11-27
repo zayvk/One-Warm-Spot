@@ -59,29 +59,41 @@ test.describe('Old Apartment Terrace — rooftop loop', () => {
     expect(save?.chosenSite).toBe('terrace');
     expect(save?.day).toBe(1);
     const t = await terrace(page);
-    expect(Object.keys(t.spawns ?? {})).toHaveLength(9);
+    /* 2 wooden crates + 1–2 cartons + 6 weeds */
+    const props = Object.keys(t.spawns ?? {}).length;
+    expect(props).toBeGreaterThanOrEqual(9);
+    expect(props).toBeLessThanOrEqual(10);
   });
 
-  test('search a box and clear a weed patch', async ({ page }) => {
+  test('search a wooden crate (stays, opened), a cardboard carton (carried off) and clear a weed patch', async ({ page }) => {
     await startFreshTerrace(page);
     const t = await terrace(page);
     const before = (await readSave(page))!.resources;
 
-    const box = t.spawns['boxes-1'];
-    await clickProp(page, box, spawnScale(box));
-    await expect.poll(async () => (await terrace(page)).searchedBoxes, { timeout: 15_000 }).toContain('boxes-1');
+    const crate = t.spawns['crate-1'];
+    await clickProp(page, crate, spawnScale(crate));
+    await expect.poll(async () => (await terrace(page)).searchedBoxes, { timeout: 15_000 }).toContain('crate-1');
     const afterBox = (await readSave(page))!.resources;
     const gained = Object.keys(afterBox).some((k) => afterBox[k] > before[k]);
-    expect(gained, 'searching a box yields materials').toBe(true);
+    expect(gained, 'searching a crate yields materials').toBe(true);
+    expect((await terrace(page)).spawns['crate-1']).toEqual(crate);
+
+    /* Every fresh run starts with at least one carton */
+    const cartonId = ['cardboard-1', 'cardboard-2', 'cardboard-3'].find((id) => t.spawns[id])!;
+    const carton = t.spawns[cartonId];
+    await clickProp(page, carton, spawnScale(carton));
+    await expect.poll(async () => (await terrace(page)).spawns[cartonId], { timeout: 15_000 }).toBeUndefined();
 
     const weed = t.spawns['weeds-1'];
     await clickProp(page, weed, spawnScale(weed));
     await expect.poll(async () => (await terrace(page)).clearedWeeds, { timeout: 15_000 }).toContain('weeds-1');
 
-    /* A searched box can't be searched twice */
-    await clickProp(page, box, spawnScale(box));
+    /* An opened crate can't be searched twice — it just waits for an axe */
+    const resources = (await readSave(page))!.resources;
+    await clickProp(page, crate, spawnScale(crate));
     await page.waitForTimeout(1500);
-    expect((await terrace(page)).searchedBoxes.filter((id) => id === 'boxes-1')).toHaveLength(1);
+    expect((await terrace(page)).searchedBoxes.filter((id) => id === 'crate-1')).toHaveLength(1);
+    expect((await readSave(page))!.resources).toEqual(resources);
   });
 
   test('light the fire pit (−1 timber), then extinguish it', async ({ page }) => {

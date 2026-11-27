@@ -18,7 +18,7 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
 - **Paused on purpose:** The earlier M1 drawer-based loop—Rest / Sleep-to-next-day buttons, the Valley Scavenge drawer, the Upgrade drawer and the Survival Kit drawer—is **intentionally paused** (code kept, not mounted). Its replacements now live *inside* the scene, built up step by step:
   - **Day rhythm:** a real-time Day → Dusk → Night cycle, with rest and sleep at the shelter.
   - **Visual upgrades:** six multi-tier stations built in the scene.
-  - **Gathering:** rooftop boxes and weeds that regrow overnight, plus four apartment floors downstairs (reached by the old elevator) whose doors, cupboards and lockers will grow into the next gathering area.
+  - **Gathering:** rooftop wooden crates, wind-blown cardboard cartons and weeds that regrow with the weather, plus four apartment floors downstairs (reached by the old elevator) whose doors, cupboards and lockers will grow into the next gathering area.
 
   See [Paused M1 Systems](#paused-m1-systems-implemented-dormant).
 
@@ -79,7 +79,7 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
    2. **Riding Up** — inside the old lift (green-painted walls, wood wainscot, brass rails) with the doors closed; a warm amber brass indicator ticks **1 → 2 → 3 → 4 → R** with tiny relay clicks over a low mechanical hum and a gentle 1–2px tremor.
    3. **Doors Open to Sunlight** — a vintage brass *"ding!"*, the doors slide apart onto the sunlit rooftop, the Terrace ambience swells, an *"Old Apartment Terrace"* caption appears, and the view steps through the doorway into the live shelter, where the traveler walks out of the rooftop stairwell door.
    Every cutscene is skippable at any moment (Skip button, click, `Space` / `Enter` / `Escape`) and respects Reduce Motion (no push-ins, tremor or sliding — calm fades instead).
-4. **Interactive Shelter** — The point-and-click painted scene (see below), with a minimal floating HUD: a **← Title** button with the lantern emblem and shelter name (top-left), the centered **Found Materials Pouch** (all 7 resources, each with an instant parchment hover/focus tooltip pill naming the resource), and a bottom-left **Vitality Medallion** (`Day N` plaque, bronze sky medallion, Stamina & Strength bars). Crafting and upgrading happen directly in-world via floor blueprints and contextual prop menus above each station. If the stage art needs a moment to load, a softly pulsing lantern emblem waits in its place. Progress auto-saves.
+4. **Interactive Shelter** — The point-and-click painted scene (see below), with a minimal floating HUD: a **← Title** button with the lantern emblem, shelter name (on wide screens) and today's **weather chip** (top-left), the centered **Found Materials Pouch** (all 7 resources, each with an instant parchment hover/focus tooltip pill naming the resource), and a bottom-left **Vitality Medallion** (`Day N` plaque, bronze sky medallion, Stamina & Strength bars). Crafting and upgrading happen directly in-world via floor blueprints and contextual prop menus above each station. If the stage art needs a moment to load, a softly pulsing lantern emblem waits in its place. Progress auto-saves.
 5. **The Old Elevator & Four Apartment Floors (Terrace)** — Clicking the rooftop's ajar stairwell/lift door walks the traveler over and opens the **Elevator Floor Panel**: a small antique-brass plate with round, softly glowing buttons stacked top to bottom:
 
    | Button | Stop |
@@ -131,11 +131,30 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
     - During **Day** or **Dusk**, hovering reads **"Rest by shelter"** — resting (**☕ Rest** in its menu) sits beside the shelter, restores **+25 Stamina**, and smoothly shifts the sky to the next phase over 1.4s.
     - During **Night**, hovering reads **"Sleep until morning"** — sleeping (**🌙 Sleep**) tucks into the bedroll under the shelter in starry twilight, then transitions into **Day N+1 · Morning** with a morning toast. A better shelter means a better night: you wake with at least **75% (T1) → 90% (T2) → 100% (T3) Stamina** (+10% with *Warm Patchwork Sheets*, capped at 100). Strength eases `-10` overnight, or just `-5` in the Insulated Hut. Each new morning the farm is ready to harvest and the rain barrel has refilled.
     - The Timber Shelter's hanging lantern glows at dusk and night; the Insulated Hut glows warmly from its **window and doorway lantern**.
-  - **3 searchable box spots, each with distinct art** — broken boxes, a double crate stack, and a single parcel with a leaning plank. Rummage once each (search pose + rummage foley) for Timber, Scrap and Cloth; the broken boxes show a cleared sprite and the others take on a dusty, rummaged look.
+  - **📦 Two kinds of boxes:**
+    - **2 heavy wooden crates** (the broken crates and the weathered double crate) are part of the rooftop from the start. Rummage each once (search pose + rummage foley) for Timber, Scrap and Cloth; afterwards it stays put, opened and empty (the broken crates show a cleared sprite, the double crate a dusty, rummaged look), still solid scenery. Hovering it reads *"Empty wooden crate (needs an axe to break down — coming soon)"*. Wind never moves or replaces a crate — they're waiting for a future crafted axe.
+    - **Light cardboard cartons** (three carton sprites; 1–2 on the roof at the start). Rummaging one gives Cloth and Scrap (sometimes a little Timber), then the emptied carton is carried off — it fades away and frees its floor. Windy nights blow fresh cartons in, up to **3 on the roof at once**.
   - **6 cleanable weed patches** — 3 weed species (grassy tufts, leafy brush, dandelion clusters), two of each; clearing each (leaf particles + snip foley) yields Seeds and Cloth.
-  - **A fresh rooftop every run:** each new game lays the boxes and weeds out differently — new spots, shuffled art, slight size variation (0.92–1.08×) and random flips. They strongly prefer the **rooftop perimeter** (the walls, the front edge, the right foreground and around the front-left brick steps) instead of sitting alone in the middle of the walkway. Boxes settle into corners; weeds scatter along the edges. Nothing ever overlaps a station (at its largest tier), its stand spot, the stairwell path or another prop. The layout is remembered for the whole run (refresh / Continue), and **Start Fresh** rolls a new one. Props in rooftops saved before the stations were recomposed are gently nudged clear of them on load.
-  - **🌱 The rooftop renews overnight:** each time you sleep into a new day, **1–2 cleared weed patches sprout back** at brand-new spots (fresh art, size and flip). **Every 2nd day one searched box is replaced by a fresh one** at a new spot by the edge. They use the same collision-safe placement as a fresh layout, so there are never more than 3 boxes and 6 weed patches. The newcomers pop in as morning light fades up, and the morning toast mentions it (*"Day 4 · Morning — Fresh weeds sprouted overnight. …"*). This gives a gentle, steady trickle of Timber, Scrap, Cloth and Seeds.
+  - **A fresh rooftop every run:** each new game lays the crates, cartons and weeds out differently — new spots, shuffled art, slight size variation (0.92–1.08×) and random flips. They strongly prefer the **rooftop perimeter** (the walls, the front edge, the right foreground and around the front-left brick steps) instead of sitting alone in the middle of the walkway. Boxes settle into corners; weeds scatter along the edges. Nothing ever overlaps a station (at its largest tier), its stand spot, the stairwell path or another prop. The layout is remembered for the whole run (refresh / Continue), and **Start Fresh** rolls a new one. Props in rooftops saved before the stations were recomposed are gently nudged clear of them on load.
+  - **🌱 The rooftop renews overnight — each weather in its own way:**
+
+    | Night's weather | What changes on the rooftop |
+    |---|---|
+    | ☀️ **Clear** | A gentle calm rhythm: **1** cleared weed patch sprouts back (if any were cleared). No boxes. |
+    | 🌧️ **Rain** | **2–3** cleared weed patches sprout back (up to the 6-patch cap), and a built barrel collects +1 💧 that day. No boxes. |
+    | 🍃 **Wind** | **1–2 fresh cardboard cartons** blow onto the roof by the edges (up to 3 cartons on the roof). No weeds, and never wooden crates. |
+
+    Newcomers land at brand-new spots with fresh art, size and flip, using the same collision-safe placement as a fresh layout. They pop in as morning light fades up, and the morning toast says what happened (*"Day 4 · Morning — Soft rain filled the barrel and sprouted extra weeds overnight. …"*).
   - **Stairwell door** — hovering shows a *"Take the elevator"* label; clicking walks the traveler to the door and opens the **Elevator Floor Panel** (see the onboarding flow above). There is no hover outline on the rooftop door itself — the label is the cue.
+- **🌦️ Live rooftop weather (Rain & Wind):** Day 1 is always clear; every morning after rolls **☀️ Clear**, **🌧️ Rain** or **🍃 Wind**. A small weather chip beside the ← Title button names today's weather, and hovering it explains what it does. Weather is always a gentle gift, never a hardship:
+
+  | Weather | What you see & hear | What it does |
+  |---|---|---|
+  | ☀️ **Clear** | Calm skies | *"Calm skies over the rooftop"* — the calm rhythm (1 weed patch sprouts back) |
+  | 🌧️ **Rain** | Soft, translucent slanted rain drifting down-left, tiny ripples spreading on the open concrete, and a cool misty overcast that blends into Day, Dusk and Night (rainy evenings stay warm-lit and cozy). A soothing patter with soft droplet taps — never harsh hiss. | *"Extra water from the barrel & faster weed growth"* — a built Rainwater Barrel collects **+1 💧** (*"Rain-filled — Collect"*), the night's cups still catch a little water, and **2–3 weed patches** sprout back overnight (*"Soft rain filled the barrel and sprouted extra weeds overnight."*). Rain never brings boxes. |
+  | 🍃 **Wind** | Golden-sage dust motes and tiny tumbling leaves & petals sweeping across the rooftop in gentle gusts, with the weed patches swaying as each gust passes. Airy breeze swelling and fading, with the odd leaf rustle. | *"Fresh boxes blown onto the roof with bonus materials"* — **1–2 light cardboard cartons** blow in overnight (*"Gusty wind carried fresh boxes onto the roof overnight."*; up to 3 on the roof, never wooden crates, no weeds), and every box searched that day — carton or crate — gives **+1 bonus material** (shown as *"🍃 +1 🔩"* in the floating reward). |
+
+  The weather sound is outdoors only: it fades out when you ride the lift down to the apartment floors and back in on the roof. Under Reduce Motion, rain keeps only its calm misty wash and wind shows a few still motes, with no swaying.
 - **3-Phase Real-Time Day Cycle & Vitality (`Stamina` & `Strength`):**
   - A full day lasts **12 real-time minutes** (`240s` per phase: **Day** Full Sun → **Dusk** Sunset → **Night** Half Moon), paused whenever you're not on the rooftop (title, any apartment floor, lift rides and cutscenes), the tab is hidden, or Settings is open. Night holds calmly without harsh pass-outs until the player chooses to sleep.
   - **Stamina (`0–100`, restedness)** is gently spent by clearing weeds (`-6`), searching boxes (`-10`), and building station tiers (`-12`), and restored by resting, sleeping and cooking. *Mended Work Gloves* make weeds and boxes ~30% lighter (`-4` / `-7`); harvesting the farm and collecting rainwater are free.
@@ -178,7 +197,7 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
   - Popovers explain anything that's missing. Locked rows show 🔒 with the station tier they need by name (*"Needs Grill Counter"*, *"Needs Knitting Basket"*), alongside *"Light the fire pit first"* and *"Need 2 🍅 more"*. They close with `Escape` or a click elsewhere.
 - **Found Materials Pouch:** A minimal, centered pouch showing all **7 resources — 🪵 Timber · 🧵 Cloth · 🌱 Seeds · 💧 Water · 🔩 Scrap · 🪨 Stone · 🍅 Food** — compact enough for small windows, each pulsing when it grows and naming itself in a small parchment tooltip on hover or keyboard focus.
 - **🧪 Generous test supplies (temporary):** While the stations are being tuned, every freshly claimed shelter starts with a generous pool (`40🪵 15🧵 10🌱 8💧 20🔩 16🪨 6🍅`). Together with the rooftop's boxes and weeds, that's enough to try every station tier, every recipe and every mending perk right away. It's behind a clearly marked `TEST_MODE_GENEROUS_START` switch, and scarcity will be tuned once downstairs scavenging arrives.
-- **Persistence:** Fire state, every station's tier, **which station stands in which build slot**, today's farm/barrel readiness, crafted perks, the box & weed layout (including overnight regrowth), searched boxes and cleared weeds are remembered between visits. Older rooftops migrate gently: earlier one-off builds become Tier 2 of their station, stations built before slots were flexible keep their original spots, and props overlapping the recomposed stations are nudged clear. Claiming a new shelter or resetting starts the Terrace fresh with a new layout and four empty slots.
+- **Persistence:** Fire state, every station's tier, **which station stands in which build slot**, today's farm/barrel readiness, crafted perks, the box & weed layout (including overnight regrowth and wind-blown cartons), opened crates and cleared weeds are remembered between visits. Older rooftops migrate gently: earlier one-off builds become Tier 2 of their station, stations built before slots were flexible keep their original spots, props overlapping the recomposed stations are nudged clear, and boxes from before crates & cartons split are sorted by their art (crates stay crates; an already-searched parcel has simply been carried off). Claiming a new shelter or resetting starts the Terrace fresh with a new layout and four empty slots.
 
 ---
 
@@ -221,7 +240,7 @@ These systems are fully implemented and unit-tested in the game engine, but thei
 
 - **Surface scavenging (morning & afternoon):** short trips to four nearby spots — the **Overgrown Highway** (scrap, cloth), **Fallen Pine Grove** (timber, seeds), **Crumbling Stone Creek** (stone, water) and **Shattered Greenhouse** (seeds, cloth, scrap). A trip spends energy and one part of the day, always brings something home, and comes back with a small warm story. A cozier shelter (every 25 Cozy Index) means an extra find on each trip.
 - **Valley Relics:** now and then a trip turns up a keepsake left by earlier travelers — a *Faded Postcard*, a *Weather Station Log*, a *Cracked Cassette*… Each is tucked into the **Field Journal** to re-read any time.
-- **Gentle daily weather:** each morning is *Clear*, *Breezy*, *Soft Rain* (a few cups of free water, more with a rain collector) or, rarely, a *Dust Squall* that keeps you in for the morning. Fortified walls let you brave it. *(Partly live: sleeping into a new day rolls the weather and names it in the morning toast, and Soft Rain adds its free 💧. Squalls have nothing to close while scavenging is paused, and the scene has no weather visuals yet.)*
+- **Gentle daily weather:** now live on the rooftop as **Clear**, **Rain** and **Wind** (see *Live rooftop weather* above), and Rain still fills a few cups of free water (more with a rain collector). *(The earlier valley design had Breezy days and rare Dust Squalls that closed morning scavenging; they were folded into Wind, and older saves with them load as Wind.)*
 
 ## ☀️ Cozy vs. ⛰️ Challenge
 
@@ -231,7 +250,7 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 |---|---|---|
 | Arrive with | Full Day 1 materials | ~60% (still enough to pitch the tarp) |
 | Scavenging trip *(paused)* | ⚡25, generous finds | ⚡35, slightly tighter finds |
-| Weather | Mostly clear, breezy & soft rain; storms rare | Dust squall mornings are common |
+| Weather | Mostly clear, with rain and wind | A little more rain and wind |
 
 ---
 
@@ -243,7 +262,7 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 - **Brand:** A painted ivy-and-lantern **wordmark** (`public/source/ui/logo-title.webp`) on the Title Screen, and a round **lantern emblem** (`logo-emblem.webp`) used as the About crest, the shelter HUD badge and the loading emblem. Browser tab icon: `favicon.png`; home-screen icon: `apple-touch-icon.png`.
 - **About & copy:** Player-facing and warm — a short story intro, three "How to play" tips, and a quiet `One Warm Spot · v0.1` footer. No technical wording.
 - **Comfort & accessibility:** **Reduce Motion** (Settings) calms camera zoom, elevator shake, particles, fire flicker and UI animations: steady fire glow with no sparks or smoke, still fireflies and stars, no leaf bursts, reward text that fades in place, no prop hover lift, no pouch bounce, calm fades instead of push-ins and door slides in both lift rides, and instant sky/HUD transitions.
-- **Backups:** Export / Load Backup saves a single `.json` with the whole run — day, vitality, all 7 materials, milestone stats **and the Terrace rooftop** (every station tier and its build slot, farm/barrel readiness, crafted perks, fire, layout, searched boxes, cleared weeds). Older backups still load: missing Food becomes 0, earlier one-off builds become Tier 2 stations, stations from before flexible slots keep their original spots, and a backup without rooftop details starts the Terrace fresh.
+- **Backups:** Export / Load Backup saves a single `.json` with the whole run — day, vitality, all 7 materials, milestone stats **and the Terrace rooftop** (every station tier and its build slot, farm/barrel readiness, crafted perks, fire, layout, opened crates, cleared weeds). Older backups still load: missing Food becomes 0, earlier one-off builds become Tier 2 stations, stations from before flexible slots keep their original spots, boxes from before crates & cartons split are sorted by their art, and a backup without rooftop details starts the Terrace fresh.
 - **Characters:** Understated, faceless 3/4-view travelers in ragged earthy gear, painted to match the backdrops.
 - **Audio:** Menu music tries an optional `public/source/audio/music-menu.mp3`; since that file isn't shipped yet, the **procedural warm-pad chord loop** is what currently plays. Procedurally synthesized UI and in-shelter foley (hover, click, claim, locked, footstep, fire ignition + looping campfire crackle that grows fuller with each fire pit tier, fire extinguish hiss, box rummage, weed snip, bedroll sleep, rest chime, building mallet taps, log-stacking knocks, hearth stone clacks, rain-barrel water-drop chimes, farm harvest rustle, grill sizzle & kettle, sewing fabric chime, and the Terrace lift's low hum, door slides, floor-tick relay clicks and brass arrival ding) using Web Audio API — 0 KB. Per-shelter **musical** ambience — soft pitched voices and spaced organic micro-events rather than noise hiss (terrace birdsong & bamboo chimes, pipe drips in a hollow hum, treehouse marimba & creaks, country-house pentatonic chimes, farmhouse barn creaks, cave echo pings, bunker room tone & relay ticks, beachhouse rolling surf, island lapping shore & pine harmonic). Plays on hover, softly while in the shelter, and as a faint birdsong drifting into the apartment floors downstairs.
 
@@ -253,12 +272,13 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 
 - **🔥 Wood-Burning Fire Mechanic (next step):** Lighting the fire already burns 1 Timber; next, a lit campfire should slowly consume more **Timber** over time, turning the extinguish toggle into a meaningful, cozy resource choice (keep warm and bright, or save wood for building).
 - **🚪 Beyond-the-Roof Gathering:** The old elevator already reaches four explorable apartment floors whose scavenging spots glow and say *"scavenging puzzle coming soon"*. Next, open those spots into cozy mini-puzzles (see [Downstairs Scavenging & Cozy Mini-Game Puzzles](#downstairs-scavenging--cozy-mini-game-puzzles-planned) below) to gather extra materials (the rooftop itself already renews a little each night). Once that lands, switch off `TEST_MODE_GENEROUS_START` and tune scarcity.
-- **📦 More Prop Variety:** A dedicated **lit fire-pit sprite**, plus "cleared" variants for the double crate and single parcel.
+- **📦 More Prop Variety:** A dedicated **lit fire-pit sprite**, plus an opened variant for the weathered double crate.
+- **🪓 Crafted Axe:** craft an axe (e.g. at the sewing/work bench) to **manually chop searched wooden crates** into extra 🪵 Timber, clearing their spot for good — the opened crates already wait on the roof with a *"needs an axe"* hint.
 - **🛠️ More In-Scene Visual Upgrades:** Beyond the six multi-tier stations — repairing the parapet walls, string lights, and other new **anchor spots**.
 - **👕 Traveler Clothing Progression:** Start in ragged earthy traveler gear and unlock cleaner, warmer, cozier outfits as the shelter improves — the *Quilted Cozy Cloak* perk is the first hook for a Tier 2 outfit sprite.
 - **🌅 Full Time-of-Day Scenes & More Arrival Vignettes:** Dedicated **Morning / Afternoon / Evening / Night** painted backdrops (and time-specific props) instead of tint-only lighting, plus per-shelter intro vignettes for the other 8 shelters (the Terrace lift ride is the template).
 - **🏠 More Interactive Shelters:** Bring the remaining 8 shelters to life with their own scene configs, props, hotspots and buildables.
-- **🌱 Richer Rooftop Regrowth:** Build on the nightly weed/box renewal — seasonal sprouts, the odd wind-blown debris pile, or regrowth that slows as the shelter gets tidier.
+- **🌱 Richer Rooftop Regrowth:** Build on the weather-driven renewal — seasonal sprouts, the odd wind-blown debris pile, or regrowth that slows as the shelter gets tidier.
 
 ### Downstairs Scavenging & Cozy Mini-Game Puzzles (Planned)
 
@@ -277,7 +297,7 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 ### ✅ Shipped from the roadmap (Terrace v2)
 
 - Rooftop **stairwell/lift entrance** stage with the traveler arriving through its door, and the **shabby cloth lean-to** beside the fire pit as the sleeping spot.
-- **Single / double box** sprites and a **third weed species**, so no two gathering spots look alike.
+- **Single / double box** sprites (now the double wooden crate and the legacy parcel), three **cardboard carton** sprites and a **third weed species**, so no two gathering spots look alike.
 - First **in-scene visual upgrades**: reinforce the cloth lean-to into a timber shelter, a raised herb planter, and a rain barrel.
 - **Terrace arrival vignette**: the 3-beat lobby → lift ride → doors-open-to-sunlight elevator cutscene, ending in a calm stroll out of the stairwell.
 - **New day rhythm**: the real-time Day → Dusk → Night cycle, with resting and sleeping at the shelter advancing the day and milestone unlocks.
@@ -285,17 +305,21 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 - **Randomized box & weed layout** per run, hugging the rooftop perimeter.
 - **Composed Terrace layout:** three zones against the brick walls — a **Living & Mending nook** on the back-left parapet, the **Central Hearth**, and a **Cooking & Utility line** on the back-right parapet by the stairwell — keeping the middle of the rooftop open.
 - **🧰 Flexible Predefined Build Slots:** four curated `+` spots where the player chooses which of the farm, barrel, grill and sewing kit to build (each placed once); older saves keep their original layout.
-- **🌱 Rooftop regrowth:** cleared weeds sprout back (1–2 per night) and a searched box is replaced every 2nd day, each at a new spot.
+- **🌱 Rooftop regrowth:** cleared weeds sprout back overnight at new spots.
+- **📦 Wooden crates vs. cardboard cartons:** 2 heavy wooden crates stay on the roof once opened (waiting for a future axe), while light cardboard cartons are carried off once searched and blown back in by the wind.
 - **Core Vitality & Multi-Tier Progression loop:** 🍅 Food as the 7th resource; six multi-tier stations (Shelter, Fire Pit, Farm, Rainwater Barrel, Cooking Grill, Sewing Kit); daily harvest & rainwater; grill cooking that restores Stamina & Strength; mending perks; shelter-tier sleep comfort; firewood cost to light the fire.
 - **In-world station menus:** the bottom build bar replaced by contextual menus above each station (main action + *Upgrade to …*), natural tier names everywhere players look, and pouch tooltips.
 - **Ride down to the lobby:** the reverse lift vignette (rooftop → R…1 → lobby) ending in an interactive ground-floor lobby — glowing *"Coming soon"* apartment doors and the lift back up.
 - **🛗 The old elevator & four apartment floors:** a brass Elevator Floor Panel (R, 4, 3, 2, 1) on the rooftop door and every floor's lift; rides between any two stops that scale with distance and open on the destination's own painting; Floors 2–4 painted and explorable alongside the lobby, with glowing scavenging spots (a sparking fuse box on Floor 3) ready for the mini-games.
+- **🌦️ Live rooftop weather:** Rain (slanted streaks, floor ripples, misty overcast, patter; +1 barrel water, 2–3 weeds regrow) and Wind (dust motes, tumbling leaves, swaying weeds, gusts; 1–2 cardboard cartons blown in, +1 box material), each with its own distinct overnight effect, and a weather chip in the shelter header.
 
 ---
 
 ## Future / Backlog Ideas
 
-- Weather visuals on the shelter scene (rain streaks, squall haze, rain-on-roof ambience) & seasonal lighting shifts
+- 🪓 **Crafted Axe — manually chop searched wooden crates for extra Timber** (and finally clear their spot on the roof).
+- ❄️ **Cold weather** *(next weather type)* — crisp, pale-blue frosty mornings with drifting flakes or breath-mist and a hushed soundscape. Gameplay idea: a lit fire pit matters more (sitting by it restores a little extra, Strength eases faster away from it, warm sheets and the cozy cloak shine), always gentle and never punishing. Possibly paired with seasons.
+- Seasonal lighting shifts (and seasons cycling the weather odds)
 - Multi-day scavenging expeditions to farther zones
 - Radio signals & visitor events
 - Optional `.webm` animated shelter backgrounds

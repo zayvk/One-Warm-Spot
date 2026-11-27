@@ -1,7 +1,7 @@
 import { useEffect, useRef, type CSSProperties, type RefObject } from 'react';
 import type { ResourceId } from '../game/types/game.ts';
 import type { AssignableStationId, StationConfig } from '../game/data/scenes/types.ts';
-import type { DayPhase } from '../game/types/game.ts';
+import type { DayPhase, Weather } from '../game/types/game.ts';
 import { RESOURCE_MAP } from '../game/data/resources.ts';
 import { canAfford } from '../game/engine/progression.ts';
 import {
@@ -20,6 +20,8 @@ export interface PropActionMenuProps {
   station: StationConfig;
   anchor: { x: number; y: number };
   dayPhase: DayPhase;
+  /** Rain adds a bonus to the barrel's yield */
+  weather: Weather;
   stationState: SceneStationState;
   resources: Record<ResourceId, number>;
   onAction: (stationId: string, action: StationMenuAction) => boolean;
@@ -105,6 +107,7 @@ export default function PropActionMenu({
   station,
   anchor,
   dayPhase,
+  weather,
   stationState,
   resources,
   onAction,
@@ -216,17 +219,19 @@ export default function PropActionMenu({
       }
       case 'barrel': {
         const ready = stationState.barrelReady;
-        const yields = formatYields(barrelCollect(tier));
+        const rainy = weather === 'rain';
+        const yields = formatYields(barrelCollect(tier, weather));
+        const label = rainy ? `🌧️ Rain-filled — Collect ${yields}` : `💧 Collect ${yields}`;
         return (
           <button
             type="button"
             className="ows-prop-menu__btn ows-prop-menu__btn--primary"
             disabled={!ready || busy}
-            title={ready ? `Collect ${yields}` : 'Filling — ready tomorrow'}
+            title={ready ? (rainy ? `Rain-filled — collect ${yields}` : `Collect ${yields}`) : 'Filling — ready tomorrow'}
             onMouseEnter={ready && !busy ? playHover : undefined}
             onClick={() => trigger('primary')}
           >
-            <span>{ready ? `💧 Collect ${yields}` : 'Filling — ready tomorrow'}</span>
+            <span>{ready ? label : 'Filling — ready tomorrow'}</span>
           </button>
         );
       }

@@ -57,10 +57,7 @@ export default function TopBar({ onBackToTitle, onRequestReset }: TopBarProps) {
           }}
         >
           {siteName}
-          <span
-            className={`ows-weather-chip ${weather === 'storm' ? 'ows-weather-chip--storm' : ''}`}
-            title={weatherInfo.hint}
-          >
+          <span className="ows-weather-chip" title={weatherInfo.hint}>
             {weatherInfo.emoji} {weatherInfo.label}
           </span>
         </span>

@@ -120,6 +120,10 @@ export const SCENE_PROPS = {
   shelterT3: '/source/props/prop-shelter-t3.webp',
   boxSingle: '/source/props/prop-box-single.webp',
   boxDouble: '/source/props/prop-box-double.webp',
+  /* Light cardboard cartons the wind blows onto the roof */
+  cardboard1: '/source/props/prop-cardboard-1.webp',
+  cardboard2: '/source/props/prop-cardboard-2.webp',
+  cardboard3: '/source/props/prop-cardboard-3.webp',
   weeds3: '/source/props/prop-weeds-3.webp',
   /* Farm planter: T1 seedling crate → T2 herb planter → T3 trellised garden bed */
   planterT1: '/source/props/prop-planter-t1.webp',

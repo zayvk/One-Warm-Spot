@@ -33,7 +33,7 @@ export const MODE_RULES: Record<GameMode, ModeRules> = {
     yieldMultiplier: 1,
     minTripTotal: 4,
     relicChance: 0.25,
-    weatherWeights: { clear: 50, breezy: 30, rain: 18, storm: 2 },
+    weatherWeights: { clear: 50, rain: 25, wind: 25 },
   },
   challenge: {
     id: 'challenge',
@@ -44,7 +44,7 @@ export const MODE_RULES: Record<GameMode, ModeRules> = {
     yieldMultiplier: 0.75,
     minTripTotal: 3,
     relicChance: 0.2,
-    weatherWeights: { clear: 34, breezy: 26, rain: 20, storm: 20 },
+    weatherWeights: { clear: 40, rain: 30, wind: 30 },
   },
 };
 
@@ -85,30 +85,36 @@ export function freshRunResources(mode: GameMode): Record<ResourceId, number> {
 
 /* ───── Weather ───── */
 
-export const WEATHER_INFO: Record<Weather, { label: string; emoji: string; hint: string }> = {
+export interface WeatherInfo {
+  /** Short HUD label */
+  label: string;
+  emoji: string;
+  /** What it does on the rooftop (HUD chip tooltip) */
+  hint: string;
+  /** Morning toast line */
+  morning: string;
+}
+
+export const WEATHER_INFO: Record<Weather, WeatherInfo> = {
   clear: {
     label: 'Clear',
     emoji: '☀️',
-    hint: 'Clear skies — a fine day to scavenge and build.',
-  },
-  breezy: {
-    label: 'Breezy',
-    emoji: '🍃',
-    hint: 'A soft breeze moves through the valley.',
+    hint: 'Calm skies over the rooftop',
+    morning: 'Clear skies greet the rooftop.',
   },
   rain: {
-    label: 'Soft Rain',
-    emoji: '🌦️',
-    hint: 'Soft rain topped up your water this morning.',
+    label: 'Rain',
+    emoji: '🌧️',
+    hint: 'Extra water from the barrel & faster weed growth',
+    morning: 'Soft rain patters on the rooftop.',
   },
-  storm: {
-    label: 'Dust Squall',
-    emoji: '🌪️',
-    hint: 'A dust squall keeps you indoors this morning — scavenging reopens in the afternoon (fortified walls let you brave it).',
+  wind: {
+    label: 'Wind',
+    emoji: '🍃',
+    hint: 'Fresh boxes blown onto the roof with bonus materials',
+    morning: 'A gusty breeze sweeps the rooftop.',
   },
 };
 
-/** Upgrade that lets the player scavenge through storm mornings */
-export const STORM_SHELTER_UPGRADE = 'shell-2';
 /** Upgrade that adds +1 water on rainy mornings */
 export const RAIN_UPGRADE = 'slot-rain-collector';

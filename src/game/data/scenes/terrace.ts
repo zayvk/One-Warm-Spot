@@ -12,7 +12,11 @@ import { SCENE_PROPS } from '../media.ts';
 
 /* ── Randomizable box & weed variants ── */
 
-export type TerraceBoxVariant = 'boxes-intact' | 'box-double' | 'box-single';
+/** Heavy wooden crates: there from the start, opened once, and they stay on the roof */
+export type TerraceCrateVariant = 'boxes-intact' | 'box-double';
+/** Light cardboard cartons: searched → gone; the wind blows fresh ones in (`box-single` = legacy parcel art) */
+export type TerraceCardboardVariant = 'cardboard-1' | 'cardboard-2' | 'cardboard-3' | 'box-single';
+export type TerraceBoxVariant = TerraceCrateVariant | TerraceCardboardVariant;
 export type TerraceWeedVariant = 'weeds-1' | 'weeds-2' | 'weeds-3';
 export type TerracePropVariant = TerraceBoxVariant | TerraceWeedVariant;
 
@@ -20,6 +24,8 @@ export interface TerracePropVariantConfig {
   sprite: string;
   spriteAfter?: string;
   label: string;
+  /** Hover text once searched (wooden crates stay on the roof, empty) */
+  searchedLabel?: string;
   reward: Record<string, number>;
   /** Base sprite height relative to the stage */
   propScale: number;
@@ -28,11 +34,14 @@ export interface TerracePropVariantConfig {
   spawnRadius: number;
 }
 
-export const TERRACE_BOX_VARIANTS: Record<TerraceBoxVariant, TerracePropVariantConfig> = {
+const EMPTY_CRATE_LABEL = 'Empty wooden crate (needs an axe to break down — coming soon)';
+
+export const TERRACE_CRATE_VARIANTS: Record<TerraceCrateVariant, TerracePropVariantConfig> = {
   'boxes-intact': {
     sprite: SCENE_PROPS['prop-boxes-intact'],
     spriteAfter: SCENE_PROPS['prop-boxes-cleared'],
-    label: 'Broken Boxes — Rummage for materials',
+    label: 'Broken Crates — Rummage for materials',
+    searchedLabel: EMPTY_CRATE_LABEL,
     reward: { scrap: 2, timber: 3 },
     propScale: 0.095,
     collider: { rx: 0.04, ry: 0.024 },
@@ -41,10 +50,38 @@ export const TERRACE_BOX_VARIANTS: Record<TerraceBoxVariant, TerracePropVariantC
   'box-double': {
     sprite: SCENE_PROPS.boxDouble,
     label: 'Weathered Crates — Rummage for materials',
+    searchedLabel: EMPTY_CRATE_LABEL,
     reward: { timber: 4, cloth: 1 },
     propScale: 0.1,
     collider: { rx: 0.046, ry: 0.026 },
     spawnRadius: 0.055,
+  },
+};
+
+export const TERRACE_CARDBOARD_VARIANTS: Record<TerraceCardboardVariant, TerracePropVariantConfig> = {
+  'cardboard-1': {
+    sprite: SCENE_PROPS.cardboard1,
+    label: 'Windblown Carton — Rummage for materials',
+    reward: { cloth: 1, scrap: 1 },
+    propScale: 0.085,
+    collider: { rx: 0.028, ry: 0.018 },
+    spawnRadius: 0.04,
+  },
+  'cardboard-2': {
+    sprite: SCENE_PROPS.cardboard2,
+    label: 'Carton Pair — Rummage for materials',
+    reward: { cloth: 1, scrap: 1, timber: 1 },
+    propScale: 0.088,
+    collider: { rx: 0.032, ry: 0.019 },
+    spawnRadius: 0.044,
+  },
+  'cardboard-3': {
+    sprite: SCENE_PROPS.cardboard3,
+    label: 'Cloth-Stuffed Carton — Rummage for materials',
+    reward: { cloth: 2, scrap: 1 },
+    propScale: 0.085,
+    collider: { rx: 0.028, ry: 0.018 },
+    spawnRadius: 0.04,
   },
   'box-single': {
     sprite: SCENE_PROPS.boxSingle,
@@ -55,6 +92,14 @@ export const TERRACE_BOX_VARIANTS: Record<TerraceBoxVariant, TerracePropVariantC
     spawnRadius: 0.042,
   },
 };
+
+export const TERRACE_BOX_VARIANTS: Record<TerraceBoxVariant, TerracePropVariantConfig> = {
+  ...TERRACE_CRATE_VARIANTS,
+  ...TERRACE_CARDBOARD_VARIANTS,
+};
+
+/** The cartons the wind blows in (fresh art only — never wooden crates or the legacy parcel) */
+export const WIND_CARDBOARD_VARIANTS: readonly TerraceCardboardVariant[] = ['cardboard-1', 'cardboard-2', 'cardboard-3'];
 
 export const TERRACE_WEED_VARIANTS: Record<TerraceWeedVariant, TerracePropVariantConfig> = {
   'weeds-1': {
@@ -83,8 +128,19 @@ export const TERRACE_WEED_VARIANTS: Record<TerraceWeedVariant, TerracePropVarian
   },
 };
 
-export const TERRACE_BOX_IDS = ['boxes-1', 'boxes-2', 'boxes-3'] as const;
+/** Two heavy wooden crates, always on the roof (one of each crate art) */
+export const TERRACE_CRATE_IDS = ['crate-1', 'crate-2'] as const;
+/** Up to 3 cardboard cartons; a carton is on the roof exactly when its id has a spawn */
+export const TERRACE_CARDBOARD_IDS = ['cardboard-1', 'cardboard-2', 'cardboard-3'] as const;
+export const TERRACE_BOX_IDS = [...TERRACE_CRATE_IDS, ...TERRACE_CARDBOARD_IDS] as const;
 export const TERRACE_WEED_IDS = ['weeds-1', 'weeds-2', 'weeds-3', 'weeds-4', 'weeds-5', 'weeds-6'] as const;
+
+/** Box ids from before crates & cartons were split → their place in the hand-placed (`spawns: null`) layout */
+export const LEGACY_DEFAULT_BOX_IDS: Readonly<Record<string, string>> = {
+  'boxes-1': 'cardboard-1',
+  'boxes-2': 'crate-1',
+  'boxes-3': 'crate-2',
+};
 
 export interface TerracePropSpawn {
   x: number;
@@ -95,11 +151,27 @@ export interface TerracePropSpawn {
   flipX: boolean;
 }
 
-/** Spawn layout for every box & weed hotspot, keyed by hotspot id */
+/** Spawn layout for every box & weed hotspot, keyed by hotspot id (absent carton = not on the roof) */
 export type TerraceSpawns = Record<string, TerracePropSpawn>;
 
 export function isBoxVariant(v: TerracePropVariant): v is TerraceBoxVariant {
   return v in TERRACE_BOX_VARIANTS;
+}
+
+export function isCrateVariant(v: TerracePropVariant): v is TerraceCrateVariant {
+  return v in TERRACE_CRATE_VARIANTS;
+}
+
+export function isCardboardVariant(v: TerracePropVariant): v is TerraceCardboardVariant {
+  return v in TERRACE_CARDBOARD_VARIANTS;
+}
+
+export function isCardboardId(id: string): boolean {
+  return (TERRACE_CARDBOARD_IDS as readonly string[]).includes(id);
+}
+
+export function isCrateId(id: string): boolean {
+  return (TERRACE_CRATE_IDS as readonly string[]).includes(id);
 }
 
 export function terraceVariantConfig(v: TerracePropVariant): TerracePropVariantConfig {
@@ -108,9 +180,9 @@ export function terraceVariantConfig(v: TerracePropVariant): TerracePropVariantC
 
 /** Hand-placed layout (used for saves from before randomized placement), composed around the station zones */
 export const DEFAULT_TERRACE_SPAWNS: TerraceSpawns = {
-  'boxes-1': { x: 0.436, y: 0.85, variant: 'box-single', scale: 1.05, flipX: true },
-  'boxes-2': { x: 0.594, y: 0.825, variant: 'boxes-intact', scale: 1.04, flipX: false },
-  'boxes-3': { x: 0.731, y: 0.855, variant: 'box-double', scale: 1.06, flipX: false },
+  'crate-1': { x: 0.594, y: 0.825, variant: 'boxes-intact', scale: 1.04, flipX: false },
+  'crate-2': { x: 0.731, y: 0.855, variant: 'box-double', scale: 1.06, flipX: false },
+  'cardboard-1': { x: 0.436, y: 0.85, variant: 'box-single', scale: 1.05, flipX: true },
   'weeds-1': { x: 0.656, y: 0.767, variant: 'weeds-3', scale: 1.04, flipX: true },
   'weeds-2': { x: 0.823, y: 0.835, variant: 'weeds-2', scale: 1, flipX: true },
   'weeds-3': { x: 0.552, y: 0.623, variant: 'weeds-2', scale: 0.96, flipX: true },
@@ -132,6 +204,8 @@ export function terraceSpawnHotspot(id: string, spawn: TerracePropSpawn): Hotspo
     propScale: v.propScale * spawn.scale,
     flipX: spawn.flipX,
     label: v.label,
+    searchedLabel: v.searchedLabel,
+    clearsWhenSearched: isCardboardVariant(spawn.variant),
     reward: { ...v.reward },
     collider,
     standOffset: {
@@ -141,11 +215,16 @@ export function terraceSpawnHotspot(id: string, spawn: TerracePropSpawn): Hotspo
   };
 }
 
-/** Apply a run's spawn layout to the Terrace config (other hotspots untouched) */
+const SPAWN_HOTSPOT_IDS: readonly string[] = [...TERRACE_BOX_IDS, ...TERRACE_WEED_IDS];
+
+/** Apply a run's spawn layout to the Terrace config: every box & weed with a spawn, nothing else */
 export function withTerraceSpawns(base: ShelterSceneConfig, spawns: TerraceSpawns): ShelterSceneConfig {
   return {
     ...base,
-    hotspots: base.hotspots.map((hs) => (spawns[hs.id] ? terraceSpawnHotspot(hs.id, spawns[hs.id]) : hs)),
+    hotspots: [
+      ...base.hotspots.filter((hs) => !SPAWN_HOTSPOT_IDS.includes(hs.id)),
+      ...SPAWN_HOTSPOT_IDS.filter((id) => spawns[id]).map((id) => terraceSpawnHotspot(id, spawns[id])),
+    ],
   };
 }
 
@@ -366,7 +445,7 @@ export const terraceScene: ShelterSceneConfig = {
     ),
 
     /* ── 3 searchable boxes + 6 weed patches (positions randomized per run) ── */
-    ...TERRACE_BOX_IDS.map((id) => terraceSpawnHotspot(id, DEFAULT_TERRACE_SPAWNS[id])),
+    ...TERRACE_BOX_IDS.filter((id) => DEFAULT_TERRACE_SPAWNS[id]).map((id) => terraceSpawnHotspot(id, DEFAULT_TERRACE_SPAWNS[id])),
     ...TERRACE_WEED_IDS.map((id) => terraceSpawnHotspot(id, DEFAULT_TERRACE_SPAWNS[id])),
 
     /* ── Ajar rooftop stairwell/lift door: opens the elevator floor panel ── */

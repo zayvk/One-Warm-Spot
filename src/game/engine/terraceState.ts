@@ -1,16 +1,24 @@
 /* ───── Terrace In-Scene State (localStorage `ows_terrace_state`) ───── */
 
 import {
+  DEFAULT_TERRACE_SPAWNS,
+  LEGACY_DEFAULT_BOX_IDS,
   TERRACE_BOX_IDS,
-  TERRACE_BOX_VARIANTS,
+  TERRACE_CARDBOARD_IDS,
+  TERRACE_CARDBOARD_VARIANTS,
+  TERRACE_CRATE_IDS,
+  TERRACE_CRATE_VARIANTS,
   TERRACE_STATIONS,
   TERRACE_WEED_IDS,
   TERRACE_WEED_VARIANTS,
+  isCardboardId,
+  isCrateId,
   type TerracePropSpawn,
   type TerracePropVariant,
   type TerraceSpawns,
 } from '../data/scenes/terrace.ts';
 import type { StationId } from '../data/scenes/types.ts';
+import type { Weather } from '../types/game.ts';
 import { PERK_IDS } from '../data/recipes.ts';
 import {
   generateTerraceSpawns,
@@ -123,10 +131,10 @@ function stringList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 }
 
-function parseSpawn(v: unknown, isBox: boolean): TerracePropSpawn | null {
+function parseSpawn(v: unknown, id: string): TerracePropSpawn | null {
   if (!v || typeof v !== 'object') return null;
   const s = v as Record<string, unknown>;
-  const variants = isBox ? TERRACE_BOX_VARIANTS : TERRACE_WEED_VARIANTS;
+  const variants = isCrateId(id) ? TERRACE_CRATE_VARIANTS : isCardboardId(id) ? TERRACE_CARDBOARD_VARIANTS : TERRACE_WEED_VARIANTS;
   if (!isUnitNumber(s.x) || !isUnitNumber(s.y)) return null;
   if (typeof s.variant !== 'string' || !(s.variant in variants)) return null;
   if (typeof s.scale !== 'number' || !Number.isFinite(s.scale) || s.scale < 0.8 || s.scale > 1.2) return null;
@@ -139,13 +147,39 @@ function parseSpawn(v: unknown, isBox: boolean): TerracePropSpawn | null {
   };
 }
 
-/** All 9 spawns must be present and well-formed, otherwise use the default layout */
-function parseSpawns(v: unknown): TerraceSpawns | null {
-  if (!v || typeof v !== 'object') return null;
-  const raw = v as Record<string, unknown>;
+const LEGACY_BOX_ID_LIST = Object.keys(LEGACY_DEFAULT_BOX_IDS);
+
+/**
+ * Layouts saved before crates & cartons were split used `boxes-1..3` with any box art:
+ * crate art becomes `crate-1/2`, the parcel becomes a carton. Returns the converted raw
+ * layout plus how the old ids map, so searched boxes follow their prop.
+ */
+function migrateLegacyBoxes(raw: Record<string, unknown>): { raw: Record<string, unknown>; idMap: Record<string, string> } {
+  if (!LEGACY_BOX_ID_LIST.some((id) => id in raw) || TERRACE_CRATE_IDS.some((id) => id in raw)) {
+    return { raw, idMap: {} };
+  }
+  const out: Record<string, unknown> = { ...raw };
+  const idMap: Record<string, string> = {};
+  const crates = [...TERRACE_CRATE_IDS];
+  const cartons = [...TERRACE_CARDBOARD_IDS];
+  for (const legacyId of LEGACY_BOX_ID_LIST) {
+    const spawn = raw[legacyId];
+    delete out[legacyId];
+    const variant = spawn && typeof spawn === 'object' ? (spawn as Record<string, unknown>).variant : undefined;
+    const target = typeof variant === 'string' && variant in TERRACE_CRATE_VARIANTS ? crates.shift() : cartons.shift();
+    if (!target) continue;
+    out[target] = spawn;
+    idMap[legacyId] = target;
+  }
+  return { raw: out, idMap };
+}
+
+/** Both crates and all 6 weeds must be present and well-formed (cartons only while on the roof), otherwise the default layout */
+function parseSpawns(raw: Record<string, unknown>): TerraceSpawns | null {
   const spawns: TerraceSpawns = {};
   for (const id of SPAWN_IDS) {
-    const spawn = parseSpawn(raw[id], (TERRACE_BOX_IDS as readonly string[]).includes(id));
+    if (raw[id] === undefined && isCardboardId(id)) continue;
+    const spawn = parseSpawn(raw[id], id);
     if (!spawn) return null;
     spawns[id] = spawn;
   }
@@ -169,7 +203,7 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
 
   const state = emptyTerraceState(null);
   state.fireLit = Boolean(obj.fireLit);
-  state.searchedBoxes = Array.isArray(obj.searchedBoxes)
+  const rawSearched = Array.isArray(obj.searchedBoxes)
     ? stringList(obj.searchedBoxes)
     : obj.boxesSearched
       ? ['boxes-1']
@@ -205,14 +239,36 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
   if (!slots) return null;
   state.slotAssignments = reconcileSlotAssignments(slots, stationTiersOf(state));
 
+  /* Older box ids follow their prop: by art in saved layouts, by spot in the hand-placed one */
+  let idMap: Record<string, string> = LEGACY_DEFAULT_BOX_IDS;
   if (obj.spawns === undefined || obj.spawns === null) {
     state.spawns = null;
   } else {
-    state.spawns = parseSpawns(obj.spawns);
+    if (typeof obj.spawns !== 'object' || Array.isArray(obj.spawns)) {
+      if (strict) return null;
+    } else {
+      const migrated = migrateLegacyBoxes(obj.spawns as Record<string, unknown>);
+      idMap = migrated.idMap;
+      state.spawns = parseSpawns(migrated.raw);
+    }
     if (!state.spawns && strict) return null;
     /* Layouts saved before the stations were recomposed: nudge only the props that now overlap */
     if (state.spawns) state.spawns = repairTerraceSpawns(state.spawns);
   }
+  if (!state.spawns) idMap = LEGACY_DEFAULT_BOX_IDS;
+
+  /*
+   * Searched wooden crates stay on the roof (kept in `searchedBoxes`); a searched carton
+   * is gone, so it simply has no spawn.
+   */
+  const searched = [...new Set(rawSearched.map((id) => idMap[id] ?? id))];
+  const searchedCartons = searched.filter((id) => isCardboardId(id));
+  if (searchedCartons.length > 0) {
+    const spawns = state.spawns ?? structuredClone(DEFAULT_TERRACE_SPAWNS);
+    for (const id of searchedCartons) delete spawns[id];
+    state.spawns = spawns;
+  }
+  state.searchedBoxes = searched.filter((id) => isCrateId(id));
   return state;
 }
 
@@ -269,13 +325,13 @@ export function saveTerraceState(s: TerraceState): void {
 }
 
 /**
- * Overnight regrowth on the stored rooftop for the morning of `day` (persisted when
- * anything regrew). `null` if no rooftop has been saved yet.
+ * Overnight regrowth on the stored rooftop under the new morning's `weather`
+ * (persisted when anything changed). `null` if no rooftop has been saved yet.
  */
-export function regrowStoredTerrace(day: number, rng?: Rng): RegrowOutcome<TerraceState> | null {
+export function regrowStoredTerrace(weather: Weather = 'clear', rng?: Rng): RegrowOutcome<TerraceState> | null {
   const stored = readStoredTerraceState();
   if (!stored) return null;
-  const outcome = regrowTerraceSpawns(stored, day, rng);
+  const outcome = regrowTerraceSpawns(stored, weather, rng);
   if (outcome.state !== stored) saveTerraceState(outcome.state);
   return outcome;
 }

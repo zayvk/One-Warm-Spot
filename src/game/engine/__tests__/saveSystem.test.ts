@@ -108,6 +108,22 @@ describe('save migration', () => {
     expect(migrateSave(save)).toEqual(save);
   });
 
+  it.each([
+    ['breezy', 'wind'],
+    ['storm', 'wind'],
+    ['wind', 'wind'],
+    ['rain', 'rain'],
+    ['clear', 'clear'],
+  ])('loads saved %s weather as %s', (saved, expected) => {
+    const { save, warnings } = expectOk({ ...v3Save, version: SAVE_VERSION, weather: saved });
+    expect(save.weather).toBe(expected);
+    expect(warnings).toEqual([]);
+    expect(parseSaveText(JSON.stringify({ ...v3Save, version: 3, weather: saved }))).toMatchObject({
+      ok: true,
+      save: { weather: expected },
+    });
+  });
+
   it('drops unknown or orphaned upgrades and relics and caps materials, reporting each clean-up', () => {
     const { save, warnings } = expectOk({
       ...v3Save,

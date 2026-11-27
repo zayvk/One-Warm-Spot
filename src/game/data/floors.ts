@@ -202,6 +202,16 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         reward: { scrap: 2, timber: 1 },
       },
       LIFT,
+      /* Listed before the fuse box so the sparking panel sits on top where its open lid overlaps the door edge */
+      {
+        id: 'f3-room-3b',
+        label: 'Utility Door 3B',
+        rect: { left: 69.2, top: 21.5, width: 5.5, height: 50 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'tic-tac-toe',
+        reward: { scrap: 2, cloth: 1 },
+      },
       {
         id: 'f3-fusebox',
         label: 'Sparking Fuse Box',
@@ -215,6 +225,15 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         repairedLabel: 'Repaired Fuse Box',
         doneNotice: 'Fuse box repaired! Salvaged +3 Metal Scrap.',
         repairedNotice: 'The wiring hums quietly—already repaired.',
+      },
+      {
+        id: 'f3-door-3c',
+        label: 'Dark Corridor 3C',
+        rect: { left: 82.5, top: 7.8, width: 4.8, height: 77 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        puzzle: 'dots-and-lines',
+        reward: { timber: 2, stone: 1 },
       },
       {
         id: 'f3-locker',
@@ -253,8 +272,19 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
       LIFT,
       {
         id: 'f4-boarded',
-        label: 'Boarded Studio Doors',
-        rect: { left: 68.3, top: 9.1, width: 25.4, height: 55 },
+        label: 'Boarded Doorway 4B',
+        rect: { left: 68.3, top: 21, width: 6.8, height: 51 },
+        kind: 'scavenge',
+        resetRule: 'wind',
+        requiresTool: 'axe',
+        puzzle: 'tic-tac-toe',
+        reward: { timber: 2, scrap: 1 },
+      },
+      /* Listed before the trunk & bookshelf so foreground furniture stays clickable on top */
+      {
+        id: 'f4-boarded-studio',
+        label: 'Boarded Studio Door',
+        rect: { left: 79.4, top: 9.1, width: 13.6, height: 67 },
         kind: 'scavenge',
         resetRule: 'wind',
         requiresTool: 'axe',

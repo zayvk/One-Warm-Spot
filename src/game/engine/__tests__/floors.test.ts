@@ -83,8 +83,8 @@ describe('building floor config', () => {
   const expectedIds: Record<DownstairsFloorId, string[]> = {
     1: ['f1-apt-1a', 'lift', 'f1-apt-1b', 'f1-side-door'],
     2: ['f2-cupboard', 'f2-boarded', 'lift', 'f2-room-2a', 'f2-door-2b'],
-    3: ['f3-broken-door', 'f3-room-3a', 'lift', 'f3-fusebox', 'f3-locker'],
-    4: ['f4-broken-door', 'f4-room-4a', 'lift', 'f4-boarded', 'f4-trunk', 'f4-bookshelf'],
+    3: ['f3-broken-door', 'f3-room-3a', 'lift', 'f3-room-3b', 'f3-fusebox', 'f3-door-3c', 'f3-locker'],
+    4: ['f4-broken-door', 'f4-room-4a', 'lift', 'f4-boarded', 'f4-boarded-studio', 'f4-trunk', 'f4-bookshelf'],
   };
 
   it('defines floors 1–4, each with its own painting and the expected hotspots', () => {
@@ -141,6 +141,12 @@ describe('building floor config', () => {
       reward: { timber: 2, scrap: 1 },
     });
     expect(byId['f4-boarded']).toMatchObject({
+      requiresTool: 'axe',
+      resetRule: 'wind',
+      puzzle: 'tic-tac-toe',
+      reward: { timber: 2, scrap: 1 },
+    });
+    expect(byId['f4-boarded-studio']).toMatchObject({
       requiresTool: 'axe',
       resetRule: 'wind',
       puzzle: 'tic-tac-toe',

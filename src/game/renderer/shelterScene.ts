@@ -1178,13 +1178,17 @@ export class ShelterScene {
   }
 
   /**
-   * Morning after sleep: adopt the store's regrown rooftop and swap in only the
-   * weeds / boxes that sprouted or turned up overnight (fresh spot, art & size),
-   * popping them in as the morning light fades up.
+   * Morning after sleep: adopt the store's overnight rooftop & downstairs resets,
+   * and swap in any weeds / cartons that sprouted or blew in overnight.
    */
   private applyOvernightRegrowth(outcome: RegrowOutcome<TerraceState>): void {
+    if (this.state.siteId !== 'terrace') return;
+    /* Keep floor puzzle resets & cleared failures in sync before interactSleep saves `this.terrace` */
+    this.terrace.repairedSpots = [...outcome.state.repairedSpots];
+    this.terrace.failedTodaySpots = [...outcome.state.failedTodaySpots];
+
     const ids = [...outcome.regrownWeeds, ...outcome.refreshedBoxes];
-    if (ids.length === 0 || this.state.siteId !== 'terrace') return;
+    if (ids.length === 0) return;
     this.terrace.spawns = outcome.state.spawns;
     this.terrace.clearedWeeds = [...outcome.state.clearedWeeds];
     this.terrace.searchedBoxes = [...outcome.state.searchedBoxes];

@@ -50,6 +50,7 @@ describe('parseTerraceState', () => {
       craftedPerks: [],
       slotAssignments: { 'slot-1': null, 'slot-2': null, 'slot-3': null, 'slot-4': null },
       spawns: null,
+      repairedSpots: [],
     });
   });
 

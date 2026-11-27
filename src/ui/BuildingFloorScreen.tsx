@@ -8,8 +8,13 @@ import {
   type FloorHotspot,
 } from '../game/data/floors.ts';
 import { fitStage, stageLeavesGaps } from '../game/engine/stageFit.ts';
+import { markStoredSpotRepaired, readStoredTerraceState } from '../game/engine/terraceState.ts';
+import { addResources } from '../game/engine/scavenge.ts';
+import { RESOURCE_MAP } from '../game/data/resources.ts';
 import { playClick, playHover, playLocked, startSiteAmbience } from '../game/audio/soundEngine.ts';
+import type { MiniGameResult } from '../game/minigames/types.ts';
 import ElevatorPanelModal from './ElevatorPanelModal.tsx';
+import ConnectWiresGame from './minigames/ConnectWiresGame.tsx';
 
 /** Floor paintings are 1376×768 (the same stage as the lift) */
 const ART_W = 1376;
@@ -66,15 +71,21 @@ export interface BuildingFloorScreenProps {
 
 /**
  * One explorable floor of the old apartment building (1–4): its painting on the
- * same aspect-locked stage as the lift, glowing scavenging spots ("puzzle coming
- * soon") and the centred lift, which opens the floor panel (including the Rooftop).
+ * same aspect-locked stage as the lift, glowing scavenging spots and the centred lift,
+ * which opens the floor panel (including the Rooftop). Spots with a live puzzle (Floor 3's
+ * fuse box → Connect the Wires) open it, are repaired for the rest of the run when solved
+ * and pay out their salvage once; the rest say their puzzle is coming soon.
  * The rooftop's day clock rests while you're down here.
  */
 export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScreenProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const pushNotice = useGameStore((s) => s.pushNotice);
+  const selectedMode = useGameStore((s) => s.selectedMode);
   const [panelOpen, setPanelOpen] = useState(false);
   const [glowing, setGlowing] = useState<{ id: string; key: number } | null>(null);
+  /* Spots fixed this run (kept in the rooftop's saved state) */
+  const [repaired, setRepaired] = useState<readonly string[]>(() => readStoredTerraceState()?.repairedSpots ?? []);
+  const [puzzleSpot, setPuzzleSpot] = useState<FloorHotspot | null>(null);
   const data = BUILDING_FLOORS[floor];
   const { w: viewW, h: viewH } = useViewport();
   const stage = useMemo(() => fitStage(viewW, viewH, ART_W, ART_H, floorSafeArea(floor)), [viewW, viewH, floor]);
@@ -103,9 +114,35 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
       openPanel();
       return;
     }
+    if (spot.puzzle) {
+      if (repaired.includes(spot.id)) {
+        playClick();
+        setGlowing({ id: spot.id, key: Date.now() });
+        pushNotice({ icon: '✨', title: spot.puzzle.repairedNotice, tone: 'build' });
+      } else {
+        playClick();
+        setPuzzleSpot(spot);
+      }
+      return;
+    }
     playLocked();
     setGlowing({ id: spot.id, key: Date.now() });
     pushNotice({ icon: '🔦', title: `${spot.label} — scavenging puzzle coming soon.`, tone: 'build' });
+  };
+
+  const closePuzzle = useCallback(() => setPuzzleSpot(null), []);
+
+  /* Solving a spot's puzzle repairs it for the rest of the run and pays out its salvage once */
+  const onPuzzleComplete = (result: MiniGameResult) => {
+    const spot = puzzleSpot;
+    setPuzzleSpot(null);
+    if (!spot?.puzzle || result.outcome !== 'win' || repaired.includes(spot.id)) return;
+    setRepaired(markStoredSpotRepaired(spot.id).repairedSpots);
+    const store = useGameStore.getState();
+    useGameStore.setState({ resources: addResources(store.resources, spot.puzzle.reward) });
+    store._save();
+    const firstReward = Object.keys(spot.puzzle.reward)[0] as keyof typeof RESOURCE_MAP | undefined;
+    pushNotice({ icon: (firstReward && RESOURCE_MAP[firstReward]?.emoji) || '🔧', title: spot.puzzle.doneNotice, tone: 'unlock' });
   };
 
   return (
@@ -156,64 +193,68 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
         />
 
-        {data.hotspots.map((spot) => (
-          <button
-            /* A fresh key per click restarts the glow animation */
-            key={glowing?.id === spot.id ? `${spot.id}-${glowing.key}` : spot.id}
-            type="button"
-            aria-label={spot.kind === 'lift' ? 'Elevator — choose a floor' : spot.label}
-            className={`ows-lobby-spot ${glowing?.id === spot.id ? 'ows-lobby-spot--glow' : ''}`}
-            style={{
-              left: `${spot.rect.left}%`,
-              top: `${spot.rect.top}%`,
-              width: `${spot.rect.width}%`,
-              height: `${spot.rect.height}%`,
-            }}
-            onMouseEnter={playHover}
-            onClick={() => onSpotClick(spot)}
-          >
-            <span className="ows-lobby-label">{spot.label}</span>
-            {spot.hasSparks && !reduceMotion && (
-              <span className="ows-sparks" aria-hidden="true">
-                {/* The box flashes cold blue in step with the main arc */}
-                <span
-                  className="ows-sparks__flash"
-                  style={{ animationDuration: `${ARCS[0].duration}s`, animationDelay: `${ARCS[0].delay}s` }}
-                />
-                {ARCS.map((arc) => (
+        {data.hotspots.map((spot) => {
+          const isRepaired = repaired.includes(spot.id);
+          const label = isRepaired && spot.puzzle ? spot.puzzle.repairedLabel : spot.label;
+          return (
+            <button
+              /* A fresh key per click restarts the glow animation */
+              key={glowing?.id === spot.id ? `${spot.id}-${glowing.key}` : spot.id}
+              type="button"
+              aria-label={spot.kind === 'lift' ? 'Elevator — choose a floor' : label}
+              className={`ows-lobby-spot ${glowing?.id === spot.id ? 'ows-lobby-spot--glow' : ''}`}
+              style={{
+                left: `${spot.rect.left}%`,
+                top: `${spot.rect.top}%`,
+                width: `${spot.rect.width}%`,
+                height: `${spot.rect.height}%`,
+              }}
+              onMouseEnter={playHover}
+              onClick={() => onSpotClick(spot)}
+            >
+              <span className="ows-lobby-label">{label}</span>
+              {spot.hasSparks && !isRepaired && !reduceMotion && (
+                <span className="ows-sparks" aria-hidden="true">
+                  {/* The box flashes cold blue in step with the main arc */}
                   <span
-                    key={`${arc.left}-${arc.top}`}
-                    className="ows-arc"
-                    style={{ left: `${arc.left}%`, top: `${arc.top}%` }}
-                  >
-                    <svg
-                      viewBox="0 0 40 34"
-                      style={{ animationDuration: `${arc.duration}s`, animationDelay: `${arc.delay}s` }}
-                    >
-                      <path d={ARC_PATHS[arc.path]} className="ows-arc__glow" />
-                      <path d={ARC_PATHS[arc.path]} className="ows-arc__core" />
-                    </svg>
-                  </span>
-                ))}
-                {EMBERS.map(([left, top, delay, kick]) => (
-                  <span
-                    key={`${left}-${top}-${delay}`}
-                    className="ows-ember"
-                    style={
-                      {
-                        left: `${left}%`,
-                        top: `${top}%`,
-                        animationDelay: `${delay}s`,
-                        animationDuration: `${ARCS.find((a) => Math.abs(a.delay - delay) < 0.2)?.duration ?? 2.2}s`,
-                        '--kick': `${kick}px`,
-                      } as CSSProperties
-                    }
+                    className="ows-sparks__flash"
+                    style={{ animationDuration: `${ARCS[0].duration}s`, animationDelay: `${ARCS[0].delay}s` }}
                   />
-                ))}
-              </span>
-            )}
-          </button>
-        ))}
+                  {ARCS.map((arc) => (
+                    <span
+                      key={`${arc.left}-${arc.top}`}
+                      className="ows-arc"
+                      style={{ left: `${arc.left}%`, top: `${arc.top}%` }}
+                    >
+                      <svg
+                        viewBox="0 0 40 34"
+                        style={{ animationDuration: `${arc.duration}s`, animationDelay: `${arc.delay}s` }}
+                      >
+                        <path d={ARC_PATHS[arc.path]} className="ows-arc__glow" />
+                        <path d={ARC_PATHS[arc.path]} className="ows-arc__core" />
+                      </svg>
+                    </span>
+                  ))}
+                  {EMBERS.map(([left, top, delay, kick]) => (
+                    <span
+                      key={`${left}-${top}-${delay}`}
+                      className="ows-ember"
+                      style={
+                        {
+                          left: `${left}%`,
+                          top: `${top}%`,
+                          animationDelay: `${delay}s`,
+                          animationDuration: `${ARCS.find((a) => Math.abs(a.delay - delay) < 0.2)?.duration ?? 2.2}s`,
+                          '--kick': `${kick}px`,
+                        } as CSSProperties
+                      }
+                    />
+                  ))}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Top-left: where we are (the lift itself opens the floor panel, including ↑ Rooftop) */}
@@ -245,6 +286,15 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
           {data.name}
         </span>
       </header>
+
+      {puzzleSpot?.puzzle?.game === 'connect-wires' && (
+        <ConnectWiresGame
+          mode={selectedMode}
+          title={puzzleSpot.puzzle.title}
+          onComplete={onPuzzleComplete}
+          onCancel={closePuzzle}
+        />
+      )}
 
       {panelOpen && (
         <ElevatorPanelModal

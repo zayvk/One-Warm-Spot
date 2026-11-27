@@ -2,6 +2,7 @@
 
 import { CUTSCENE_ASSETS, SCENE_STAGES } from './media.ts';
 import type { StageSafeArea } from '../engine/stageFit.ts';
+import type { ResourceId } from '../types/game.ts';
 
 /** Every lift stop: the four apartment floors and the Rooftop Terrace */
 export type BuildingFloorId = 1 | 2 | 3 | 4 | 'R';
@@ -19,10 +20,26 @@ export interface FloorHotspot {
   id: string;
   label: string;
   rect: FloorRect;
-  /** `lift` opens the elevator panel; `scavenge` will open a scavenging puzzle (coming soon) */
+  /** `lift` opens the elevator panel; `scavenge` opens its puzzle (or says one is coming soon) */
   kind: 'lift' | 'scavenge';
-  /** Live electric arcs & embers (e.g. a fuse box) */
+  /** Live electric arcs & embers (e.g. a fuse box) — they settle once the spot is repaired */
   hasSparks?: boolean;
+  /** A live scavenging puzzle: solving it repairs the spot once per run */
+  puzzle?: FloorPuzzle;
+}
+
+export interface FloorPuzzle {
+  game: 'connect-wires';
+  /** Mini-game heading */
+  title: string;
+  /** Materials awarded on the first repair */
+  reward: Partial<Record<ResourceId, number>>;
+  /** Hover label once repaired */
+  repairedLabel: string;
+  /** Toast on solving */
+  doneNotice: string;
+  /** Toast when clicked again after repair */
+  repairedNotice: string;
 }
 
 export interface BuildingFloor {
@@ -73,7 +90,21 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
       { id: 'f3-broken-door', label: 'Unhinged Door', rect: { left: 10.9, top: 22, width: 13.1, height: 66.5 }, kind: 'scavenge' },
       { id: 'f3-room-3a', label: 'Utility Door 3A', rect: { left: 25.6, top: 21.5, width: 5.3, height: 49.5 }, kind: 'scavenge' },
       LIFT,
-      { id: 'f3-fusebox', label: 'Sparking Fuse Box', rect: { left: 71.6, top: 26, width: 9.4, height: 24 }, kind: 'scavenge', hasSparks: true },
+      {
+        id: 'f3-fusebox',
+        label: 'Sparking Fuse Box',
+        rect: { left: 71.6, top: 26, width: 9.4, height: 24 },
+        kind: 'scavenge',
+        hasSparks: true,
+        puzzle: {
+          game: 'connect-wires',
+          title: 'Floor 3 · Fuse Box',
+          reward: { scrap: 3 },
+          repairedLabel: 'Repaired Fuse Box',
+          doneNotice: 'Fuse box repaired! Salvaged +3 Metal Scrap.',
+          repairedNotice: 'The wiring hums quietly—already repaired.',
+        },
+      },
       { id: 'f3-locker', label: 'Metal Utility Locker', rect: { left: 87.1, top: 18.9, width: 12.9, height: 81 }, kind: 'scavenge' },
     ],
   },

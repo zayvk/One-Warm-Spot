@@ -60,7 +60,7 @@ One-Warm-Spot/
     │   │   ├── survivalKit.ts   # 5-item Day 1 kit (with "how it helps" copy)
     │   │   ├── upgrades.ts      # The 10 macro upgrades (cost, energy, cozy, tier prerequisite) + categories
     │   │   ├── recipes.ts       # 5 grill RECIPES (tier, ingredients, ⚡/❤️, needsFire) + 3 MENDING_PERKS
-    │   │   ├── floors.ts        # Old apartment building: BuildingFloorId (1–4 | 'R'), BUILDING_FLOORS (painting + % hotspots), ELEVATOR_STOPS, liftTickSequence, liftRideTimeline
+    │   │   ├── floors.ts        # Old apartment building: BuildingFloorId (1–4 | 'R'), BUILDING_FLOORS (painting + % hotspots, optional live `puzzle` with reward / repaired label & toasts), ELEVATOR_STOPS, liftTickSequence, liftRideTimeline
     │   │   ├── media.ts         # Background, sprite, stage, prop (all station tier sprites), cutscene & Jigsaw painting (JIGSAW_IMAGES, not preloaded) paths + fallback gradients
     │   │   └── scenes/
     │   │       ├── types.ts     # ShelterSceneConfig, HotspotConfig, SceneObstacle, StationConfig / StationTierConfig, BuildSlotConfig, AssignableStationId schema (normalized 0–1 coords)
@@ -73,8 +73,8 @@ One-Warm-Spot/
     │   │   ├── scavenge.ts      # Pure runScavenge(), trip availability, capped resource adds
     │   │   ├── weather.ts       # Daily weather roll (clear / rain / wind), legacy 'breezy'/'storm' → wind (normalizeWeather), soft-rain water bonus, windy box bonus (windBoxBonus)
     │   │   ├── saveSystem.ts    # v4 save: strict validation, migration, persistent progress
-    │   │   ├── backup.ts        # .json backups: SaveState (+ stats) + Terrace `terraceState`; strict validate, export/import
-    │   │   ├── terraceState.ts  # `ows_terrace_state` parse/validate/load/save/clear (fire, boxes, weeds, 6 station tiers, ready flags, perks, spawns; legacy builtProps migration)
+    │   │   ├── backup.ts        # .json backups: SaveState (+ stats) + Terrace `terraceState` (incl. repairedSpots); strict validate, export/import
+    │   │   ├── terraceState.ts  # `ows_terrace_state` parse/validate/load/save/clear (fire, boxes, weeds, 6 station tiers, ready flags, perks, spawns, repairedSpots; legacy builtProps migration) + withSpotRepaired / markStoredSpotRepaired
     │   │   ├── terraceSpawns.ts # Pure seeded crate / carton / weed placement: generateTerraceSpawns, regrowTerraceSpawns (weather-driven overnight), repairTerraceSpawns, perimeterDistance, findSpawnProblems
     │   │   ├── buildSlots.ts    # Pure flexible build-slot rules: placeStationInSlot, unplacedStations, reconcileSlotAssignments (legacy migration), parseSlotAssignments (strict/lenient)
     │   │   ├── stageFit.ts      # Pure fitStage(): cover-fit a painted stage but never crop its safe area (any window shape); stageLeavesGaps()
@@ -86,7 +86,8 @@ One-Warm-Spot/
     │   │   ├── jigsaw.ts        # Pure Jigsaw engine: interlocking edges, buildPiecePath SVG cutter, pickJigsawImage, createJigsawState / placePiece / isSolved (seedable)
     │   │   ├── dotsAndBoxes.ts  # Pure Dots & Lines (Dots and Boxes) engine: applyEdgeMove (extra turn on a closed box), dotsStatus, chooseDotsCpuMove(state, mode, rng?) Cozy / Challenge AI
     │   │   ├── findTheObject.ts # Pure Find the Object "Rummage Pile" engine: 18-item RUMMAGE_ITEMS catalog, createRummageState, movePileItem / nudgeClutterItem / collectTargetItem, getNextHintTargetId (seedable)
-    │   │   └── __tests__/       # ticTacToe.test.ts, jigsaw.test.ts, dotsAndBoxes.test.ts, findTheObject.test.ts
+    │   │   ├── connectWires.ts  # Pure Connect the Wires engine: WIRE_SPECS (colour + symbol), createWireState (deranged terminals), tryConnectWire, isWireBoxFixed (seedable)
+    │   │   └── __tests__/       # ticTacToe.test.ts, jigsaw.test.ts, dotsAndBoxes.test.ts, findTheObject.test.ts, connectWires.test.ts
     │   ├── audio/
     │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9 site soundscapes, rooftop weather layer (setWeatherAmbience), shelter + lift foley (incl. playHarvest / playCook / playSew), mini-game playBoxChime
     │   ├── store/
@@ -107,10 +108,11 @@ One-Warm-Spot/
         ├── minigames/DotsAndBoxesGame.tsx # Hand-inked Dots & Lines card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
         ├── minigames/FindTheObjectGame.tsx # Wooden rummage-drawer card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
         ├── minigames/rummageIcons.tsx # Hand-inked SVG art for the 18 rummage items (RummageArt in the pile, RummageIcon for the checklist) — 0 image files
+        ├── minigames/ConnectWiresGame.tsx # Steel junction-box wiring card implementing MiniGameProps — LIVE on Floor 3's fuse box
         ├── TerraceLiftCutscene.tsx   # Lift ride between any two stops (fromFloor → toFloor): push-in / step-in, ticking indicator, destination painting + caption; the arrival is the 1 → R ride
         ├── LiftRideScreen.tsx        # Full-screen shell for in-building rides (fade-out, Skip button / click / Space-Enter-Escape)
         ├── ElevatorPanelModal.tsx    # Antique brass floor picker (R, 4, 3, 2, 1; current floor lit & disabled; Cancel / outside click / Escape)
-        ├── BuildingFloorScreen.tsx   # One explorable apartment floor (1–4) from floors.ts on a safe-area stage (fitStage + floorSafeArea, blurred fill on extreme shapes): % hotspots with glow + "puzzle coming soon" toast, fuse-box electric arcs, the lift (opens the floor panel), floor title
+        ├── BuildingFloorScreen.tsx   # One explorable apartment floor (1–4) from floors.ts on a safe-area stage (fitStage + floorSafeArea, blurred fill on extreme shapes): % hotspots with glow + "puzzle coming soon" toast (or a live puzzle: Floor 3's fuse box → ConnectWiresGame, repaired once per run), fuse-box electric arcs until repaired, the lift (opens the floor panel), floor title
         ├── liftStage.tsx             # Shared lift pieces: cover-fitted stage size, sliding doors, frame, amber floor readout, caption
         ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas + ← Title + emblem badge + weather chip (☀️ Clear / 🌧️ Rain / 🍃 Wind, effect tooltip) + 7-item Pouch HUD (hover/focus tooltips) + VitalityDialHud; drives setWeatherAmbience + PropActionMenu + StationPopover; the stairwell door opens ElevatorPanelModal (`onRide`)
         ├── VitalityDialHud.tsx       # Bottom-left bronze Vitality Medallion (80px; phase sky window + progress ring + centred Day plaque) + slim smoked-glass Stamina/Strength capsule tucked behind it
@@ -262,7 +264,7 @@ Flow:
 
 **HUD:** `.ows-sky-chip` in the shelter header (☀️ Clear / 🌧️ Rain / 🍃 Wind) with a hover/focus tooltip of its effect. To keep the header clear of the centred pouch: the shelter name shows only above 1360px, the chip drops its label at ≤ 840px and the emblem hides at ≤ 760px.
 
-### Scavenging Mini-Games (framework + all four: Tic-Tac-Toe, Jigsaw, Dots & Lines, Find the Object)
+### Scavenging Mini-Games (framework + five games: Tic-Tac-Toe, Jigsaw, Dots & Lines, Find the Object, Connect the Wires — the last one live on Floor 3)
 
 **Contract (`src/game/minigames/types.ts`, no React):** every puzzle component takes `MiniGameProps { mode: GameMode; title?: string; onComplete(result: MiniGameResult); onCancel() }` and reports `MiniGameResult { outcome: 'win' | 'draw' | 'loss' | 'cancelled'; mode }`. Difficulty follows the active shelter's `selectedMode`. The puzzle never touches resources — the host hotspot decides the reward.
 
@@ -327,6 +329,26 @@ Flow:
 - **Sizing:** `--rum-tray-w = min(600px, 100vw − 280px, (100vh − 120px) × 1.6)` with a 200px side column. At ≤ 520px height: `100vw − 260px` and `(100vh − 110px) × 1.6` with a 170px column, and Play Again / Continue sit side by side so Challenge's five-row checklist still fits. Checked in-browser at 667×375 and 844×390 (both modes), 1024×768 and 1440×900, before and after finishing: no card scroll, and every pile was cleared just by tapping.
 - **Reduce Motion:** no nudge glide, pop, glint or ring pulse; found items simply disappear, and the hint ring is static.
 
+**Connect the Wires engine (`src/game/minigames/connectWires.ts`, pure, seedable via `rng`):**
+- **Wires:** `WIRE_SPECS` lists 6 wires, each with a colour and a symbol: terracotta ●, sage ▲, ochre ■, slate ◆, plum ★, teal ✚. `wireCount(mode)` → 4 (Cozy, the first four) or 6 (Challenge).
+- **`createWireState(mode, rng?)`** → `{ mode, left, right, connected }`. Both strips are shuffled, and `right` is re-shuffled until it's a derangement of `left` (`straightAcross() === 0`, so every wire crosses). If the rng is stuck, a one-row rotation is used, which is always a derangement.
+- **`tryConnectWire(state, leftIndex, rightIndex)`** → `{ state, matched }`. It joins the pair only when both terminals carry the same wire and it isn't already joined. Mismatches, repeats and out-of-range indices return the same state with `matched: false`.
+- **Also:** `isWireConnected`, `countConnected`, `isWireBoxFixed`.
+
+**UI (`src/ui/minigames/ConnectWiresGame.tsx`):** reuses the `.ows-mg-*` card (`.ows-wire-card`), with the panel beside a status column.
+- **Header and status:** title, a `2 / 4` pill, the mode badge and ×. The status line reads *"Drag each wire to its matching terminal — or tap one, then its match"*, *"Now tap the matching terminal on the right"*, *"Those don't match — check the colour and symbol"*, then *"Wiring restored!"* with a single **Continue** (`onComplete({ outcome: 'win', mode })`). × / Escape → `onCancel`.
+- **Panel:** one SVG, 600 units wide and 96 + 68 × (n − 1) tall, with per-instance steel / brass gradients. It has a bevelled steel plate with rivets, scuffs and a *"JUNCTION · 230V"* stamp, plus two dark terminal strips. Each terminal has a status light (dim → glowing green when connected), an insulated colour stub with a highlight, a parchment symbol badge and a brass post. Joined wires are cubic-Bézier cords (`cordPath`, with sag growing with distance) drawn under the posts, in an ink, edge, fill and highlight stroke.
+- **Controls:** each terminal is a `role="button"` `<g>` with a generous transparent hit row. Pressing a left terminal captures the pointer; past 6px it becomes a drag that draws a live cord to the pointer, snapping onto any unconnected right post within 46 units. Releasing there tries that pair; releasing elsewhere just retracts. A plain tap selects or deselects a wire (pulsing gold ring), and tapping a right terminal tries the pair. Enter / Space do the same. Focus starts on the first left terminal.
+- **Feedback:** a correct pair gets a brass glint and a cord glow plus `playBoxChime`; the last one instead plays `playClaim` as the panel's frame lights up. A wrong pair shakes the left terminal, pulses the right post red and plays `playLocked`.
+- **Sizing:** `width = min(520px, 100vw − 260px, (100vh − 120px) × ratio)` with a 180px side column. At ≤ 520px height: `100vw − 230px` and `(100vh − 104px) × ratio` with a 150px column. Checked in-browser at 1024×768 (Cozy) and 667×375 (Challenge, 6 wires, before and after finishing): no card scroll. Reduce Motion drops the ring pulse, glint, red pulse, shake and cord glow.
+
+**Live on Floor 3 (`BuildingFloorScreen.tsx` + `data/floors.ts`):**
+- **Data:** `FloorHotspot.puzzle?: FloorPuzzle { game: 'connect-wires', title, reward, repairedLabel, doneNotice, repairedNotice }`. `f3-fusebox` uses `title: 'Floor 3 · Fuse Box'`, `reward: { scrap: 3 }`, `repairedLabel: 'Repaired Fuse Box'`.
+- **Before repair:** the screen reads `repairedSpots` from the stored rooftop state on mount. Clicking an unrepaired puzzle spot (`playClick`) mounts `<ConnectWiresGame mode={selectedMode} title=… />`.
+- **On a `'win'`:** `markStoredSpotRepaired(id)` saves the spot into `ows_terrace_state`, the reward is added via `addResources` and `_save()`, and a 🔩 `unlock` toast shows *"Fuse box repaired! Salvaged +3 Metal Scrap."*.
+- **After repair:** the spot's sparks stop rendering, its label and aria-label become *"Repaired Fuse Box"*, and clicking it only glows and shows a ✨ toast (*"The wiring hums quietly—already repaired."*). Cancelling changes nothing. Verified in-browser: scrap 3 → 6, sparks gone, label swapped, the stored list updated, and all of it still there after a reload.
+- **Persistence:** `TerraceState.repairedSpots: string[]` is `[]` on a fresh run, so choosing a shelter or resetting clears it. Lenient loading keeps only unique strings and defaults to `[]` for older saves; strict backup validation rejects a non-string-list. The rooftop scene keeps it on every save, since its state comes from `loadTerraceState()` and only one screen is mounted at a time. Helpers: `isSpotRepaired`, `withSpotRepaired` (immutable, idempotent), `markStoredSpotRepaired`.
+
 ### The Old Elevator: Floor Picker, Lift Rides & Apartment Floors
 
 **Data (`data/floors.ts`, pure, unit-tested):**
@@ -339,7 +361,7 @@ Flow:
 |---|---|---|
 | 1 · Ground Floor · Lobby | `terrace-lobby.webp` | `apartment-1a` Apartment 1A · `apartment-1b` Apartment 1B · `side-doorway` Open Doorway · `lift` |
 | 2 · Residential Hallway | `terrace-floor-2.webp` | `f2-cupboard` Hallway Cupboard · `f2-boarded` Boarded Doorway & Debris · `f2-room-2a` Sunlit Room 2A · `f2-door-2b` Cracked Door 2B · `lift` |
-| 3 · Utility Corridor | `terrace-floor-3.webp` | `f3-broken-door` Unhinged Door · `f3-room-3a` Utility Door 3A · `f3-fusebox` Sparking Fuse Box (`hasSparks`) · `f3-locker` Metal Utility Locker · `lift` |
+| 3 · Utility Corridor | `terrace-floor-3.webp` | `f3-broken-door` Unhinged Door · `f3-room-3a` Utility Door 3A · `f3-fusebox` Sparking Fuse Box (`hasSparks`, live `puzzle`: Connect the Wires → *Repaired Fuse Box*, +3 scrap) · `f3-locker` Metal Utility Locker · `lift` |
 | 4 · Skylight Landing | `terrace-floor-4.webp` | `f4-broken-door` Splintered Doorway · `f4-room-4a` Dark Hallway 4A · `f4-boarded` Boarded Studio Doors · `f4-trunk` Dusty Steamer Trunk · `f4-bookshelf` Hallway Bookshelf · `lift` |
 
 **Ride timing (`liftRideTimeline`):**
@@ -475,6 +497,12 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
         - **Burial:** every target has at least one overlapping piece above it; Challenge averages ≥ 3 covers per target, more than Cozy, with > 1.5× the clutter tilt; targets sit in the lower layers (> 25 Challenge pieces above them). Seeded determinism.
     - **Moving:** `movePileItem` moves immutably, lifts to the top once (no endless climbing), clamps to both corners, and ignores targets, unknown ids and NaN. `nudgeClutterItem` stays in bounds, lifts the piece and travels at most about `NUDGE_DISTANCE`; a piece near the left wall goes left, one pinned in a corner comes back out; it ignores targets and unknown ids.
     - **Collecting:** clutter, unknown ids and repeats are rejected with the state unchanged; collecting every target in any order completes the pile; `getNextHintTargetId` walks the checklist and returns `null` once everything is found.
+  - `connectWires.test.ts` (`src/game/minigames/__tests__`):
+    - **Boxes:** Cozy has 4 and Challenge 6 colour + symbol wires on both strips (exact colour sets, all symbols distinct). Across 300 seeds per mode no wire runs straight across, even with a stuck rng. The shuffle varies across seeds and is deterministic per seed.
+    - **Connecting:** `tryConnectWire` locks a match immutably and leaves the state untouched for mismatches, repeats and out-of-range terminals; the box is fixed only after the last wire.
+    - **Floor data:** `f3-fusebox` is a live `connect-wires` puzzle paying 3 scrap.
+    - **Persistence:** `repairedSpots` is empty on a fresh run; `withSpotRepaired` is immutable and idempotent. It survives a save round-trip; older saves load as `[]`, and lenient loading drops junk and duplicates.
+    - **Backups:** they carry the list, older rooftops import as `[]`, and strict validation rejects a non-list or non-string entries.
   - `resumeLocation.test.ts` — every screen maps to its refresh destination (arrival → rooftop, ride → its destination), round-trips, Title fallback without a claimed shelter (floors need the Terrace), damaged data ignored.
 - **Lint:** `npx oxlint src` (0 warnings).
 - **E2E:** `npm run test:e2e` (`playwright test`) — 28 scenarios driving the real game in **system Chrome** (`channel: 'chrome'`; `npx playwright install` is blocked by the corporate TLS proxy, so no bundled browser is downloaded). Playwright starts its own `vite` dev server on port 5180. Every test fails on any page error or `console.error`. Canvas clicks map normalized scene coords through the same `fitStage()` the scene uses; state is asserted from `localStorage`. Reports land in `playwright-report/` / `test-results/` (git-ignored).
@@ -609,9 +637,10 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
   - **Rooms:** illustrated apartment interiors and scavenging spots reached from the shipped building floors (`BUILDING_FLOORS` hotspots with `kind: 'scavenge'` in `data/floors.ts`, rendered by `BuildingFloorScreen.tsx`), replacing their "scavenging puzzle coming soon" toast.
   - **Reusable mini-game overlay:** one framework triggered from room scavenging hotspots (`safe`, `drawer`, `cupboard`, `under-bed`, `shelf`, …). Rewards feed back cleanly into the main Zustand resource store (`addResources()` + `_save()`); occasional Found Traveler Diary Pages are a later hook.
   - **Shared contract (built):** `src/game/minigames/types.ts` — `MiniGameProps { mode, title?, onComplete(result), onCancel }` and `MiniGameResult { outcome: 'win' | 'draw' | 'loss' | 'cancelled', mode }`. A mini-game never touches resources; the host hotspot maps the outcome to rewards.
-  - **Starter puzzle modules — all four built (✅ not wired yet):** **Find the Object**, **Jigsaw Puzzle**, **Tic-Tac-Toe** and **Dots & Lines**. Next milestone: wire them into the four apartment floors' scavenging spots, replacing the "coming soon" toasts.
+  - **Starter puzzle modules — five built:** **Connect the Wires** (✅ **live on Floor 3's fuse box**), plus **Find the Object**, **Jigsaw Puzzle**, **Tic-Tac-Toe** and **Dots & Lines** (✅ built, not wired yet). Next milestone: wire the other four into the remaining scavenging spots the same way (`FloorPuzzle` data on the hotspot, a `game` case in `BuildingFloorScreen`, `repairedSpots` for once-per-run rewards), replacing the "coming soon" toasts.
+  - [x] **Connect the Wires (built, LIVE):** pure engine `src/game/minigames/connectWires.ts` + UI `src/ui/minigames/ConnectWiresGame.tsx`, mounted by `BuildingFloorScreen` for `f3-fusebox` (+3 🔩 scrap once per run, sparks off, *Repaired Fuse Box*).
   - [x] **Tic-Tac-Toe (built, unmounted):** pure engine `src/game/minigames/ticTacToe.ts` + UI `src/ui/minigames/TicTacToeGame.tsx`. Next: mount it from a floor/apartment hotspot (e.g. replace one "scavenging puzzle coming soon" toast), pass `useGameStore().selectedMode` as `mode`, and award materials on `onComplete`.
-  - [x] **Jigsaw Puzzle (built, unmounted):** pure engine `src/game/minigames/jigsaw.ts` + UI `src/ui/minigames/JigsawGame.tsx` + `JIGSAW_IMAGES` (15 paintings in `public/source/jigsaw/` + 4 shelter scenes). Wire it the same way, e.g. to a "torn note / map / jammed panel" spot such as Floor 4's bookshelf or Floor 3's fuse box. Its only finished outcome is `'win'`.
+  - [x] **Jigsaw Puzzle (built, unmounted):** pure engine `src/game/minigames/jigsaw.ts` + UI `src/ui/minigames/JigsawGame.tsx` + `JIGSAW_IMAGES` (15 paintings in `public/source/jigsaw/` + 4 shelter scenes). Wire it the same way, e.g. to a "torn note / map / jammed panel" spot such as Floor 4's bookshelf. Its only finished outcome is `'win'`.
   - [x] **Dots & Lines (built, unmounted):** pure engine `src/game/minigames/dotsAndBoxes.ts` + UI `src/ui/minigames/DotsAndBoxesGame.tsx`. Wire it the same way (e.g. a latch, safe or locker spot such as Floor 3's locker). It can end in `'win'`, `'loss'` or (Challenge only) `'draw'`.
   - [x] **Find the Object (built, unmounted):** pure engine `src/game/minigames/findTheObject.ts` + art `src/ui/minigames/rummageIcons.tsx` + UI `src/ui/minigames/FindTheObjectGame.tsx`. A natural fit for drawer / cupboard / trunk spots (e.g. Floor 2's Hallway Cupboard, Floor 4's Steamer Trunk). Its only finished outcome is `'win'`.
   - **Cozy guarantee:** no punishing timers or harsh failure states; puzzles can always be retried or left.
@@ -642,7 +671,7 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - **Rest fast-forward:** resting at the shelter moves day → dusk → night immediately (+25 Stamina) — a cozy "skip ahead", so nobody has to wait out the real-time clock.
 - **Sit pause after lighting the fire:** ~0.6s where clicks are ignored so the sit-down is visible.
 - **Generous start pool:** `TEST_MODE_GENEROUS_START` stays on during the build phase; switch off and tune scarcity once more gathering exists.
-- **Downstairs placeholders:** every floor scavenging spot shows "puzzle coming soon" until the mini-games are wired in (all four are built and unmounted — see Planned / Next Milestones).
+- **Downstairs placeholders:** every floor scavenging spot except Floor 3's fuse box (live: Connect the Wires) shows "puzzle coming soon" until its mini-game is wired in (the other four games are built and unmounted — see Planned / Next Milestones).
 
 ### 🗺️ Backlog
 

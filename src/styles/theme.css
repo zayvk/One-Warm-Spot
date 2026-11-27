@@ -2209,7 +2209,8 @@ button:disabled {
 }
 
 .ows-jig-progress,
-.ows-rum-progress {
+.ows-rum-progress,
+.ows-wire-progress {
   padding: 2px 8px;
   border-radius: 999px;
   font-family: var(--font-display);
@@ -3078,4 +3079,249 @@ button:disabled {
 
 [data-reduce-motion='true'] .ows-rum-glint {
   animation: none;
+}
+
+/* ───── Connect the Wires: a weathered steel junction box with brass terminals ───── */
+
+.ows-wire-card {
+  width: auto;
+  max-width: calc(100vw - 24px);
+}
+
+.ows-wire-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.ows-wire-panel {
+  flex: none;
+  display: block;
+  width: min(520px, calc(100vw - 260px), calc((100vh - 120px) * var(--wire-ratio)));
+  aspect-ratio: var(--wire-ratio);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 4px #6e4526,
+    0 0 0 5px rgba(255, 220, 170, 0.35),
+    0 6px 14px rgba(40, 24, 10, 0.35);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: box-shadow 500ms ease;
+}
+
+/* Power restored: a warm glow around the box */
+.ows-wire-panel--powered {
+  box-shadow:
+    0 0 0 4px #8a5c30,
+    0 0 0 6px rgba(255, 214, 130, 0.85),
+    0 0 24px 6px rgba(255, 196, 92, 0.5),
+    0 6px 14px rgba(40, 24, 10, 0.35);
+}
+
+.ows-wire-stamp {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  fill: rgba(255, 240, 210, 0.22);
+  text-anchor: middle;
+}
+
+.ows-wire-symbol {
+  font-size: 18px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.ows-wire-terminal {
+  cursor: pointer;
+  outline: none;
+}
+
+.ows-wire-terminal--left {
+  cursor: grab;
+}
+
+.ows-wire-terminal[aria-disabled='true'] {
+  cursor: default;
+}
+
+.ows-wire-hit {
+  fill: transparent;
+}
+
+.ows-wire-terminal:not([aria-disabled='true']):hover .ows-wire-hit,
+.ows-wire-terminal:focus-visible .ows-wire-hit {
+  fill: rgba(255, 220, 150, 0.1);
+  stroke: rgba(255, 214, 140, 0.55);
+  stroke-width: 2;
+}
+
+.ows-wire-terminal--armed:not([aria-disabled='true']) .ows-wire-hit {
+  fill: rgba(255, 220, 150, 0.08);
+}
+
+.ows-wire-light {
+  fill: #2e3a2b;
+  stroke: #1e1b19;
+  stroke-width: 2;
+  transition: fill 300ms ease;
+}
+
+.ows-wire-light--on {
+  fill: #9be283;
+  filter: drop-shadow(0 0 5px rgba(150, 240, 120, 0.95));
+}
+
+.ows-wire-ring {
+  fill: none;
+  stroke: rgba(255, 214, 120, 0.95);
+  stroke-width: 4;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: owsWireRing 900ms ease-in-out infinite alternate;
+}
+
+@keyframes owsWireRing {
+  from {
+    opacity: 0.5;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+.ows-wire-cord path {
+  fill: none;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.ows-wire-cord--live {
+  opacity: 0.92;
+}
+
+.ows-wire-cord--fresh {
+  animation: owsWireSnap 700ms ease-out;
+}
+
+@keyframes owsWireSnap {
+  0% {
+    filter: drop-shadow(0 0 10px rgba(255, 206, 110, 1));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 rgba(255, 206, 110, 0));
+  }
+}
+
+/* Brass glint on a correct post, a soft red pulse on a wrong one */
+.ows-wire-glint,
+.ows-wire-miss {
+  fill: none;
+  stroke-width: 6;
+  pointer-events: none;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: owsWirePulse 650ms ease-out;
+}
+
+.ows-wire-glint {
+  stroke: rgba(255, 210, 110, 0.95);
+}
+
+.ows-wire-miss {
+  stroke: rgba(220, 110, 80, 0.9);
+}
+
+@keyframes owsWirePulse {
+  0% {
+    opacity: 1;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+/* A wrong wire springs back with a little bounce */
+.ows-wire-shake {
+  animation: owsWireShake 420ms ease;
+}
+
+@keyframes owsWireShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(10px);
+  }
+  50% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+.ows-wire-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 180px;
+}
+
+.ows-wire-side .ows-mg-status {
+  margin: 4px 0 0;
+  text-align: left;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+@media (max-height: 520px) {
+  .ows-wire-card {
+    padding: 10px 12px 12px;
+  }
+
+  .ows-wire-card .ows-mg-header {
+    padding-bottom: 6px;
+  }
+
+  .ows-wire-body {
+    gap: 12px;
+    margin-top: 6px;
+  }
+
+  .ows-wire-panel {
+    width: min(520px, calc(100vw - 230px), calc((100vh - 104px) * var(--wire-ratio)));
+  }
+
+  .ows-wire-side {
+    width: 150px;
+  }
+
+  .ows-wire-side .ows-mg-status {
+    font-size: 0.84rem;
+  }
+}
+
+[data-reduce-motion='true'] .ows-wire-ring,
+[data-reduce-motion='true'] .ows-wire-cord--fresh,
+[data-reduce-motion='true'] .ows-wire-glint,
+[data-reduce-motion='true'] .ows-wire-miss,
+[data-reduce-motion='true'] .ows-wire-shake {
+  animation: none;
+}
+
+[data-reduce-motion='true'] .ows-wire-panel,
+[data-reduce-motion='true'] .ows-wire-light {
+  transition: none;
 }

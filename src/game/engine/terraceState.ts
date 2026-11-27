@@ -63,6 +63,8 @@ export interface TerraceState {
   slotAssignments: SlotAssignments;
   /** This run's box & weed layout; `null` = hand-placed defaults (older saves) */
   spawns: TerraceSpawns | null;
+  /** Downstairs scavenging spots fixed this run (e.g. `f3-fusebox`) */
+  repairedSpots: string[];
 }
 
 export const STATION_TIER_KEY: Record<StationId, keyof TerraceState> = {
@@ -111,6 +113,7 @@ export function emptyTerraceState(spawns: TerraceSpawns | null = null): TerraceS
     craftedPerks: [],
     slotAssignments: emptySlotAssignments(),
     spawns,
+    repairedSpots: [],
   };
 }
 
@@ -196,6 +199,7 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
     if (!isStringList(obj.searchedBoxes) || !isStringList(obj.clearedWeeds)) return null;
     if (obj.builtProps !== undefined && !isStringList(obj.builtProps)) return null;
     if (obj.craftedPerks !== undefined && !isStringList(obj.craftedPerks)) return null;
+    if (obj.repairedSpots !== undefined && !isStringList(obj.repairedSpots)) return null;
     for (const key of ['planterReady', 'barrelReady']) {
       if (obj[key] !== undefined && typeof obj[key] !== 'boolean') return null;
     }
@@ -233,6 +237,8 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
   state.planterReady = state.planterTier >= 1 && (typeof obj.planterReady === 'boolean' ? obj.planterReady : true);
   state.barrelReady = state.barrelTier >= 1 && (typeof obj.barrelReady === 'boolean' ? obj.barrelReady : true);
   state.craftedPerks = [...new Set(stringList(obj.craftedPerks).filter((id) => PERK_IDS.has(id)))];
+  /* Saves from before the downstairs puzzles have none */
+  state.repairedSpots = [...new Set(stringList(obj.repairedSpots))];
 
   /* Older rooftops have no slot data: built stations go back to their old spots */
   const slots = parseSlotAssignments(obj.slotAssignments, strict);
@@ -322,6 +328,22 @@ export function saveTerraceState(s: TerraceState): void {
   try {
     localStorage.setItem(TERRACE_STATE_KEY, JSON.stringify(s));
   } catch { /* ignore storage restrictions */ }
+}
+
+export function isSpotRepaired(state: Pick<TerraceState, 'repairedSpots'> | null, spotId: string): boolean {
+  return Boolean(state?.repairedSpots.includes(spotId));
+}
+
+/** Records a downstairs spot as fixed (immutable; the same state back if it already was) */
+export function withSpotRepaired(state: TerraceState, spotId: string): TerraceState {
+  return isSpotRepaired(state, spotId) ? state : { ...state, repairedSpots: [...state.repairedSpots, spotId] };
+}
+
+/** Marks a downstairs spot fixed in the stored rooftop state and persists it */
+export function markStoredSpotRepaired(spotId: string): TerraceState {
+  const state = withSpotRepaired(loadTerraceState(), spotId);
+  saveTerraceState(state);
+  return state;
 }
 
 /**

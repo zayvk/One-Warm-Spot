@@ -79,7 +79,11 @@ One-Warm-Spot/
     │   │   ├── buildSlots.ts    # Pure flexible build-slot rules: placeStationInSlot, unplacedStations, reconcileSlotAssignments (legacy migration), parseSlotAssignments (strict/lenient)
     │   │   ├── stageFit.ts      # Pure fitStage(): cover-fit a painted stage but never crop its safe area (any window shape); stageLeavesGaps()
     │   │   ├── resumeLocation.ts # Refresh-resume: per-tab sessionStorage location (title / site-select / rooftop / floor N), validated against the run
-    │   │   └── __tests__/       # Vitest suites (save, scavenging & modes, progression & unlocks, day cycle, Terrace state/spawns, stations & cooking, backups, floors, stage fit)
+    │   │   └── __tests__/       # Vitest suites (save, scavenging & modes, progression & unlocks, day cycle, Terrace state/spawns, stations & cooking, backups, floors, stage fit, refresh-resume)
+    │   ├── minigames/
+    │   │   ├── types.ts         # Shared mini-game contract: MiniGameOutcome ('win'|'draw'|'loss'|'cancelled'), MiniGameResult, MiniGameProps
+    │   │   ├── ticTacToe.ts     # Pure Tic-Tac-Toe rules (applyMove, evaluateBoard, findWinningMove) + chooseCpuMove(board, mode, rng?) Cozy / Challenge AI (memoized minimax)
+    │   │   └── __tests__/       # ticTacToe.test.ts
     │   ├── audio/
     │   │   └── soundEngine.ts   # Web Audio singleton: Music & SFX/Ambience channels, 9 site soundscapes, rooftop weather layer (setWeatherAmbience), shelter + lift foley (incl. playHarvest / playCook / playSew)
     │   ├── store/
@@ -95,6 +99,7 @@ One-Warm-Spot/
         ├── ArrivalCutscene.tsx       # Cutscene shell (fade-out, Skip button, Space/Enter/Escape); Ken Burns fade for most shelters
         ├── cutsceneKeys.ts           # isCutsceneSkipKey(): Space/Enter/Escape skip only when no control is focused and no dialog (e.g. Settings) is open
         ├── keepInView.ts             # useKeepInView(): floating prop menus / station popover stay on screen below the pouch (scroll if taller than the room)
+        ├── minigames/TicTacToeGame.tsx # Parchment Tic-Tac-Toe card implementing MiniGameProps (not mounted yet — ready for a floor/apartment hotspot)
         ├── TerraceLiftCutscene.tsx   # Lift ride between any two stops (fromFloor → toFloor): push-in / step-in, ticking indicator, destination painting + caption; the arrival is the 1 → R ride
         ├── LiftRideScreen.tsx        # Full-screen shell for in-building rides (fade-out, Skip button / click / Space-Enter-Escape)
         ├── ElevatorPanelModal.tsx    # Antique brass floor picker (R, 4, 3, 2, 1; current floor lit & disabled; Cancel / outside click / Escape)
@@ -250,6 +255,17 @@ Flow:
 
 **HUD:** `.ows-sky-chip` in the shelter header (☀️ Clear / 🌧️ Rain / 🍃 Wind) with a hover/focus tooltip of its effect. To keep the header clear of the centred pouch: the shelter name shows only above 1360px, the chip drops its label at ≤ 840px and the emblem hides at ≤ 760px.
 
+### Scavenging Mini-Games (framework + Tic-Tac-Toe)
+
+**Contract (`src/game/minigames/types.ts`, no React):** every puzzle component takes `MiniGameProps { mode: GameMode; title?: string; onComplete(result: MiniGameResult); onCancel() }` and reports `MiniGameResult { outcome: 'win' | 'draw' | 'loss' | 'cancelled'; mode }`. Difficulty follows the active shelter's `selectedMode`. The puzzle never touches resources — the host hotspot decides the reward.
+
+**Tic-Tac-Toe engine (`src/game/minigames/ticTacToe.ts`, pure, seedable via `rng`):** `Cell = 'player' | 'cpu' | null` on a 9-cell row-major board; `applyMove(board, i, mark)` returns a new board or `null` (occupied, off-board or finished game); `evaluateBoard()` → `{ status: 'playing' | 'win' | 'draw' | 'loss', winningLine }` (win/loss from the player's view); `findWinningMove()`; `rankCpuMoves()` (memoized minimax over < 3⁹ positions — sooner wins score higher, ties shuffled by `rng`).
+- `chooseCpuMove(board, 'cozy', rng?)`: a random open cell, except `COZY_SMART_CHANCE` (25%) of the time it takes a win or blocks.
+- `chooseCpuMove(board, 'challenge', rng?)`: always wins, always blocks, otherwise the minimax best — with `CHALLENGE_SECOND_BEST_CHANCE` (15%) of the second-best cell while fewer than 4 marks are down, so a perfect player can sometimes fork.
+- Measured over 2,000 seeded games (player first): a perfect player wins ~94% vs Cozy and ~7% vs Challenge (the rest draws, never a loss); a random player wins ~46% vs Cozy and ~0.3% vs Challenge.
+
+**UI (`src/ui/minigames/TicTacToeGame.tsx`, not mounted yet):** a `.ows-mg-overlay` / `.ows-mg-card` parchment card with bronze trim — title (default *"Tic-Tac-Toe"*), a Cozy / Challenge badge, × close; a status line (*"Your turn"*, *"Thinking…"*, *"You won!"* / *"A quiet draw"* / *"Almost — try again"*); a carved-wood `.ows-ttt-board` of parchment cells with hand-drawn SVG marks (terracotta X, sage O) that draw in; golden glowing winning cells plus a brushed gold strike. The player always starts; the opponent answers after 380ms (120ms under Reduce Motion, which also skips the draw-in animations). Sounds: `playHover` on open cells, `playClick` on every move, `playClaim` on a win, `playLocked` on a loss. When finished: **Play Again** (fresh board) or **Continue** (`onComplete`). × / Escape → `onCancel` at any time. Cells are labelled buttons (*"Row 2, column 3: empty"*), keyboard focus starts on the board, and the status is a polite live region.
+
 ### The Old Elevator: Floor Picker, Lift Rides & Apartment Floors
 
 **Data (`data/floors.ts`, pure, unit-tested):**
@@ -383,6 +399,7 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
   - `terraceSpawns.test.ts` — 250 seeded layouts all pass `findSpawnProblems` (inside bounds, clear of walls/structures/entry path, no crowding) and keep clear of the fixed stations, every build slot and their stand spots; ≥ 95% of props on the perimeter band; valid hand-placed defaults; composition (both wooden crates, 1–2 distinct fresh cartons — both counts seen — and two of each weed) and scale range; per-seed determinism; validator flags crowded/off-floor props and a missing crate. `repairTerraceSpawns` leaves valid layouts alone and moves only overlapping props (keeping their art). `regrowTerraceSpawns` across 250 seeds: **rain** regrows 2–3 weeds (both counts seen, capped by cleared) and **0** boxes; **wind** blows in 1–2 cartons with fresh carton art only (both counts seen, ≥ 85% on the perimeter), **0** weeds, crates (even opened ones) untouched; windy nights fill up to exactly 3 cartons and then stop; **clear** regrows exactly 1 weed and 0 boxes; a full rooftop is untouched; seeded determinism per weather; the `spawns: null` default layout; 40 mixed-weather cleared-out nights stay valid within the caps.
   - `backup.test.ts` — backups from before Rain & Wind (`'breezy'` / `'storm'`) load as wind; backups from before crates & cartons split (searched parcel carried off, searched broken crates kept as `crate-1`); full backup round-trip (save incl. food, stats, rooftop incl. station tiers, slot assignments, perks, flags & layout), pre-Food / pre-station / pre-slot backups (food 0, legacy builds → Tier 2, built stations back in their old slots), older backups without `terraceState` (load + "starts fresh" warning), rejection of damaged rooftop fields (tiers, flags, lists, layout, the same station in two slots, unknown slot, unknown slot station, non-object slot map), and friendly errors for unreadable/invalid saves.
   - `stageFit.test.ts` — no safe area = plain centred cover; 16:9 windows identical to cover with no gaps; the Terrace safe area stays fully on screen from phone portrait to 3440×1440; ultrawide slides the framing instead of shrinking; gaps only on extreme shapes; the middle of every floor hotspot stays on screen on all 4 floors at every shape.
+  - `ticTacToe.test.ts` (`src/game/minigames/__tests__`) — all 8 lines detected for either side, real-game rows/columns/diagonals, draw vs still playing; `applyMove` immutability and refusal of occupied / off-board / fractional cells and moves after the game ends; `findWinningMove`. Challenge, across every reachable position: always takes an immediate win, always blocks an immediate player win; beats a random player (< 5% player wins), never loses to a perfect player while still conceding the odd fork; seeded determinism. Cozy: only ever picks open cells; far more forgiving (a perfect player wins > 70% and > 3× as often as vs Challenge; a random player wins > 4× as often); still takes a win/block about a quarter of the time; refuses a full board.
   - `resumeLocation.test.ts` — every screen maps to its refresh destination (arrival → rooftop, ride → its destination), round-trips, Title fallback without a claimed shelter (floors need the Terrace), damaged data ignored.
 - **Lint:** `npx oxlint src` (0 warnings).
 - **E2E:** `npm run test:e2e` (`playwright test`) — 28 scenarios driving the real game in **system Chrome** (`channel: 'chrome'`; `npx playwright install` is blocked by the corporate TLS proxy, so no bundled browser is downloaded). Playwright starts its own `vite` dev server on port 5180. Every test fails on any page error or `console.error`. Canvas clicks map normalized scene coords through the same `fitStage()` the scene uses; state is asserted from `localStorage`. Reports land in `playwright-report/` / `test-results/` (git-ignored).
@@ -516,7 +533,9 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 - [ ] **Downstairs Apartment Interiors & Scavenging Mini-Game Framework** *(design: `GAME_CONTEXT.md` → Downstairs Scavenging & Cozy Mini-Game Puzzles)*
   - **Rooms:** illustrated apartment interiors and scavenging spots reached from the shipped building floors (`BUILDING_FLOORS` hotspots with `kind: 'scavenge'` in `data/floors.ts`, rendered by `BuildingFloorScreen.tsx`), replacing their "scavenging puzzle coming soon" toast.
   - **Reusable mini-game overlay:** one framework triggered from room scavenging hotspots (`safe`, `drawer`, `cupboard`, `under-bed`, `shelf`, …). Rewards feed back cleanly into the main Zustand resource store (`addResources()` + `_save()`); occasional Found Traveler Diary Pages are a later hook.
-  - **Planned starter puzzle modules:** **Find the Object**, **Jigsaw Puzzle**, **Tic-Tac-Toe**, and **Dots & Lines** (spec TBD).
+  - **Shared contract (built):** `src/game/minigames/types.ts` — `MiniGameProps { mode, title?, onComplete(result), onCancel }` and `MiniGameResult { outcome: 'win' | 'draw' | 'loss' | 'cancelled', mode }`. A mini-game never touches resources; the host hotspot maps the outcome to rewards.
+  - **Planned starter puzzle modules:** **Find the Object**, **Jigsaw Puzzle**, **Tic-Tac-Toe** *(✅ built, not wired — see below)*, and **Dots & Lines** (spec TBD).
+  - [x] **Tic-Tac-Toe (built, unmounted):** pure engine `src/game/minigames/ticTacToe.ts` + UI `src/ui/minigames/TicTacToeGame.tsx`. Next: mount it from a floor/apartment hotspot (e.g. replace one "scavenging puzzle coming soon" toast), pass `useGameStore().selectedMode` as `mode`, and award materials on `onComplete`.
   - **Cozy guarantee:** no punishing timers or harsh failure states; puzzles can always be retried or left.
   - **Follow-ups:** persist per-room searched spots (ties into the Save schema v5 item below), then switch off `TEST_MODE_GENEROUS_START` and tune scarcity.
 

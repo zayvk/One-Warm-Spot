@@ -1,6 +1,7 @@
 import {
   Application,
   Assets,
+  BlurFilter,
   Circle,
   Container,
   Graphics,
@@ -47,6 +48,7 @@ import {
 import type { SleepComfort } from '../engine/dayCycle.ts';
 import type { RegrowOutcome } from '../engine/terraceSpawns.ts';
 import { placeStationInSlot, type SlotAssignments } from '../engine/buildSlots.ts';
+import { fitStage, stageLeavesGaps } from '../engine/stageFit.ts';
 
 /** Hotspot type a slot takes on once a station is placed in it */
 const STATION_HOTSPOT_TYPE: Partial<Record<StationId, HotspotConfig['type']>> = {
@@ -415,6 +417,7 @@ export class ShelterScene {
   private readonly bgLayer = new Container();
   private readonly floorHit = new Graphics();
   private bgSprite: Sprite | null = null;
+  private bgFill: Sprite | null = null;
   private bgFallback: Graphics | null = null;
   private bgToken = 0;
 
@@ -869,16 +872,13 @@ export class ShelterScene {
 
   /* ── Stage space (cover-fitted backdrop) ── */
 
-  /** Recompute where the backdrop is drawn: `cover` framing, centered on screen */
+  /** Recompute where the backdrop is drawn: cover framing that always keeps the scene's safe area on screen */
   private updateStageRect(): void {
     const { width: W, height: H } = this;
     const tex = this.bgSprite?.texture;
     const texW = tex?.width || DEFAULT_STAGE_ASPECT;
     const texH = tex?.height || 1;
-    const scale = Math.max(W / texW, H / texH);
-    const width = texW * scale;
-    const height = texH * scale;
-    this.stage = { x: (W - width) / 2, y: (H - height) / 2, width, height };
+    this.stage = fitStage(W, H, texW, texH, this.sceneConfig?.safeArea);
   }
 
   /** Normalized stage coords → screen pixels */
@@ -910,11 +910,22 @@ export class ShelterScene {
           this.bgSprite.destroy();
           this.bgSprite = null;
         }
+        this.bgFill?.destroy();
+        /* Soft, dimmed copy of the painting behind it — only seen on extreme window shapes */
+        const fill = new Sprite(texture);
+        fill.anchor.set(0.5);
+        fill.eventMode = 'none';
+        fill.tint = 0xb8aea3;
+        fill.filters = [new BlurFilter({ strength: 28, quality: 3, resolution: 0.5 })];
+        fill.visible = false;
+        this.bgFill = fill;
         const sprite = new Sprite(texture);
         sprite.anchor.set(0.5);
         sprite.eventMode = 'none';
         this.bgSprite = sprite;
-        this.bgLayer.addChildAt(sprite, this.bgFallback ? 1 : 0);
+        const base = this.bgFallback ? 1 : 0;
+        this.bgLayer.addChildAt(fill, base);
+        this.bgLayer.addChildAt(sprite, base + 1);
         this.layout();
         this.revealStage();
       })
@@ -1214,7 +1225,8 @@ export class ShelterScene {
       case 'shelter':
         return this.state.dayPhase === 'night' ? 'Sleep until morning' : 'Rest by shelter';
       case 'firepit':
-        return this.fireLit ? 'Extinguish fire' : 'Light fire pit · 1 🪵';
+        /* Opens a menu (light / sit / extinguish / upgrade), so just name the spot */
+        return 'Fire pit';
       case 'planter':
         return this.terrace.planterReady
           ? `Harvest ${cfg.name} · ${formatMaterials(planterHarvest(tier), '+')}`
@@ -2335,6 +2347,12 @@ export class ShelterScene {
     if (this.bgSprite) {
       this.bgSprite.scale.set(SW / (this.bgSprite.texture.width || 1));
       this.bgSprite.position.set(this.stage.x + SW / 2, this.stage.y + SH / 2);
+    }
+    if (this.bgFill) {
+      const tex = this.bgFill.texture;
+      this.bgFill.visible = stageLeavesGaps(this.stage, W, H);
+      this.bgFill.scale.set(Math.max(W / (tex.width || 1), H / (tex.height || 1)) * 1.08);
+      this.bgFill.position.set(W / 2, H / 2);
     }
     this.drawFallback();
 

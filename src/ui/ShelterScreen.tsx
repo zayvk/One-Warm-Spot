@@ -33,14 +33,28 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
   const dayPhase = useGameStore((s) => s.dayPhase);
   const resources = useGameStore((s) => s.resources);
 
-  const prevResourcesRef = useRef(resources);
   const [pulsing, setPulsing] = useState<Partial<Record<ResourceId, boolean>>>({});
+  const [prevResources, setPrevResources] = useState(resources);
   const canvasRef = useRef<ShelterCanvasHandle>(null);
   /* Null until the scene reports its restored station state */
   const [stationState, setStationState] = useState<SceneStationState | null>(null);
   const [popover, setPopover] = useState<{ station: PopoverStation; anchor: { x: number; y: number } } | null>(null);
   const [propMenu, setPropMenu] = useState<{ stationId: StationId; anchor: { x: number; y: number } } | null>(null);
   const [slotMenu, setSlotMenu] = useState<{ slotId: string; anchor: { x: number; y: number } } | null>(null);
+  const [elevatorOpen, setElevatorOpen] = useState(false);
+
+  /* Pulse newly found pouch materials (derived as the pouch changes) */
+  if (resources !== prevResources) {
+    setPrevResources(resources);
+    const increased = POUCH_IDS.filter((id) => resources[id] > prevResources[id]);
+    if (increased.length > 0) {
+      setPulsing((curr) => {
+        const next = { ...curr };
+        for (const id of increased) next[id] = true;
+        return next;
+      });
+    }
+  }
 
   const stations = getSceneConfig(chosenSite)?.stations ?? [];
 
@@ -73,7 +87,6 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
    * The traveler reached the stairwell/lift door: open the floor panel. Returning
    * false lets the scene unlock, so cancelling the panel leaves them free to roam.
    */
-  const [elevatorOpen, setElevatorOpen] = useState(false);
   const handleDoor = useCallback(
     (doorId: string) => {
       if (doorId !== 'stairwell-door' || !onRide) return false;
@@ -105,34 +118,19 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
     };
   }, []);
 
-  /* Pulse newly found pouch materials */
+  /* Every pulse settles 700ms after the latest find */
   useEffect(() => {
-    const prev = prevResourcesRef.current;
-    const newlyIncreased: ResourceId[] = [];
-    for (const id of POUCH_IDS) {
-      if (resources[id] > prev[id]) {
-        newlyIncreased.push(id);
-      }
-    }
-    prevResourcesRef.current = resources;
-    if (newlyIncreased.length === 0) return;
-
-    setPulsing((curr) => {
-      const next = { ...curr };
-      for (const id of newlyIncreased) next[id] = true;
-      return next;
-    });
-
+    const active = POUCH_IDS.filter((id) => pulsing[id]);
+    if (active.length === 0) return;
     const timer = setTimeout(() => {
       setPulsing((curr) => {
         const next = { ...curr };
-        for (const id of newlyIncreased) next[id] = false;
+        for (const id of active) next[id] = false;
         return next;
       });
     }, 700);
-
     return () => clearTimeout(timer);
-  }, [resources]);
+  }, [pulsing]);
 
   const siteName = SITES.find((s) => s.id === chosenSite)?.name ?? 'your shelter';
   const pouchResources = POUCH_IDS.map((id) => RESOURCE_MAP[id]).filter((r) => r !== undefined);
@@ -184,6 +182,7 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
           style={{ flexShrink: 0, filter: 'drop-shadow(0 2px 5px rgba(48, 38, 30, 0.45))' }}
         />
         <span
+          className="ows-shelter-name"
           style={{
             fontFamily: 'var(--font-game-title)',
             fontSize: 'clamp(0.95rem, 1.8vw, 1.2rem)',

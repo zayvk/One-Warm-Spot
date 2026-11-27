@@ -1,6 +1,7 @@
 /* ───── Old Apartment building: floors, hotspots & lift-ride timing (pure data) ───── */
 
 import { CUTSCENE_ASSETS, SCENE_STAGES } from './media.ts';
+import type { StageSafeArea } from '../engine/stageFit.ts';
 
 /** Every lift stop: the four apartment floors and the Rooftop Terrace */
 export type BuildingFloorId = 1 | 2 | 3 | 4 | 'R';
@@ -20,7 +21,7 @@ export interface FloorHotspot {
   rect: FloorRect;
   /** `lift` opens the elevator panel; `scavenge` will open a scavenging puzzle (coming soon) */
   kind: 'lift' | 'scavenge';
-  /** Tiny intermittent golden sparks (e.g. a fuse box) */
+  /** Live electric arcs & embers (e.g. a fuse box) */
   hasSparks?: boolean;
 }
 
@@ -127,6 +128,20 @@ export function floorBackdrop(floor: BuildingFloorId): string {
   return floor === 'R' ? ROOFTOP_STAGE : BUILDING_FLOORS[floor].backdrop;
 }
 
+/**
+ * Region of a floor's painting kept on screen at any window shape: every hotspot's
+ * middle half, so each spot stays visible and clickable (stage fractions, 0–1).
+ */
+export function floorSafeArea(floor: DownstairsFloorId): StageSafeArea {
+  const rects = BUILDING_FLOORS[floor].hotspots.map((h) => h.rect);
+  return {
+    xMin: Math.min(...rects.map((r) => r.left + r.width * 0.25)) / 100,
+    xMax: Math.max(...rects.map((r) => r.left + r.width * 0.75)) / 100,
+    yMin: Math.min(...rects.map((r) => r.top + r.height * 0.25)) / 100,
+    yMax: Math.max(...rects.map((r) => r.top + r.height * 0.75)) / 100,
+  };
+}
+
 /** Arrival caption for a floor */
 export function floorCaption(floor: BuildingFloorId, rooftopName = 'Old Apartment Terrace'): string {
   return floor === 'R' ? rooftopName : BUILDING_FLOORS[floor].name;
@@ -216,4 +231,12 @@ export function liftRideTimeline(from: BuildingFloorId, to: BuildingFloorId): Li
     stepOut: arrive + 650,
     total,
   };
+}
+
+/** The screen fade-out at the end of every lift ride */
+export const LIFT_FADE_MS = 400;
+
+/** When the ride's screen should start fading out (the ride ends exactly as the fade does) */
+export function liftRideHoldMs(from: BuildingFloorId, to: BuildingFloorId): number {
+  return liftRideTimeline(from, to).total - LIFT_FADE_MS;
 }

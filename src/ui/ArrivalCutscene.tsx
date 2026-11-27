@@ -1,6 +1,8 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import BackgroundStage from './BackgroundStage.tsx';
-import TerraceLiftCutscene, { LIFT_FADE_MS, liftRideHoldMs } from './TerraceLiftCutscene.tsx';
+import TerraceLiftCutscene from './TerraceLiftCutscene.tsx';
+import { isCutsceneSkipKey } from './cutsceneKeys.ts';
+import { LIFT_FADE_MS, liftRideHoldMs } from '../game/data/floors.ts';
 import { BG_SHELTERS } from '../game/data/media.ts';
 import { SITES } from '../game/data/sites.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
@@ -24,6 +26,8 @@ const FOOTSTEP_TIMES = [400, 900, 1400, 1950, 2500]; // ms offsets
 
 export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
+  /* Timings follow the setting at the start, so toggling Reduce Motion mid-cutscene never restarts it */
+  const [reducedAtStart] = useState(reduceMotion);
   const [phase, setPhase] = useState<'walking' | 'fadeout'>('walking');
   const [skipped, setSkipped] = useState(false);
   /* The Terrace arrives by the old apartment lift; other shelters use the Ken Burns fade */
@@ -52,18 +56,18 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
 
   /* Schedule footsteps (skip walking footsteps when reduceMotion is on) */
   useEffect(() => {
-    if (reduceMotion || isLift) return;
+    if (reducedAtStart || isLift) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     for (const ms of FOOTSTEP_TIMES) {
       timers.push(setTimeout(playFootstep, ms));
     }
     return () => timers.forEach(clearTimeout);
-  }, [reduceMotion, isLift]);
+  }, [reducedAtStart, isLift]);
 
   /* Auto-complete after duration */
   useEffect(() => {
-    const holdMs = isLift ? liftRideHoldMs(1, 'R') : reduceMotion ? REDUCED_DURATION : DURATION;
-    const fadeMs = isLift ? LIFT_FADE_MS : reduceMotion ? 300 : 600;
+    const holdMs = isLift ? liftRideHoldMs(1, 'R') : reducedAtStart ? REDUCED_DURATION : DURATION;
+    const fadeMs = isLift ? LIFT_FADE_MS : reducedAtStart ? 300 : 600;
     timerRef.current = setTimeout(() => {
       setPhase('fadeout');
       completeTimerRef.current = setTimeout(finishOnce, fadeMs);
@@ -73,7 +77,7 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
       clearTimeout(timerRef.current);
       clearTimeout(completeTimerRef.current);
     };
-  }, [reduceMotion, finishOnce, isLift]);
+  }, [reducedAtStart, finishOnce, isLift]);
 
   /* Skip handler */
   const handleSkip = useCallback(() => {
@@ -87,7 +91,7 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (['Space', 'Enter', 'Escape'].includes(e.code)) {
+      if (isCutsceneSkipKey(e)) {
         e.preventDefault();
         handleSkip();
       }
@@ -107,7 +111,7 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
         zIndex: 10,
         cursor: 'pointer',
         opacity: phase === 'fadeout' ? 0 : 1,
-        transition: `opacity ${isLift ? `${LIFT_FADE_MS}ms` : reduceMotion ? '300ms' : '600ms'} ease`,
+        transition: `opacity ${isLift ? `${LIFT_FADE_MS}ms` : reducedAtStart ? '300ms' : '600ms'} ease`,
         animation: reduceMotion ? 'owsFadeOpacity 250ms ease' : undefined,
       }}
     >

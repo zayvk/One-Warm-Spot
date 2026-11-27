@@ -12,6 +12,7 @@ import {
 } from '../game/engine/stations.ts';
 import type { SceneStationState } from '../game/renderer/shelterScene.ts';
 import { playClick, playHover, playLocked } from '../game/audio/soundEngine.ts';
+import { useKeepInView } from './keepInView.ts';
 
 export type StationMenuAction = 'primary' | 'sit' | 'extinguish' | 'upgrade';
 
@@ -111,6 +112,7 @@ export default function PropActionMenu({
 }: PropActionMenuProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   useMenuDismiss(rootRef, onClose);
+  useKeepInView(rootRef, anchor.x, anchor.y);
 
   const tier = stationState.tiers[station.id] ?? 0;
   const currentCfg = stationTierConfig(station, tier);
@@ -344,6 +346,7 @@ export interface SlotBuildMenuProps {
 export function SlotBuildMenu({ stations, anchor, resources, busy, onPick, onClose }: SlotBuildMenuProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   useMenuDismiss(rootRef, onClose);
+  useKeepInView(rootRef, anchor.x, anchor.y);
 
   return (
     <div

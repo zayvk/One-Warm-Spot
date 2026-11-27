@@ -64,6 +64,8 @@ let musicElement: HTMLAudioElement | null = null;
 let musicSourceNode: MediaElementAudioSourceNode | null = null;
 let proceduralMusicInterval: ReturnType<typeof setInterval> | null = null;
 let musicPlaying = false;
+/** A fade-out is in flight (its pause lands ~750ms later unless a new session starts) */
+let musicFadingOut = false;
 let musicSessionId = 0;
 
 /* ═══════════════════════════════════════════
@@ -474,9 +476,11 @@ export function fadeOutMenuMusic(): void {
     clearProceduralMusic();
     return;
   }
+  musicFadingOut = true;
   rampGain(musicFadeGain.gain, 0, 0.65);
   setTimeout(() => {
     if (session !== musicSessionId) return;
+    musicFadingOut = false;
     musicPlaying = false;
     if (musicElement) musicElement.pause();
     clearProceduralMusic();
@@ -484,6 +488,12 @@ export function fadeOutMenuMusic(): void {
 }
 
 export function fadeInMenuMusic(): void {
+  /* Coming back mid fade-out: restart cleanly (the new session cancels the pending pause) */
+  if (musicPlaying && musicFadingOut) {
+    musicFadingOut = false;
+    musicPlaying = false;
+    clearProceduralMusic();
+  }
   if (musicPlaying) return;
   startMenuMusic();
 }

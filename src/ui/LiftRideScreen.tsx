@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import TerraceLiftCutscene, { LIFT_FADE_MS, liftRideHoldMs } from './TerraceLiftCutscene.tsx';
+import TerraceLiftCutscene from './TerraceLiftCutscene.tsx';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { stopLiftHum } from '../game/audio/soundEngine.ts';
 import { preloadSceneBackdrop } from '../game/renderer/shelterScene.ts';
-import type { BuildingFloorId } from '../game/data/floors.ts';
+import { LIFT_FADE_MS, liftRideHoldMs, type BuildingFloorId } from '../game/data/floors.ts';
+import { isCutsceneSkipKey } from './cutsceneKeys.ts';
 
 export interface LiftRideScreenProps {
   fromFloor: BuildingFloorId;
@@ -57,7 +58,7 @@ export default function LiftRideScreen({ fromFloor, toFloor, onArrive }: LiftRid
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (['Space', 'Enter', 'Escape'].includes(e.code)) {
+      if (isCutsceneSkipKey(e)) {
         e.preventDefault();
         skip();
       }

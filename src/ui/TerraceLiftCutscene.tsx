@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CUTSCENE_ASSETS } from '../game/data/media.ts';
 import { SITES } from '../game/data/sites.ts';
 import {
@@ -27,14 +27,6 @@ import {
   LiftFrame,
 } from './liftStage.tsx';
 
-/** The parent's fade-out at the end of every lift ride */
-export const LIFT_FADE_MS = 400;
-
-/** When the parent should start fading out of a ride (the ride ends exactly as the fade does) */
-export function liftRideHoldMs(from: BuildingFloorId, to: BuildingFloorId): number {
-  return liftRideTimeline(from, to).total - LIFT_FADE_MS;
-}
-
 /** Downstairs floors hear the rooftop's birdsong faintly through the windows */
 const DOWNSTAIRS_AMBIENCE_LEVEL = 0.3;
 
@@ -57,6 +49,11 @@ export interface TerraceLiftCutsceneProps {
 export default function TerraceLiftCutscene({ fromFloor, toFloor, reduceMotion, skipped }: TerraceLiftCutsceneProps) {
   const timeline = useMemo(() => liftRideTimeline(fromFloor, toFloor), [fromFloor, toFloor]);
   const isPush = timeline.intro === 'push';
+  /* Read at beat time, so toggling Reduce Motion mid-ride never restarts the schedule */
+  const reduceMotionRef = useRef(reduceMotion);
+  useEffect(() => {
+    reduceMotionRef.current = reduceMotion;
+  }, [reduceMotion]);
 
   /* Push rides start inside the closed lift (hidden under the floor painting); step-in rides start with open doors */
   const [entered, setEntered] = useState(isPush);
@@ -86,7 +83,11 @@ export default function TerraceLiftCutscene({ fromFloor, toFloor, reduceMotion, 
     const at = (ms: number, fn: () => void) => timers.push(setTimeout(fn, ms));
 
     /* Beat 1 — leaving the floor */
-    if (!reduceMotion) for (const ms of t.footsteps) at(ms, playFootstep);
+    for (const ms of t.footsteps) {
+      at(ms, () => {
+        if (!reduceMotionRef.current) playFootstep();
+      });
+    }
     if (isPush) {
       at(t.liftIn, () => {
         playLiftDoorSlide();
@@ -133,7 +134,7 @@ export default function TerraceLiftCutscene({ fromFloor, toFloor, reduceMotion, 
       timers.forEach(clearTimeout);
       stopLiftHum();
     };
-  }, [timeline, isPush, toFloor, reduceMotion, skipped]);
+  }, [timeline, isPush, toFloor, skipped]);
 
   const rooftopName = SITES.find((s) => s.id === 'terrace')?.name ?? 'Old Apartment Terrace';
   const behindIsRooftop = (behindIsDestination ? toFloor : fromFloor) === 'R';

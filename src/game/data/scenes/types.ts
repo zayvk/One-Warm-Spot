@@ -1,6 +1,7 @@
 /* ───── Shelter Scene Configuration Schema ───── */
 
 import type { ResourceId } from '../../types/game.ts';
+import type { StageSafeArea } from '../../engine/stageFit.ts';
 
 export interface HotspotConfig {
   id: string;
@@ -111,4 +112,6 @@ export interface ShelterSceneConfig {
   stations?: StationConfig[];
   /** Flexible build slots (each hosts one assignable station) */
   buildSlots?: BuildSlotConfig[];
+  /** Region (stations, door, walk floor) kept on screen at any window shape; omitted = plain cover fit */
+  safeArea?: StageSafeArea;
 }

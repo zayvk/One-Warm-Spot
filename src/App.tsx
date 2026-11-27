@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import './styles/theme.css';
 import { useGameStore } from './game/store/useGameStore.ts';
 import { unlock, startMenuMusic, fadeOutMenuMusic, fadeInMenuMusic } from './game/audio/soundEngine.ts';
@@ -11,6 +11,7 @@ import LiftRideScreen from './ui/LiftRideScreen.tsx';
 import AudioToggle from './ui/AudioToggle.tsx';
 import NoticeToasts from './ui/NoticeToasts.tsx';
 import type { BuildingFloorId, DownstairsFloorId } from './game/data/floors.ts';
+import { locationForScreen, readResumeLocation, writeResumeLocation } from './game/engine/resumeLocation.ts';
 
 /** `shelter` is the rooftop (lift stop R); `floor` is one of the apartment floors 1–4 */
 type Screen = 'title' | 'site-select' | 'arrival' | 'shelter' | 'ride' | 'floor';
@@ -19,15 +20,27 @@ export default function App() {
   const chosenSite = useGameStore((s) => s.chosenSite);
   const reduceMotion = useGameStore((s) => s.reduceMotion);
 
-  const [screen, setScreen] = useState<Screen>('title');
+  /* A refresh lands back where the player was (this tab only — a new visit starts at the Title) */
+  const [resumed] = useState(() => readResumeLocation(useGameStore.getState().chosenSite));
+  const [screen, setScreen] = useState<Screen>(resumed.screen);
   /* Where the traveler is in the building, and the lift ride in progress */
-  const [floor, setFloor] = useState<DownstairsFloorId>(1);
+  const [floor, setFloor] = useState<DownstairsFloorId>(resumed.screen === 'floor' ? resumed.floor : 1);
   const [ride, setRide] = useState<{ from: BuildingFloorId; to: BuildingFloorId }>({ from: 'R', to: 1 });
   /* Everything past site selection needs a claimed site — fall back to the title otherwise */
   const activeScreen: Screen =
     (screen === 'arrival' || screen === 'shelter' || screen === 'ride' || screen === 'floor') && !chosenSite
       ? 'title'
       : screen;
+
+  useEffect(() => {
+    writeResumeLocation(locationForScreen(activeScreen, floor, ride.to));
+  }, [activeScreen, floor, ride.to]);
+
+  /* The menu music only belongs to the Title & shelter selector (a refresh may resume in-game) */
+  const onMenuScreenRef = useRef(activeScreen === 'title' || activeScreen === 'site-select');
+  useEffect(() => {
+    onMenuScreenRef.current = activeScreen === 'title' || activeScreen === 'site-select';
+  }, [activeScreen]);
 
   /* ── Sync reduceMotion preference to root document attribute ── */
   useEffect(() => {
@@ -38,7 +51,7 @@ export default function App() {
   useEffect(() => {
     function handleFirstInteraction() {
       unlock();
-      startMenuMusic();
+      if (onMenuScreenRef.current) startMenuMusic();
       window.removeEventListener('pointerdown', handleFirstInteraction);
       window.removeEventListener('keydown', handleFirstInteraction);
     }

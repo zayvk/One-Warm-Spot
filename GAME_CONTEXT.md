@@ -90,7 +90,7 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
    | **2** | Floor 2 · Hallway |
    | **1** | Floor 1 · Ground Lobby |
 
-   The floor you're on is lit amber and marked **Current**. **Cancel**, a click outside or `Escape` closes the panel and leaves you where you are.
+   The floor you're on is lit amber and marked **Current**. **Cancel**, a click outside or `Escape` closes the panel and leaves you where you are. *(The panel deliberately uses these short names; each floor's own header and arrival caption use its full name, e.g. "Floor 2 · Residential Hallway", "Ground Floor · Lobby".)*
 
    **Riding between any two stops** (e.g. R → 2, 4 → 2, 3 → R) plays one lift ride that scales with distance — about **2.8s for one floor, up to ~4.5s for four**:
    1. **Leaving** — from a floor, a gentle push-in toward its lift before cutting inside. From the rooftop, the view pulls back into the lift with the sunlit Terrace framed in its open doors, which then slide shut as the rooftop falls quiet.
@@ -99,7 +99,7 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
 
    Rides are skippable like every cutscene and turn into calm fades under Reduce Motion.
 
-   **Each floor is a small interactive scene** on the same aspect-locked painted stage, so every glow stays on its door at any window shape:
+   **Each floor is a small interactive scene** on the same aspect-locked painted stage, so every glow stays on its door and every spot stays reachable at any window shape:
    - **Floor 1 · Ground Lobby** — Apartment 1A, Apartment 1B and the open side doorway.
    - **Floor 2 · Residential Hallway** — a tall ajar **Hallway Cupboard**, a **Boarded Doorway & Debris**, the bright **Sunlit Room 2A** and the ajar **Cracked Door 2B**.
    - **Floor 3 · Utility Corridor** — an ivy-draped **Unhinged Door**, **Utility Door 3A**, a rusty **Sparking Fuse Box** (live and clearly not to be touched: jagged blue-white arcs crackle across its open contacts and dangling wires in quick double flickers, throwing a cold blue flash over the box and spitting a few hot embers that fall; off under Reduce Motion) and a tall **Metal Utility Locker**.
@@ -123,7 +123,7 @@ The game has **pivoted away from menu-drawer clicking** toward a **living, point
 - **🧰 Flexible Predefined Build Slots:** the farm, rainwater barrel, cooking grill and sewing kit aren't tied to a spot — **you choose which goes where**. Each station can be placed once, so once all four are built, no empty slots remain.
   - *(The original layout put the farm in slot 1, the sewing kit in slot 2, the grill in slot 3 and the barrel in slot 4. Older saves keep exactly that.)*
 - **Interactive props:**
-  - **Central Fire Pit (3 tiers)** — hovering reads *"Light fire pit · 1 🪵"* (or *"Extinguish fire"*). Lighting it (flickering flames, embers, warm glow and a looping campfire crackle) makes the traveler **sit by the fire** and **burns 1 🪵 Timber** of firewood (with too little, a gentle toast says *"Need 1 Timber to light the fire"*). While it's lit, its menu offers **Sit** or **Extinguish** (a soft hiss that saves fuel). A lit fire is also needed for some grill recipes. At Dusk and Night its radial glow warms up the rooftop. It grows with the shelter:
+  - **Central Fire Pit (3 tiers)** — hovering simply reads *"Fire pit"*, and clicking opens its options. Lighting it (flickering flames, embers, warm glow and a looping campfire crackle) makes the traveler **sit by the fire** and **burns 1 🪵 Timber** of firewood (with too little, a gentle toast says *"Need 1 Timber to light the fire"*). While it's lit, its menu offers **Sit** or **Extinguish** (a soft hiss that saves fuel). A lit fire is also needed for some grill recipes. At Dusk and Night its radial glow warms up the rooftop. It grows with the shelter:
     - **Tier 1 · Makeshift Twigs** (start) — a modest, delicate flame, sparse sparks and a soft compact glow.
     - **Tier 2 · Stacked Logs** — a taller, livelier multi-tongue flame (deep amber outside, bright gold core), steadier rising embers, a ~35% wider and brighter glow pool, and a fuller crackle.
     - **Tier 3 · Stone-Ring Hearth** — a rich hearth fire: layered dancing flames over a pulsing coal bed, frequent drifting embers, curling translucent smoke wisps, a lush wide golden glow that transforms the rooftop at Dusk and Night, and the richest crackle.
@@ -237,7 +237,9 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 
 ## Art & Audio Direction
 
-- **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP backgrounds, stage backdrops, cutscene plates, character pose sprites, and interactive prop sprites organized under `public/source/`. Target <5 MB initial browser payload. Interactive stages stay locked to their painted floor on any window shape (16:9, ultrawide or portrait).
+- **Visual style:** Lightweight layered flat-painterly 2D (gouache-inspired). WebP backgrounds, stage backdrops, cutscene plates, character pose sprites, and interactive prop sprites organized under `public/source/`. Target <5 MB initial browser payload. Interactive stages stay locked to their painted floor on any landscape window shape (16:9, 4:3 tablets, landscape phones or ultrawide), and never crop away anything you can interact with: the framing slides toward the action, and on unusually narrow screens the painting sits inside a soft, blurred copy of itself instead of hiding the stairwell door or the shelter off-screen.
+- **Platforms:** desktop web browsers first; tablets and phones are supported **in landscape** (taps work like clicks, with a compact HUD and menus on short screens). Portrait orientation is intentionally not a supported layout.
+- **Refresh-safe:** refreshing the page brings you back to exactly where you were (the rooftop, a floor, or the destination of a lift ride mid-way); opening the game again later starts at the Title with **Continue**.
 - **Brand:** A painted ivy-and-lantern **wordmark** (`public/source/ui/logo-title.webp`) on the Title Screen, and a round **lantern emblem** (`logo-emblem.webp`) used as the About crest, the shelter HUD badge and the loading emblem. Browser tab icon: `favicon.png`; home-screen icon: `apple-touch-icon.png`.
 - **About & copy:** Player-facing and warm — a short story intro, three "How to play" tips, and a quiet `One Warm Spot · v0.1` footer. No technical wording.
 - **Comfort & accessibility:** **Reduce Motion** (Settings) calms camera zoom, elevator shake, particles, fire flicker and UI animations: steady fire glow with no sparks or smoke, still fireflies and stars, no leaf bursts, reward text that fades in place, no prop hover lift, no pouch bounce, calm fades instead of push-ins and door slides in both lift rides, and instant sky/HUD transitions.

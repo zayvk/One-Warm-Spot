@@ -337,7 +337,7 @@ export const terraceScene: ShelterSceneConfig = {
       position: FIREPIT_POS,
       propSprite: SCENE_PROPS.firepitT1,
       propScale: 0.058,
-      label: 'Light fire pit',
+      label: 'Fire pit',
       collider: { rx: 0.042, ry: 0.026 },
       standOffset: FIREPIT_STAND,
     },
@@ -383,6 +383,9 @@ export const terraceScene: ShelterSceneConfig = {
 
   stations: TERRACE_STATIONS,
   buildSlots: [...TERRACE_BUILD_SLOTS],
+
+  /* Left parapet & slot-1 → stairwell door, tallest shelter roof → front edge of the walk floor */
+  safeArea: { xMin: 0.1, xMax: 0.93, yMin: 0.3, yMax: 0.9 },
 };
 
 /* ── Spawn rules for randomized box & weed placement ── */

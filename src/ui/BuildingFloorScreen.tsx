@@ -1,14 +1,34 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import {
   BUILDING_FLOORS,
+  floorSafeArea,
   type BuildingFloorId,
   type DownstairsFloorId,
   type FloorHotspot,
 } from '../game/data/floors.ts';
+import { fitStage, stageLeavesGaps } from '../game/engine/stageFit.ts';
 import { playClick, playHover, playLocked, startSiteAmbience } from '../game/audio/soundEngine.ts';
-import { LIFT_STAGE_H, LIFT_STAGE_W } from './liftStage.tsx';
 import ElevatorPanelModal from './ElevatorPanelModal.tsx';
+
+/** Floor paintings are 1376×768 (the same stage as the lift) */
+const ART_W = 1376;
+const ART_H = 768;
+
+function subscribeResize(onChange: () => void): () => void {
+  window.addEventListener('resize', onChange);
+  return () => window.removeEventListener('resize', onChange);
+}
+const viewportKey = () => `${window.innerWidth}x${window.innerHeight}`;
+
+/** Live window size (re-renders on resize) */
+function useViewport(): { w: number; h: number } {
+  const key = useSyncExternalStore(subscribeResize, viewportKey);
+  return useMemo(() => {
+    const [w, h] = key.split('x').map(Number);
+    return { w, h };
+  }, [key]);
+}
 
 /** Birdsong drifts faintly in from the rooftop */
 const DOWNSTAIRS_AMBIENCE_LEVEL = 0.3;
@@ -56,6 +76,9 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
   const [panelOpen, setPanelOpen] = useState(false);
   const [glowing, setGlowing] = useState<{ id: string; key: number } | null>(null);
   const data = BUILDING_FLOORS[floor];
+  const { w: viewW, h: viewH } = useViewport();
+  const stage = useMemo(() => fitStage(viewW, viewH, ART_W, ART_H, floorSafeArea(floor)), [viewW, viewH, floor]);
+  const showFill = stageLeavesGaps(stage, viewW, viewH);
 
   useEffect(() => {
     startSiteAmbience('terrace', false, DOWNSTAIRS_AMBIENCE_LEVEL);
@@ -96,15 +119,33 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
         animation: 'owsFadeOpacity 300ms ease',
       }}
     >
-      {/* Cover-fitted 1376×768 stage — the painting and every hotspot share its coordinates */}
+      {/* On extreme window shapes the painting stops short of an edge: a soft, dimmed copy fills behind it */}
+      {showFill && (
+        <img
+          src={data.backdrop}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          style={{
+            position: 'absolute',
+            inset: '-6%',
+            width: '112%',
+            height: '112%',
+            objectFit: 'cover',
+            filter: 'blur(22px) brightness(0.72)',
+          }}
+        />
+      )}
+
+      {/* The 1376×768 stage, cover-fitted but never cropping a hotspot — the painting and every spot share its coordinates */}
       <div
         style={{
           position: 'absolute',
-          left: '50%',
-          top: '50%',
-          width: LIFT_STAGE_W,
-          height: LIFT_STAGE_H,
-          transform: 'translate(-50%, -50%)',
+          left: `${stage.x}px`,
+          top: `${stage.y}px`,
+          width: `${stage.width}px`,
+          height: `${stage.height}px`,
+          boxShadow: showFill ? '0 0 40px rgba(20, 16, 12, 0.45)' : undefined,
         }}
       >
         <img

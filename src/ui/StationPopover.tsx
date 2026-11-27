@@ -5,6 +5,7 @@ import { MENDING_PERKS, RECIPES } from '../game/data/recipes.ts';
 import { perkBlocker, recipeBlocker } from '../game/engine/stations.ts';
 import type { SceneStationState, StationActionResult } from '../game/renderer/shelterScene.ts';
 import { playClick, playHover, playLocked } from '../game/audio/soundEngine.ts';
+import { useKeepInView } from './keepInView.ts';
 
 export type PopoverStation = 'grill' | 'sewing';
 
@@ -50,6 +51,7 @@ export default function StationPopover({
 }: StationPopoverProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  useKeepInView(rootRef, anchor.x, anchor.y);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

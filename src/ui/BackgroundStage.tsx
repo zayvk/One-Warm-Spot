@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { MediaEntry } from '../game/data/media.ts';
 import { ALL_BG_URLS } from '../game/data/media.ts';
 
@@ -41,23 +41,20 @@ export default function BackgroundStage({ media, dimmed = false }: BackgroundSta
     prev: null,
     current: media,
   });
-  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  useEffect(() => {
-    if (media.src === layers.current.src) return;
-
-    /* Start crossfade: mount new layer on top, keep old underneath */
+  /* A new background: mount it on top, keep the old one underneath while it fades in */
+  if (media.src !== layers.current.src) {
     setLayers({ prev: layers.current, current: media });
+  }
 
-    /* After the CSS transition completes, drop the old layer */
-    clearTimeout(fadeTimerRef.current);
-    fadeTimerRef.current = setTimeout(() => {
+  /* After the CSS transition completes, drop the old layer */
+  useEffect(() => {
+    if (!layers.prev) return;
+    const timer = setTimeout(() => {
       setLayers((l) => ({ prev: null, current: l.current }));
     }, 420); // slightly longer than the 400ms transition
-
-    return () => clearTimeout(fadeTimerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [media]);
+    return () => clearTimeout(timer);
+  }, [layers.prev]);
 
   const dimFilter = dimmed
     ? 'brightness(0.55) saturate(0.45)'

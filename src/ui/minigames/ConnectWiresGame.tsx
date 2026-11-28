@@ -11,6 +11,7 @@ import {
   type WireState,
 } from '../../game/minigames/connectWires.ts';
 import { playBoxChime, playClaim, playClick, playHover, playLocked } from '../../game/audio/soundEngine.ts';
+import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
 
 const MODE_LABEL = { cozy: 'Cozy', challenge: 'Challenge' } as const;
 
@@ -126,16 +127,6 @@ export default function ConnectWiresGame({ mode, title = 'Connect the Wires', on
     if (fixed) playClaim();
   }, [fixed]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
 
   useEffect(() => {
     cardRef.current?.querySelector<SVGGElement>('.ows-wire-terminal--left')?.focus();
@@ -245,6 +236,10 @@ export default function ConnectWiresGame({ mode, title = 'Connect the Wires', on
     onComplete({ outcome: 'win', mode });
   };
 
+  /* Once finished, × / Escape report the result like Continue */
+  const close = miniGameClose(fixed, finish, onCancel);
+  useMiniGameEscape(close);
+
   let statusText: string;
   let statusMod: string;
   if (fixed) {
@@ -281,7 +276,7 @@ export default function ConnectWiresGame({ mode, title = 'Connect the Wires', on
             {done} / {n}
           </span>
           <span className={`ows-mg-badge ows-mg-badge--${mode}`}>{MODE_LABEL[mode]}</span>
-          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={onCancel}>
+          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={close}>
             ×
           </button>
         </header>

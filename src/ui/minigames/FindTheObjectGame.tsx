@@ -16,6 +16,7 @@ import {
 } from '../../game/minigames/findTheObject.ts';
 import { useGameStore } from '../../game/store/useGameStore.ts';
 import { playBoxChime, playClaim, playClick, playHover, playRummage } from '../../game/audio/soundEngine.ts';
+import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
 import { RummageArt, RummageIcon } from './rummageIcons.tsx';
 
 const MODE_LABEL = { cozy: 'Cozy', challenge: 'Challenge' } as const;
@@ -72,16 +73,6 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
     return () => clearTimeout(timer);
   }, [hint]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
 
   /** Screen point → tray fractions */
   const toTray = (clientX: number, clientY: number) => {
@@ -186,6 +177,10 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
     onComplete({ outcome: 'win', mode });
   };
 
+  /* Once finished, × / Escape report the result like Continue */
+  const close = miniGameClose(complete, finish, onCancel);
+  useMiniGameEscape(close);
+
   let statusText: string;
   if (complete) statusText = 'Found everything!';
   else if (lastFound) statusText = `Found the ${getRummageItem(lastFound).name}!`;
@@ -204,7 +199,7 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
             {found} / {total}
           </span>
           <span className={`ows-mg-badge ows-mg-badge--${mode}`}>{MODE_LABEL[mode]}</span>
-          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={onCancel}>
+          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={close}>
             ×
           </button>
         </header>

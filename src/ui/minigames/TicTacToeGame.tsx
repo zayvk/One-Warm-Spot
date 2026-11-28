@@ -10,6 +10,7 @@ import {
 } from '../../game/minigames/ticTacToe.ts';
 import { useGameStore } from '../../game/store/useGameStore.ts';
 import { playClaim, playClick, playHover, playLocked } from '../../game/audio/soundEngine.ts';
+import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
 
 /** The opponent takes a calm breath before answering */
 const CPU_DELAY_MS = 380;
@@ -96,17 +97,7 @@ export default function TicTacToeGame({
     else if (status === 'loss') playLocked();
   }, [status]);
 
-  /* Escape closes; keyboard players start on the board */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
+  /* Keyboard players start on the board */
 
   useEffect(() => {
     cardRef.current?.querySelector<HTMLButtonElement>('.ows-ttt-cell:not(:disabled)')?.focus();
@@ -134,6 +125,10 @@ export default function TicTacToeGame({
     onComplete({ outcome: status, mode });
   };
 
+  /* Once finished, × / Escape report the result like Continue */
+  const close = miniGameClose(finished, finish, onCancel);
+  useMiniGameEscape(close);
+
   const lostLocked = status === 'loss' && !allowRetryOnLoss;
   const statusText = lostLocked
     ? 'Try again tomorrow'
@@ -158,7 +153,7 @@ export default function TicTacToeGame({
     <div className="ows-mg-overlay">
       <section
         ref={cardRef}
-        className="ows-mg-card"
+        className="ows-mg-card ows-ttt-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ows-ttt-title"
@@ -168,7 +163,7 @@ export default function TicTacToeGame({
             {title}
           </h2>
           <span className={`ows-mg-badge ows-mg-badge--${mode}`}>{MODE_LABEL[mode]}</span>
-          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={onCancel}>
+          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={close}>
             ×
           </button>
         </header>

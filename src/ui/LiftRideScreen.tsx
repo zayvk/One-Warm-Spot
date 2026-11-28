@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import TerraceLiftCutscene from './TerraceLiftCutscene.tsx';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { stopLiftHum } from '../game/audio/soundEngine.ts';
-import { preloadSceneBackdrop } from '../game/renderer/shelterScene.ts';
+import { preloadShelterScene } from '../game/renderer/preloadScene.ts';
 import { LIFT_FADE_MS, liftRideHoldMs, type BuildingFloorId } from '../game/data/floors.ts';
 import { isCutsceneSkipKey } from './cutsceneKeys.ts';
 
@@ -32,7 +32,7 @@ export default function LiftRideScreen({ fromFloor, toFloor, onArrive }: LiftRid
 
   /* Decode the rooftop stage early so the live scene reveals without a pop-in */
   useEffect(() => {
-    if (toFloor === 'R') preloadSceneBackdrop('terrace');
+    if (toFloor === 'R') preloadShelterScene('terrace');
   }, [toFloor]);
 
   useEffect(() => {
@@ -90,8 +90,8 @@ export default function LiftRideScreen({ fromFloor, toFloor, onArrive }: LiftRid
         className="ows-btn-glass"
         style={{
           position: 'absolute',
-          bottom: 'var(--space-md)',
-          right: 'var(--space-md)',
+          bottom: 'var(--hud-bottom)',
+          right: 'var(--hud-right)',
           zIndex: 10,
           padding: 'var(--space-xs) var(--space-md)',
           fontSize: '0.82rem',

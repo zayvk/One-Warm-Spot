@@ -6,6 +6,8 @@ import {
   floorCaption,
   floorIndicator,
   liftRideTimeline,
+  stopSafeArea,
+  LIFT_SAFE_AREA,
   type BuildingFloorId,
 } from '../game/data/floors.ts';
 import {
@@ -20,12 +22,12 @@ import {
 import {
   CutsceneCaption,
   LIFT_DOORWAY_ORIGIN,
-  LIFT_STAGE_H,
-  LIFT_STAGE_W,
   LiftDoors,
   LiftFloorReadout,
   LiftFrame,
+  StageFill,
 } from './liftStage.tsx';
+import { stageBox, useBuildingStage } from './buildingStage.ts';
 
 /** Downstairs floors hear the rooftop's birdsong faintly through the windows */
 const DOWNSTAIRS_AMBIENCE_LEVEL = 0.3;
@@ -67,6 +69,10 @@ export default function TerraceLiftCutscene({ fromFloor, toFloor, reduceMotion, 
 
   const fromBackdrop = floorBackdrop(fromFloor);
   const toBackdrop = floorBackdrop(toFloor);
+  /* The lift and the floor we push in from are framed by the same fitStage maths as every scene */
+  const lift = useBuildingStage(LIFT_SAFE_AREA);
+  const pushSafe = useMemo(() => stopSafeArea(fromFloor), [fromFloor]);
+  const push = useBuildingStage(pushSafe);
 
   /* Warm the image cache so every layer is ready before it's needed */
   useEffect(() => {
@@ -142,17 +148,11 @@ export default function TerraceLiftCutscene({ fromFloor, toFloor, reduceMotion, 
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#1e1a16' }}>
-      {/* ── Cover-fitted 16:9 lift stage ── */}
-      <div
-        style={{
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          width: LIFT_STAGE_W,
-          height: LIFT_STAGE_H,
-          transform: 'translate(-50%, -50%)',
-        }}
-      >
+      {/* Soft blurred fill where the fitted lift stops short of an edge (extreme window shapes) */}
+      {lift.fill && <StageFill src={behindIsDestination ? toBackdrop : fromBackdrop} />}
+
+      {/* ── The fitted 1376×768 lift stage ── */}
+      <div style={{ ...stageBox(lift.stage), boxShadow: lift.fill ? '0 0 40px rgba(20, 16, 12, 0.45)' : undefined }}>
         <div
           style={{
             position: 'absolute',
@@ -217,7 +217,7 @@ export default function TerraceLiftCutscene({ fromFloor, toFloor, reduceMotion, 
           >
             <LiftDoors open={doorsOpen} reduceMotion={reduceMotion} />
             <LiftFrame />
-            <LiftFloorReadout floor={floorIndicator(indicator)} reduceMotion={reduceMotion} />
+            <LiftFloorReadout floor={floorIndicator(indicator)} reduceMotion={reduceMotion} stageHeight={lift.stage.height} />
           </div>
         </div>
       </div>
@@ -232,16 +232,16 @@ export default function TerraceLiftCutscene({ fromFloor, toFloor, reduceMotion, 
             opacity: inLift ? 0 : 1,
             transition: 'opacity 300ms ease',
             pointerEvents: 'none',
+            background: '#1e1a16',
           }}
         >
+          {push.fill && <StageFill src={fromBackdrop} />}
           <img
             src={fromBackdrop}
             alt=""
             draggable={false}
             style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
+              ...stageBox(push.stage),
               transformOrigin: '50% 45%',
               animation: reduceMotion ? undefined : `owsLobbyPush ${timeline.liftIn + 200}ms ease-in-out forwards`,
             }}

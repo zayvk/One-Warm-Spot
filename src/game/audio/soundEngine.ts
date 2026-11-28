@@ -10,6 +10,7 @@
  */
 
 import type { SiteId } from '../types/game.ts';
+import { assetUrl } from '../engine/assetUrl.ts';
 
 /* ═══════════════════════════════════════════
    Storage & Defaults
@@ -124,6 +125,7 @@ export function unlock(): void {
   applyAmbience();
   applyCampfire();
   applyWeatherSound();
+  applyRoomTone();
 }
 
 export function isUnlocked(): boolean {
@@ -149,6 +151,7 @@ export function toggleMute(): void {
   applyAmbience();
   applyCampfire();
   applyWeatherSound();
+  applyRoomTone();
 }
 
 export function getMusicVolume(): number {
@@ -181,6 +184,7 @@ export function setSfxVolume(v: number): void {
   applyAmbience();
   applyCampfire();
   applyWeatherSound();
+  applyRoomTone();
 }
 
 /** Convenience helper if a caller adjusts both channels uniformly */
@@ -408,7 +412,7 @@ export function startMenuMusic(): void {
     return;
   }
 
-  const audio = new Audio('/source/audio/music-menu.mp3');
+  const audio = new Audio(assetUrl('/source/audio/music-menu.mp3'));
   audio.loop = true;
   audio.volume = 1;
   audio.crossOrigin = 'anonymous';
@@ -1342,6 +1346,100 @@ export function setWeatherAmbience(weather: WeatherSound | null): void {
   applyWeatherSound();
 }
 
+/* ═══════════════════════════════════════════
+   Apartment Room Interiors
+   A muffled indoor room tone (still air, the weather heard through old glass)
+   and a wooden door creak on the way in.
+   ═══════════════════════════════════════════ */
+
+export interface RoomToneRequest {
+  weather: WeatherSound;
+  phase: 'day' | 'dusk' | 'night';
+}
+
+const ROOM_TONE_FADE = 0.6;
+
+let desiredRoomTone: RoomToneRequest | null = null;
+let currentRoomTone: AmbienceInstance | null = null;
+
+function buildRoomTone(inst: AmbienceInstance, c: AudioContext, req: RoomToneRequest): void {
+  /* Everything outside reaches the room through the walls and a closed window */
+  const muffle = c.createBiquadFilter();
+  muffle.type = 'lowpass';
+  muffle.frequency.value = 1300;
+  muffle.connect(inst.bus);
+  inst.nodes.push(muffle);
+
+  /* Still indoor air */
+  addBed(inst, c, { color: 'brown', filter: 'lowpass', freq: 190, vol: 0.05, swellRate: 0.03, swellDepth: 0.01 });
+
+  if (req.weather === 'rain') {
+    addBed(inst, c, { color: 'pink', filter: 'bandpass', freq: 850, q: 0.6, vol: 0.026, swellRate: 0.05, swellDepth: 0.008 });
+    /* Drops on the window pane */
+    every(inst, 140, 480, (t) => rainTap(c, muffle, t));
+  } else if (req.weather === 'wind') {
+    const draught = addBed(inst, c, {
+      color: 'pink',
+      filter: 'bandpass',
+      freq: 320,
+      q: 1.1,
+      vol: 0.028,
+      swellRate: 0.09,
+      swellDepth: 0.022,
+      sweepRate: 0.05,
+      sweepDepth: 90,
+    });
+    addLfo(inst, c, 0.027, 0.01, [draught.gain.gain]);
+  } else if (req.phase !== 'night') {
+    /* Faint birds outside the window on calm days */
+    every(inst, 5000, 12000, (t) => birdsong(c, muffle, t, 0.012), [1500, 4000]);
+  }
+  /* The old building settles now and then */
+  every(inst, 7000, 15000, (t) => creak(c, muffle, t, rand(14, 22), rand(380, 620), 0.02, rand(0.5, 0.9)), [3000, 7000]);
+}
+
+function applyRoomTone(): void {
+  const want = desiredRoomTone;
+  if (!want || muted || !unlocked || sfxVolume <= 0) {
+    if (currentRoomTone) {
+      stopAmbienceInstance(currentRoomTone, ROOM_TONE_FADE);
+      currentRoomTone = null;
+    }
+    return;
+  }
+  const key = `${want.weather}|${want.phase}`;
+  if (currentRoomTone?.key === key) return;
+  if (currentRoomTone) stopAmbienceInstance(currentRoomTone, ROOM_TONE_FADE);
+
+  const c = getCtx();
+  const bus = c.createGain();
+  bus.gain.value = 0;
+  bus.connect(getSfxTarget());
+  const inst: AmbienceInstance = { key, bus, nodes: [], timers: new Set(), alive: true };
+  buildRoomTone(inst, c, want);
+  rampGain(bus.gain, 1, ROOM_TONE_FADE);
+  currentRoomTone = inst;
+}
+
+/** Fade in the muffled interior room tone for the current weather & time of day (`null` fades it out) */
+export function setRoomTone(req: RoomToneRequest | null): void {
+  desiredRoomTone = req;
+  applyRoomTone();
+}
+
+/** An old apartment door swinging open: a slow wooden creak and a soft knock against the stop */
+export function playDoorCreak(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  const pv = pitchVar();
+  creak(c, target, t, 17 * pv, 540 * pv, 0.11, 0.75);
+  creak(c, target, t + 0.42, 24 * pv, 820 * pv, 0.06, 0.45);
+  puff(c, target, t + 0.05, 0.03, 0.6, 300, 1400, 600);
+  tone(c, target, t + 0.92, { freq: 95 * pv, glideTo: 70, vol: 0.09, decay: 0.16, type: 'triangle', attack: 0.004 });
+}
+
 /** Hollow woody knocks as split logs are stacked in the fire pit */
 export function playLogStack(): void {
   if (muted || !unlocked || sfxVolume <= 0) return;
@@ -1551,6 +1649,84 @@ export function playBoxChime(): void {
 
   [[784, 0], [1046, 0.07]].forEach(([freq, off]) => {
     tone(c, target, t + off, { freq: freq * pv, vol: 0.075, decay: 0.28, attack: 0.003 });
+  });
+}
+
+/* ═══════════════════════════════════════════
+   Safe Dial & Hit the Nail
+   ═══════════════════════════════════════════ */
+
+/**
+ * One notch of a safe dial: a crisp click, a deeper resonant tick near the target, and a heavy
+ * metallic clunk when the tumbler catches.
+ */
+export function playDialTick(kind: 'tick' | 'near' | 'catch'): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  const pv = 0.97 + Math.random() * 0.06;
+  if (kind === 'tick') {
+    relayTick(c, target, t, 0.05);
+    tone(c, target, t, { freq: 1900 * pv, vol: 0.02, decay: 0.03, type: 'triangle', attack: 0.001 });
+    return;
+  }
+  if (kind === 'near') {
+    relayTick(c, target, t, 0.04);
+    tone(c, target, t, { freq: 620 * pv, glideTo: 520, vol: 0.06, decay: 0.09, type: 'triangle', attack: 0.002 });
+    return;
+  }
+  /* The tumbler drops into its gate: a dull thump, a metal knock and a short ring */
+  tone(c, target, t, { freq: 110 * pv, glideTo: 70, vol: 0.18, decay: 0.16, type: 'triangle', attack: 0.002 });
+  tone(c, target, t + 0.004, { freq: 340 * pv, glideTo: 260, vol: 0.09, decay: 0.12, type: 'square', attack: 0.001 });
+  tone(c, target, t + 0.01, { freq: 1480 * pv, vol: 0.03, decay: 0.35, attack: 0.002 });
+  puff(c, target, t, 0.05, 0.08, 500, 2600, 900);
+}
+
+/** The safe's bolt slides back and the door releases: a latch clack and a warm rising chime */
+export function playSafeOpen(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  tone(c, target, t, { freq: 160, glideTo: 90, vol: 0.16, decay: 0.2, type: 'triangle', attack: 0.002 });
+  puff(c, target, t + 0.02, 0.06, 0.25, 300, 2200, 700);
+  [523.3, 659.3, 784, 1046.5].forEach((f, i) => {
+    tone(c, target, t + 0.22 + i * 0.09, { freq: f, vol: 0.08, decay: 0.7, attack: 0.01 });
+  });
+}
+
+/** A clean hammer blow: a bright metallic clang over a wooden thud */
+export function playNailClang(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  const pv = pitchVar();
+  tone(c, target, t, { freq: 1320 * pv, vol: 0.09, decay: 0.32, type: 'triangle', attack: 0.001 });
+  tone(c, target, t, { freq: 2210 * pv, vol: 0.05, decay: 0.22, attack: 0.001 });
+  tone(c, target, t, { freq: 140 * pv, glideTo: 80, vol: 0.16, decay: 0.12, type: 'triangle', attack: 0.002 });
+  puff(c, target, t, 0.06, 0.1, 400, 3200, 1000);
+}
+
+/** A glancing blow: a dull, short tink */
+export function playNailTink(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  tone(c, target, t, { freq: 880 * pitchVar(), glideTo: 700, vol: 0.05, decay: 0.08, type: 'triangle', attack: 0.001 });
+  puff(c, target, t, 0.025, 0.05, 800, 2400, 1200);
+}
+
+/** All three nails flush: a warm settled chord */
+export function playNailFinish(): void {
+  if (muted || !unlocked || sfxVolume <= 0) return;
+  const c = getCtx();
+  const t = now();
+  const target = getSfxTarget();
+  [392, 493.9, 587.3, 784].forEach((f, i) => {
+    tone(c, target, t + i * 0.05, { freq: f, vol: 0.075, decay: 0.9, attack: 0.012 });
   });
 }
 

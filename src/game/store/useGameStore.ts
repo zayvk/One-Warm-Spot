@@ -50,7 +50,7 @@ import {
   floorSpotResetRule,
   readStoredTerraceState,
   regrowStoredTerrace,
-  resetFloorSpotsForNewDay,
+  applyFloorNightReset,
   saveTerraceState,
   type TerraceState,
 } from '../engine/terraceState.ts';
@@ -522,14 +522,9 @@ export const useGameStore = create<GameState>()((set, get) => {
       if (s.chosenSite === 'terrace') {
         const storedTerrace = regrowth?.state ?? readStoredTerraceState();
         if (storedTerrace) {
-          const nextRepaired = resetFloorSpotsForNewDay(storedTerrace.repairedSpots, weather);
-          const resetIds = storedTerrace.repairedSpots.filter((id) => !nextRepaired.includes(id));
-          if (resetIds.length > 0 || storedTerrace.failedTodaySpots.length > 0) {
-            const nextState: TerraceState = {
-              ...storedTerrace,
-              repairedSpots: nextRepaired,
-              failedTodaySpots: [],
-            };
+          /* Re-locked doors also forget their room interiors */
+          const { state: nextState, resetIds } = applyFloorNightReset(storedTerrace, weather);
+          if (nextState !== storedTerrace) {
             saveTerraceState(nextState);
             if (regrowth) regrowth.state = nextState;
           }

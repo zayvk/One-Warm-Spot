@@ -165,7 +165,8 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
           flexDirection: 'column',
           alignItems: 'center',
           height: '100%',
-          padding: 'var(--space-md) var(--space-lg) var(--space-lg)',
+          padding:
+            'max(var(--sp-md), env(safe-area-inset-top, 0px)) max(var(--sp-lg), env(safe-area-inset-right, 0px)) var(--sp-lg) max(var(--sp-lg), env(safe-area-inset-left, 0px))',
           overflowY: 'auto',
         }}
       >
@@ -184,7 +185,7 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
             <h2
               style={{
                 fontFamily: 'var(--font-game-title)',
-                fontSize: 'clamp(1.25rem, 2.4vw, 1.65rem)',
+                fontSize: 'clamp(1.15rem, 2.4vw, calc(1.65rem * var(--ui-text-scale)))',
                 color: '#fff',
                 textShadow: '0 2px 12px rgba(48, 38, 30, 0.5)',
                 lineHeight: 1.2,
@@ -258,11 +259,11 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
         <p
           style={{
             color: 'rgba(255, 252, 246, 0.92)',
-            fontSize: '0.86rem',
+            fontSize: 'calc(0.86rem * var(--ui-text-scale))',
             textShadow: '0 1px 6px rgba(48, 38, 30, 0.55)',
-            marginBottom: '12px',
+            marginBottom: 'calc(12px * var(--ui-text-scale))',
             textAlign: 'center',
-            maxWidth: '720px',
+            maxWidth: 'calc(720px * var(--ui-text-scale))',
           }}
         >
           {modeInfo.desc} Every spot holds weathered traces left by an earlier traveler.
@@ -288,7 +289,7 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
           <>
             <p
               style={{
-                fontSize: '0.75rem',
+                fontSize: 'var(--fs-xs)',
                 fontWeight: 600,
                 color: 'rgba(255, 252, 246, 0.84)',
                 textShadow: '0 1px 6px rgba(48, 38, 30, 0.5)',
@@ -365,7 +366,7 @@ function SiteCard({ site, locked, stats, onHover, onLeave, onClaim, onLockedClic
       <div
         style={{
           width: '100%',
-          height: '84px',
+          height: 'calc(84px * var(--ui-text-scale))',
           flexShrink: 0,
           borderRadius: 'var(--radius-sm)',
           overflow: 'hidden',
@@ -405,7 +406,7 @@ function SiteCard({ site, locked, stats, onHover, onLeave, onClaim, onLockedClic
         <h3
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: '1.02rem',
+            fontSize: 'calc(1.02rem * var(--ui-text-scale))',
             color: 'var(--charcoal)',
             lineHeight: 1.25,
           }}
@@ -414,7 +415,7 @@ function SiteCard({ site, locked, stats, onHover, onLeave, onClaim, onLockedClic
         </h3>
         <p
           style={{
-            fontSize: '0.8rem',
+            fontSize: 'calc(0.8rem * var(--ui-text-scale))',
             color: 'var(--text-secondary)',
             fontStyle: 'italic',
             marginTop: '2px',
@@ -425,7 +426,7 @@ function SiteCard({ site, locked, stats, onHover, onLeave, onClaim, onLockedClic
       </div>
 
       {/* Description */}
-      <p style={{ fontSize: '0.8rem', color: 'var(--charcoal)', lineHeight: 1.48 }}>
+      <p style={{ fontSize: 'calc(0.8rem * var(--ui-text-scale))', color: 'var(--charcoal)', lineHeight: 1.48 }}>
         {site.description}
       </p>
 
@@ -433,7 +434,7 @@ function SiteCard({ site, locked, stats, onHover, onLeave, onClaim, onLockedClic
       {!locked && site.leftBehind && (
         <p
           style={{
-            fontSize: '0.75rem',
+            fontSize: 'var(--fs-xs)',
             color: 'var(--text-secondary)',
             borderTop: '1px solid var(--border)',
             paddingTop: '6px',
@@ -457,7 +458,7 @@ function SiteCard({ site, locked, stats, onHover, onLeave, onClaim, onLockedClic
               padding: '8px var(--space-md)',
               borderRadius: 'var(--radius-sm)',
               fontWeight: 600,
-              fontSize: '0.88rem',
+              fontSize: 'calc(0.88rem * var(--ui-text-scale))',
             }}
           >
             Restore this shelter
@@ -465,7 +466,7 @@ function SiteCard({ site, locked, stats, onHover, onLeave, onClaim, onLockedClic
         ) : (
           <div
             style={{
-              fontSize: '0.78rem',
+              fontSize: 'calc(0.78rem * var(--ui-text-scale))',
               fontWeight: 500,
               color: 'var(--locked)',
               textAlign: 'center',

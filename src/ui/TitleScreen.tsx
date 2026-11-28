@@ -77,23 +77,8 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
     <>
       <BackgroundStage media={BG_TITLE} />
 
-      {/* Content layer positioned in the upper-center open sky area */}
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          height: '100%',
-          overflowY: 'auto',
-          paddingTop: 'clamp(42px, 7vh, 84px)',
-          paddingBottom: 'var(--space-lg)',
-          paddingInline: 'var(--space-md)',
-          textAlign: 'center',
-        }}
-      >
+      {/* Content layer in the upper-centre open sky (logo beside the buttons on short landscape phones) */}
+      <div className="ows-title-screen">
         <div className="ows-title-stack">
           {/* Game title: painted wordmark, with a hidden heading for screen readers */}
           <h1 className="ows-sr-only">One Warm Spot</h1>
@@ -104,130 +89,77 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
             className="ows-title-logo"
           />
 
-          {/* Tagline */}
-          <p
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(0.95rem, 1.8vw, 1.18rem)',
-              color: 'rgba(255, 252, 246, 0.94)',
-              textShadow: '0 2px 10px rgba(48, 38, 30, 0.52)',
-              marginBottom: 'var(--space-lg)',
-              maxWidth: '460px',
-            }}
-          >
-            The dust has settled. The sun returns. Find your shelter.
-          </p>
+          <div className="ows-title-copy">
+            <p className="ows-title-tagline">The dust has settled. The sun returns. Find your shelter.</p>
 
-          {/* Button group */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-sm)',
-              alignItems: 'center',
-              width: '100%',
-              maxWidth: '260px',
-            }}
-          >
-            {hasSave ? (
-              <>
-                <button
-                  type="button"
-                  onClick={handleContinue}
-                  onMouseEnter={playHover}
-                  onFocus={playHover}
-                  className="ows-btn-primary"
-                  style={{
-                    padding: '12px var(--space-lg)',
-                    fontSize: '1.1rem',
-                    borderRadius: 'var(--radius-md)',
-                    width: '100%',
-                    fontWeight: 600,
-                  }}
-                >
-                  ☀️ Continue
-                </button>
+            {/* Button group */}
+            <div className="ows-title-actions">
+              {hasSave ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleContinue}
+                    onMouseEnter={playHover}
+                    onFocus={playHover}
+                    className="ows-btn-primary ows-title-btn ows-title-btn--main"
+                  >
+                    ☀️ Continue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStart}
+                    onMouseEnter={playHover}
+                    onFocus={playHover}
+                    className="ows-btn-glass ows-title-btn ows-title-btn--alt"
+                  >
+                    New Game
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
                   onClick={handleStart}
                   onMouseEnter={playHover}
                   onFocus={playHover}
-                  className="ows-btn-glass"
-                  style={{
-                    padding: '10px var(--space-lg)',
-                    fontSize: '0.96rem',
-                    borderRadius: 'var(--radius-md)',
-                    width: '100%',
-                    fontWeight: 500,
-                  }}
+                  className="ows-btn-primary ows-title-btn ows-title-btn--main"
                 >
-                  New Game
+                  ☀️ Start
                 </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={handleStart}
-                onMouseEnter={playHover}
-                onFocus={playHover}
-                className="ows-btn-primary"
-                style={{
-                  padding: '12px var(--space-lg)',
-                  fontSize: '1.1rem',
-                  borderRadius: 'var(--radius-md)',
-                  width: '100%',
-                  fontWeight: 600,
-                }}
-              >
-                ☀️ Start
-              </button>
-            )}
+              )}
 
-            <div style={{ display: 'flex', gap: 'var(--space-sm)', width: '100%' }}>
-              <button
-                type="button"
-                onClick={handleAboutOpen}
-                onMouseEnter={playHover}
-                onFocus={playHover}
-                className="ows-btn-glass"
-                style={{
-                  flex: 1,
-                  padding: '9px var(--space-sm)',
-                  fontSize: '0.9rem',
-                  borderRadius: 'var(--radius-md)',
+              <div className="ows-title-row">
+                <button
+                  type="button"
+                  onClick={handleAboutOpen}
+                  onMouseEnter={playHover}
+                  onFocus={playHover}
+                  className="ows-btn-glass ows-title-btn ows-title-btn--small"
+                >
+                  About
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLoadBackupClick}
+                  onMouseEnter={playHover}
+                  onFocus={playHover}
+                  className="ows-btn-glass ows-title-btn ows-title-btn--small"
+                  title="Resume from a .json backup"
+                >
+                  Load Backup
+                </button>
+              </div>
+              <input
+                ref={backupInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={(e) => {
+                  void handleBackupFile(e);
                 }}
-              >
-                About
-              </button>
-              <button
-                type="button"
-                onClick={handleLoadBackupClick}
-                onMouseEnter={playHover}
-                onFocus={playHover}
-                className="ows-btn-glass"
-                title="Resume from a .json backup"
-                style={{
-                  flex: 1,
-                  padding: '9px var(--space-sm)',
-                  fontSize: '0.9rem',
-                  borderRadius: 'var(--radius-md)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Load Backup
-              </button>
+                style={{ display: 'none' }}
+                aria-hidden="true"
+                tabIndex={-1}
+              />
             </div>
-            <input
-              ref={backupInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={(e) => {
-                void handleBackupFile(e);
-              }}
-              style={{ display: 'none' }}
-              aria-hidden="true"
-              tabIndex={-1}
-            />
           </div>
         </div>
       </div>

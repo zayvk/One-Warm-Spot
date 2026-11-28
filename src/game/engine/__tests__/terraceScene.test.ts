@@ -1,4 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+/* Quiet in-memory storage before the store module loads (it reads saves on import) */
+vi.hoisted(() => {
+  const m = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+    removeItem: (k: string) => void m.delete(k),
+    clear: () => m.clear(),
+  });
+});
+
 import {
   freshTerraceState,
   isSpotFailedToday,
@@ -64,6 +76,7 @@ describe('parseTerraceState', () => {
       spawns: null,
       repairedSpots: [],
       failedTodaySpots: [],
+      roomLayouts: {},
     });
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { locationForScreen, parseResumeLocation } from '../resumeLocation.ts';
+import { locationForScreen, parseResumeLocation, resolveScreen } from '../resumeLocation.ts';
 
 const stored = (v: unknown) => JSON.stringify(v);
 
@@ -39,5 +39,25 @@ describe('resume location after a refresh', () => {
     for (const raw of [null, '', '{', 'null', '42', stored({}), stored({ screen: 'ride' }), stored({ screen: 'floor', floor: 5 }), stored({ screen: 'floor', floor: 'R' })]) {
       expect(parseResumeLocation(raw, 'terrace')).toEqual({ screen: 'title' });
     }
+  });
+});
+
+describe('screen guard (backups loaded mid-session)', () => {
+  it('sends anything past site selection to the Title without a claimed shelter', () => {
+    expect(resolveScreen('title', null, false)).toBe('title');
+    expect(resolveScreen('site-select', null, false)).toBe('site-select');
+    expect(resolveScreen('shelter', null, true)).toBe('title');
+    expect(resolveScreen('room', null, true)).toBe('title');
+  });
+
+  it('leaves the building for the shelter when the loaded run is on another site', () => {
+    for (const s of ['ride', 'floor', 'room'] as const) expect(resolveScreen(s, 'valley', true)).toBe('shelter');
+    expect(resolveScreen('shelter', 'valley', false)).toBe('shelter');
+  });
+
+  it('steps out of a room to its floor once the room is no longer valid', () => {
+    expect(resolveScreen('room', 'terrace', true)).toBe('room');
+    expect(resolveScreen('room', 'terrace', false)).toBe('floor');
+    expect(resolveScreen('floor', 'terrace', false)).toBe('floor');
   });
 });

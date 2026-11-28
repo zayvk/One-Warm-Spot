@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import ShelterCanvas, { type ShelterCanvasHandle } from '../game/renderer/ShelterCanvas.tsx';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import type { ShelterCanvasHandle } from '../game/renderer/ShelterCanvas.tsx';
 import type { SceneStationState } from '../game/renderer/shelterScene.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { SITES } from '../game/data/sites.ts';
@@ -17,6 +17,8 @@ import StationPopover, { type PopoverStation } from './StationPopover.tsx';
 import VitalityDialHud from './VitalityDialHud.tsx';
 import ElevatorPanelModal from './ElevatorPanelModal.tsx';
 import type { BuildingFloorId } from '../game/data/floors.ts';
+import { stagePointToPx, type StagePoint, type StageRect } from '../game/engine/stageFit.ts';
+import { useHudStageFrame } from './useViewport.ts';
 
 export interface ShelterScreenProps {
   onBackToTitle: () => void;
@@ -29,6 +31,18 @@ const SHELTER_AMBIENCE_LEVEL = 0.55;
 
 const POUCH_IDS: ResourceId[] = ['timber', 'cloth', 'seeds', 'water', 'scrap', 'stone', 'food'];
 
+/* PixiJS and the scene code load on demand (kept out of the main bundle; usually warmed during the arrival / lift ride) */
+const ShelterCanvas = lazy(() => import('../game/renderer/ShelterCanvas.tsx'));
+
+/** The same lantern emblem the canvas shows while its stage decodes */
+function SceneLoader() {
+  return (
+    <div className="ows-scene-loader" aria-hidden="true">
+      <img src={UI_ASSETS.logoEmblem} alt="" width={72} height={72} draggable={false} />
+    </div>
+  );
+}
+
 export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenProps) {
   const chosenSite = useGameStore((s) => s.chosenSite);
   const dayPhase = useGameStore((s) => s.dayPhase);
@@ -40,9 +54,12 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
   const canvasRef = useRef<ShelterCanvasHandle>(null);
   /* Null until the scene reports its restored station state */
   const [stationState, setStationState] = useState<SceneStationState | null>(null);
-  const [popover, setPopover] = useState<{ station: PopoverStation; anchor: { x: number; y: number } } | null>(null);
-  const [propMenu, setPropMenu] = useState<{ stationId: StationId; anchor: { x: number; y: number } } | null>(null);
-  const [slotMenu, setSlotMenu] = useState<{ slotId: string; anchor: { x: number; y: number } } | null>(null);
+  /* Menu anchors are stage points, placed with the live stage so they stay on their prop through resizes */
+  const [popover, setPopover] = useState<{ station: PopoverStation; anchor: StagePoint } | null>(null);
+  const [propMenu, setPropMenu] = useState<{ stationId: StationId; anchor: StagePoint } | null>(null);
+  const [slotMenu, setSlotMenu] = useState<{ slotId: string; anchor: StagePoint } | null>(null);
+  const [stage, setStage] = useState<StageRect | null>(null);
+  useHudStageFrame(stage);
   const [elevatorOpen, setElevatorOpen] = useState(false);
 
   /* Pulse newly found pouch materials (derived as the pouch changes) */
@@ -61,21 +78,21 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
   const stations = getSceneConfig(chosenSite)?.stations ?? [];
 
   const closePopover = useCallback(() => setPopover(null), []);
-  const openPopover = useCallback((station: PopoverStation, anchor: { x: number; y: number }) => {
+  const openPopover = useCallback((station: PopoverStation, anchor: StagePoint) => {
     setPropMenu(null);
     setSlotMenu(null);
     setPopover({ station, anchor });
   }, []);
 
   const closePropMenu = useCallback(() => setPropMenu(null), []);
-  const openPropMenu = useCallback((stationId: StationId, anchor: { x: number; y: number }) => {
+  const openPropMenu = useCallback((stationId: StationId, anchor: StagePoint) => {
     setPopover(null);
     setSlotMenu(null);
     setPropMenu({ stationId, anchor });
   }, []);
 
   const closeSlotMenu = useCallback(() => setSlotMenu(null), []);
-  const openSlotMenu = useCallback((slotId: string, anchor: { x: number; y: number }) => {
+  const openSlotMenu = useCallback((slotId: string, anchor: StagePoint) => {
     setPopover(null);
     setPropMenu(null);
     setSlotMenu({ slotId, anchor });
@@ -153,23 +170,12 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
   const slotChoices = stationState
     ? unplacedStations(stationState.slots).flatMap((id) => stations.filter((s) => s.assignableId === id))
     : [];
+  const toPx = (p: StagePoint) => (stage ? stagePointToPx(stage, p) : { x: 0, y: 0 });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Top-left Back + Title cluster */}
-      <header
-        style={{
-          position: 'fixed',
-          top: '16px',
-          left: '16px',
-          zIndex: 30,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-sm)',
-          pointerEvents: 'auto',
-          maxWidth: 'calc(100vw - 128px)',
-        }}
-      >
+      <header className="ows-hud-header" data-hud-top="">
         <button
           type="button"
           onClick={() => {
@@ -191,18 +197,7 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
           draggable={false}
           style={{ flexShrink: 0, filter: 'drop-shadow(0 2px 5px rgba(48, 38, 30, 0.45))' }}
         />
-        <span
-          className="ows-shelter-name"
-          style={{
-            fontFamily: 'var(--font-game-title)',
-            fontSize: 'clamp(0.95rem, 1.8vw, 1.2rem)',
-            color: '#fff',
-            textShadow: '0 2px 10px rgba(48, 38, 30, 0.65)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
+        <span className="ows-hud-place ows-shelter-name">
           {siteName}
         </span>
         {/* Today's weather and what it does on the rooftop (hover / focus) */}
@@ -220,7 +215,7 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
       </header>
 
       {/* Enlarged, horizontally centered Found Materials Pouch with instant hover tooltips */}
-      <div className="ows-hud-bar ows-pouch-bar" aria-label="Found Materials Pouch">
+      <div className="ows-hud-bar ows-pouch-bar" aria-label="Found Materials Pouch" data-hud-top="">
         {pouchResources.map((r) => (
           <span
             key={r.id}
@@ -239,6 +234,7 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
 
       {/* Interactive PixiJS canvas (full viewport) */}
       <main style={{ position: 'relative', flex: 1, minHeight: 0, background: '#F5EFE4' }}>
+        <Suspense fallback={<SceneLoader />}>
         <ShelterCanvas
           ref={canvasRef}
           onStationStateChange={setStationState}
@@ -246,13 +242,15 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
           onStationMenuOpen={openPropMenu}
           onSlotMenuOpen={openSlotMenu}
           onDoor={handleDoor}
+          onStageChange={setStage}
         />
+        </Suspense>
 
-        {slotMenu && stationState && slotChoices.length > 0 && (
+        {slotMenu && stage && stationState && slotChoices.length > 0 && (
           <SlotBuildMenu
             key={`${slotMenu.slotId}-${slotMenu.anchor.x}-${slotMenu.anchor.y}`}
             stations={slotChoices}
-            anchor={slotMenu.anchor}
+            anchor={toPx(slotMenu.anchor)}
             resources={resources}
             busy={stationState.pending !== null}
             onPick={(stationId) => canvasRef.current?.buildInSlot(slotMenu.slotId, stationId) ?? false}
@@ -260,11 +258,11 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
           />
         )}
 
-        {propMenu && menuStation && stationState && (
+        {propMenu && stage && menuStation && stationState && (
           <PropActionMenu
             key={`${propMenu.stationId}-${propMenu.anchor.x}-${propMenu.anchor.y}`}
             station={menuStation}
-            anchor={propMenu.anchor}
+            anchor={toPx(propMenu.anchor)}
             dayPhase={dayPhase}
             weather={outdoorWeather}
             stationState={stationState}
@@ -274,11 +272,11 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
           />
         )}
 
-        {popover && stationState && (
+        {popover && stage && stationState && (
           <StationPopover
             key={`${popover.station}-${popover.anchor.x}-${popover.anchor.y}`}
             station={popover.station}
-            anchor={popover.anchor}
+            anchor={toPx(popover.anchor)}
             title={popoverTitle}
             stationState={stationState}
             resources={resources}

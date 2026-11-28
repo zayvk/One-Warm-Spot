@@ -29,6 +29,7 @@ import {
   type Rng,
 } from './terraceSpawns.ts';
 import { stationMaxTier, type StationTiers } from './stations.ts';
+import { parseRoomLayout, type GeneratedRoomLayout } from '../data/rooms.ts';
 import {
   emptySlotAssignments,
   parseSlotAssignments,
@@ -68,6 +69,8 @@ export interface TerraceState {
   repairedSpots: string[];
   /** Downstairs scavenging spots lost today and locked until tomorrow */
   failedTodaySpots: string[];
+  /** Room interiors behind opened doors (door id → layout); dropped when the door re-locks */
+  roomLayouts: Record<string, GeneratedRoomLayout>;
 }
 
 export const STATION_TIER_KEY: Record<StationId, keyof TerraceState> = {
@@ -118,6 +121,7 @@ export function emptyTerraceState(spawns: TerraceSpawns | null = null): TerraceS
     spawns,
     repairedSpots: [],
     failedTodaySpots: [],
+    roomLayouts: {},
   };
 }
 
@@ -194,6 +198,29 @@ function parseSpawns(raw: Record<string, unknown>): TerraceSpawns | null {
 }
 
 /**
+ * Saved room interiors. `strict` (backups) rejects a damaged map or entry; lenient
+ * loading drops bad entries. Either way only doors that are still open keep their room.
+ */
+function parseRoomLayouts(
+  raw: unknown,
+  openDoors: readonly string[],
+  strict: boolean,
+): Record<string, GeneratedRoomLayout> | null {
+  const out: Record<string, GeneratedRoomLayout> = {};
+  if (raw === undefined || raw === null) return out;
+  if (typeof raw !== 'object' || Array.isArray(raw)) return strict ? null : out;
+  for (const [doorId, value] of Object.entries(raw as Record<string, unknown>)) {
+    const layout = parseRoomLayout(value, doorId);
+    if (!layout) {
+      if (strict) return null;
+      continue;
+    }
+    if (openDoors.includes(doorId)) out[doorId] = layout;
+  }
+  return out;
+}
+
+/**
  * Shared normalizer. `strict` (backups) rejects any damaged field with `null`;
  * lenient mode (localStorage) falls back to safe defaults instead.
  */
@@ -245,6 +272,9 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
   /* Saves from before the downstairs puzzles have none */
   state.repairedSpots = [...new Set(stringList(obj.repairedSpots))];
   state.failedTodaySpots = [...new Set(stringList(obj.failedTodaySpots))];
+  const layouts = parseRoomLayouts(obj.roomLayouts, state.repairedSpots, strict);
+  if (!layouts) return null;
+  state.roomLayouts = layouts;
 
   /* Older rooftops have no slot data: built stations go back to their old spots */
   const slots = parseSlotAssignments(obj.slotAssignments, strict);
@@ -392,6 +422,34 @@ export function resetFloorSpotsForNewDay(repairedSpots: readonly string[], weath
     if (weather === 'wind' && rule === 'wind') return false;
     return true;
   });
+}
+
+/**
+ * The whole downstairs morning reset: weather re-locks spots (`resetFloorSpotsForNewDay`),
+ * yesterday's losses unlock, and every re-locked door forgets its room interior — so
+ * reopening it later reveals a fresh room. Returns the same state when nothing changed.
+ */
+export function applyFloorNightReset(
+  state: TerraceState,
+  weather: Weather,
+): { state: TerraceState; resetIds: string[] } {
+  const repairedSpots = resetFloorSpotsForNewDay(state.repairedSpots, weather);
+  const resetIds = state.repairedSpots.filter((id) => !repairedSpots.includes(id));
+  if (resetIds.length === 0 && state.failedTodaySpots.length === 0) return { state, resetIds };
+  const roomLayouts = Object.fromEntries(Object.entries(state.roomLayouts).filter(([id]) => repairedSpots.includes(id)));
+  return { state: { ...state, repairedSpots, failedTodaySpots: [], roomLayouts }, resetIds };
+}
+
+/** The room behind an opened door, if one has been generated */
+export function storedRoomLayout(doorId: string): GeneratedRoomLayout | null {
+  return readStoredTerraceState()?.roomLayouts[doorId] ?? null;
+}
+
+/** Remembers the room behind an opened door (ignored once the door has re-locked) */
+export function storeRoomLayout(doorId: string, layout: GeneratedRoomLayout): void {
+  const state = loadTerraceState();
+  if (!isSpotRepaired(state, doorId) || state.roomLayouts[doorId]) return;
+  saveTerraceState({ ...state, roomLayouts: { ...state.roomLayouts, [doorId]: layout } });
 }
 
 /**

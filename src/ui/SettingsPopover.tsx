@@ -47,6 +47,7 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
     return () => clearTimeout(statusTimerRef.current);
   }, []);
 
+  /* Capture phase: Escape closes only this popover, never the mini-game / room / panel underneath */
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -55,8 +56,8 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
         onClose();
       }
     }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [onClose]);
 
   const handleMusicChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -102,11 +103,8 @@ export default function SettingsPopover({ onClose }: SettingsPopoverProps) {
     <div
       role="dialog"
       aria-label="Game settings"
+      className="ows-settings-pop"
       style={{
-        position: 'absolute',
-        top: 'calc(100% + 8px)',
-        right: 0,
-        width: 'min(320px, calc(100vw - 32px))',
         background: 'rgba(250, 248, 245, 0.94)',
         backdropFilter: 'blur(14px)',
         WebkitBackdropFilter: 'blur(14px)',

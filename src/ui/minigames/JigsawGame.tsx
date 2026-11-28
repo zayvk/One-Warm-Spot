@@ -15,6 +15,7 @@ import {
 import { JIGSAW_IMAGES } from '../../game/data/media.ts';
 import { useGameStore } from '../../game/store/useGameStore.ts';
 import { playClaim, playClick, playHover } from '../../game/audio/soundEngine.ts';
+import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
 
 const MODE_LABEL = { cozy: 'Cozy', challenge: 'Challenge' } as const;
 
@@ -136,16 +137,6 @@ export default function JigsawGame({ mode, title = 'Jigsaw Puzzle', onComplete, 
     rememberPlayed(puzzle.imageId);
   }, [puzzle.imageId]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
 
   /* Keyboard players start on the first tray piece */
   useEffect(() => {
@@ -281,6 +272,10 @@ export default function JigsawGame({ mode, title = 'Jigsaw Puzzle', onComplete, 
     onComplete({ outcome: 'win', mode });
   };
 
+  /* Once finished, × / Escape report the result like Continue */
+  const close = miniGameClose(solved, finish, onCancel);
+  useMiniGameEscape(close);
+
   let statusText: string;
   if (solved) statusText = 'Piece by piece — complete!';
   else if (!ready) statusText = 'Unpacking the pieces…';
@@ -310,7 +305,7 @@ export default function JigsawGame({ mode, title = 'Jigsaw Puzzle', onComplete, 
             {placed} / {total}
           </span>
           <span className={`ows-mg-badge ows-mg-badge--${mode}`}>{MODE_LABEL[mode]}</span>
-          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={onCancel}>
+          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={close}>
             ×
           </button>
         </header>
@@ -451,22 +446,23 @@ export default function JigsawGame({ mode, title = 'Jigsaw Puzzle', onComplete, 
             )}
           </div>
         </div>
-
-        {drag && dragPiece && (
-          <div
-            ref={ghostRef}
-            className={`ows-jig-ghost ${reduceMotion ? '' : 'ows-jig-ghost--tilt'}`}
-            style={{
-              width: ghostSize,
-              height: ghostSize,
-              transform: `translate(${drag.x - ghostSize / 2}px, ${drag.y - ghostSize / 2}px)`,
-            }}
-            aria-hidden="true"
-          >
-            <PieceArt piece={dragPiece} gridSize={gridSize} src={image.src} clipId={`${uid}-ghost`} />
-          </div>
-        )}
       </section>
+
+      {/* The drag ghost sits outside the (scaled) card so its fixed position follows the pointer 1:1 */}
+      {drag && dragPiece && (
+        <div
+          ref={ghostRef}
+          className={`ows-jig-ghost ${reduceMotion ? '' : 'ows-jig-ghost--tilt'}`}
+          style={{
+            width: ghostSize,
+            height: ghostSize,
+            transform: `translate(${drag.x - ghostSize / 2}px, ${drag.y - ghostSize / 2}px)`,
+          }}
+          aria-hidden="true"
+        >
+          <PieceArt piece={dragPiece} gridSize={gridSize} src={image.src} clipId={`${uid}-ghost`} />
+        </div>
+      )}
     </div>
   );
 }

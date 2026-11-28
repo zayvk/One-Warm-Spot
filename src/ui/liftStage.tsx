@@ -1,11 +1,26 @@
 import { CUTSCENE_ASSETS } from '../game/data/media.ts';
 
-/* Shared pieces of the Terrace lift cutscenes (ride up on arrival, ride down to the lobby) */
+/* Shared pieces of the Terrace lift cutscenes (ride up on arrival, ride down to the lobby); the stage itself is fitted by useBuildingStage */
 
-/** Painted lift & lobby art is 1376×768; the stage is cover-fitted at this aspect so layers stay aligned */
-export const LIFT_STAGE_ASPECT = 1376 / 768;
-export const LIFT_STAGE_W = `max(100vw, calc(100vh * ${LIFT_STAGE_ASPECT}))`;
-export const LIFT_STAGE_H = `max(100vh, calc(100vw / ${LIFT_STAGE_ASPECT}))`;
+/** Soft, dimmed full-bleed copy of a painting behind a stage that doesn't reach every edge */
+export function StageFill({ src }: { src: string }) {
+  return (
+    <img
+      src={src}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      style={{
+        position: 'absolute',
+        inset: '-6%',
+        width: '112%',
+        height: '112%',
+        objectFit: 'cover',
+        filter: 'blur(22px) brightness(0.72)',
+      }}
+    />
+  );
+}
 
 /** The transparent doorway cutout in `terrace-lift-frame.webp` (stage %) */
 const DOORWAY = { left: '35.5%', top: '21.5%', width: '29%', height: '66%' } as const;
@@ -53,8 +68,16 @@ export function LiftFrame() {
   );
 }
 
-/** Vintage amber floor readout inside the brass indicator box */
-export function LiftFloorReadout({ floor, reduceMotion }: { floor: string; reduceMotion: boolean }) {
+/** Vintage amber floor readout inside the brass indicator box (sized to the fitted stage) */
+export function LiftFloorReadout({
+  floor,
+  reduceMotion,
+  stageHeight,
+}: {
+  floor: string;
+  reduceMotion: boolean;
+  stageHeight: number;
+}) {
   return (
     <div
       aria-hidden="true"
@@ -65,7 +88,7 @@ export function LiftFloorReadout({ floor, reduceMotion }: { floor: string; reduc
         transform: 'translate(-50%, -50%)',
         fontFamily: '"Courier New", ui-monospace, monospace',
         fontWeight: 700,
-        fontSize: `calc(${LIFT_STAGE_H} * 0.05)`,
+        fontSize: `${Math.round(stageHeight * 0.05)}px`,
         lineHeight: 1,
         color: '#ffc061',
         textShadow:

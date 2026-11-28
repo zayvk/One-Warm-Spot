@@ -9,6 +9,10 @@ import type {
   StationId,
 } from './types.ts';
 import { SCENE_PROPS } from '../media.ts';
+import { assetUrl } from '../../engine/assetUrl.ts';
+
+/** Left parapet & slot-1 → stairwell door, tallest shelter roof → front edge of the walk floor */
+export const TERRACE_SAFE_AREA = { xMin: 0.1, xMax: 0.93, yMin: 0.3, yMax: 0.9 } as const;
 
 /* ── Randomizable box & weed variants ── */
 
@@ -393,7 +397,7 @@ export const TERRACE_STATIONS: StationConfig[] = [
 ];
 
 export const terraceScene: ShelterSceneConfig = {
-  backdrop: '/source/scenes/terrace-stage.webp',
+  backdrop: assetUrl('/source/scenes/terrace-stage.webp'),
 
   walkableArea: { xMin: 0.12, xMax: 0.9, yMin: 0.53, yMax: 0.88 },
   obstacles: [
@@ -463,8 +467,7 @@ export const terraceScene: ShelterSceneConfig = {
   stations: TERRACE_STATIONS,
   buildSlots: [...TERRACE_BUILD_SLOTS],
 
-  /* Left parapet & slot-1 → stairwell door, tallest shelter roof → front edge of the walk floor */
-  safeArea: { xMin: 0.1, xMax: 0.93, yMin: 0.3, yMax: 0.9 },
+  safeArea: { ...TERRACE_SAFE_AREA },
 };
 
 /* ── Spawn rules for randomized box & weed placement ── */

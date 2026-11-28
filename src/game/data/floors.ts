@@ -3,7 +3,9 @@
 import { CUTSCENE_ASSETS, SCENE_STAGES } from './media.ts';
 import { RESOURCE_MAP } from './resources.ts';
 import type { StageSafeArea } from '../engine/stageFit.ts';
+import { TERRACE_SAFE_AREA } from './scenes/terrace.ts';
 import type { ResourceId } from '../types/game.ts';
+import { assetUrl } from '../engine/assetUrl.ts';
 
 /** Every lift stop: the four apartment floors and the Rooftop Terrace */
 export type BuildingFloorId = 1 | 2 | 3 | 4 | 'R';
@@ -50,6 +52,8 @@ export interface FloorHotspot {
   doneNotice?: string;
   /** Optional toast when clicked again after winning today */
   repairedNotice?: string;
+  /** An apartment room door: once opened (won), it can be entered into a room interior */
+  enterable?: boolean;
 }
 
 export interface BuildingFloor {
@@ -89,6 +93,11 @@ export function floorSpotRepairedNotice(spot: FloorHotspot): string {
   return 'Already searched today — door stands open.';
 }
 
+/** Hover prompt for an opened room door */
+export function floorSpotEnterLabel(spot: FloorHotspot): string {
+  return `Enter · ${spot.label}`;
+}
+
 /* Every floor is painted from the same spot, so the lift sits in the same place on each */
 const LIFT: FloorHotspot = {
   id: 'lift',
@@ -108,6 +117,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Apartment 1A',
         rect: { left: 25.4, top: 21.5, width: 5.6, height: 49 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'tic-tac-toe',
         reward: { timber: 2, cloth: 1 },
@@ -118,6 +128,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Apartment 1B',
         rect: { left: 69.2, top: 21.2, width: 5.5, height: 51.7 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'tic-tac-toe',
         reward: { timber: 1, cloth: 2 },
@@ -127,6 +138,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Side Doorway',
         rect: { left: 82.3, top: 7.5, width: 10.8, height: 85.5 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'dots-and-lines',
         reward: { timber: 1, cloth: 1, seeds: 1 },
@@ -152,6 +164,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Boarded Doorway & Debris',
         rect: { left: 25.1, top: 21.5, width: 7.3, height: 50 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         requiresTool: 'axe',
         puzzle: 'tic-tac-toe',
@@ -163,6 +176,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Sunlit Room 2A',
         rect: { left: 69.2, top: 21.5, width: 5.5, height: 50 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'dots-and-lines',
         reward: { timber: 1, food: 1 },
@@ -172,6 +186,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Cracked Door 2B',
         rect: { left: 82.5, top: 7.8, width: 10.4, height: 83 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'dots-and-lines',
         reward: { timber: 2, cloth: 1 },
@@ -188,6 +203,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Unhinged Door',
         rect: { left: 10.9, top: 22, width: 13.1, height: 66.5 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'dots-and-lines',
         reward: { timber: 2, scrap: 1 },
@@ -197,6 +213,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Utility Door 3A',
         rect: { left: 25.6, top: 21.5, width: 5.3, height: 49.5 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'tic-tac-toe',
         reward: { scrap: 2, timber: 1 },
@@ -208,6 +225,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Utility Door 3B',
         rect: { left: 69.2, top: 21.5, width: 5.5, height: 50 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'tic-tac-toe',
         reward: { scrap: 2, cloth: 1 },
@@ -231,6 +249,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Dark Corridor 3C',
         rect: { left: 82.5, top: 7.8, width: 4.8, height: 77 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'dots-and-lines',
         reward: { timber: 2, stone: 1 },
@@ -256,6 +275,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Splintered Doorway',
         rect: { left: 11.3, top: 8.5, width: 10.5, height: 80 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'dots-and-lines',
         reward: { timber: 2, seeds: 1 },
@@ -265,6 +285,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Dark Hallway 4A',
         rect: { left: 25.8, top: 22.8, width: 5.1, height: 45 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         puzzle: 'dots-and-lines',
         reward: { scrap: 1, stone: 1, cloth: 1 },
@@ -275,6 +296,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Boarded Doorway 4B',
         rect: { left: 68.3, top: 21, width: 6.8, height: 51 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         requiresTool: 'axe',
         puzzle: 'tic-tac-toe',
@@ -286,6 +308,7 @@ export const BUILDING_FLOORS: Record<DownstairsFloorId, BuildingFloor> = {
         label: 'Boarded Studio Door',
         rect: { left: 79.4, top: 9.1, width: 13.6, height: 67 },
         kind: 'scavenge',
+        enterable: true,
         resetRule: 'wind',
         requiresTool: 'axe',
         puzzle: 'tic-tac-toe',
@@ -326,7 +349,12 @@ export const ELEVATOR_STOPS: readonly ElevatorStop[] = [
 /** Bottom to top */
 export const BUILDING_FLOOR_ORDER: readonly BuildingFloorId[] = [1, 2, 3, 4, 'R'];
 
-const ROOFTOP_STAGE = SCENE_STAGES.terrace ?? '/source/scenes/terrace-stage.webp';
+/** The enterable room door `doorId` on `floor`, if there is one */
+export function findEnterableDoor(floor: DownstairsFloorId, doorId: string): FloorHotspot | undefined {
+  return BUILDING_FLOORS[floor].hotspots.find((h) => h.id === doorId && h.enterable);
+}
+
+const ROOFTOP_STAGE = SCENE_STAGES.terrace ?? assetUrl('/source/scenes/terrace-stage.webp');
 
 export function floorLevel(floor: BuildingFloorId): number {
   return BUILDING_FLOOR_ORDER.indexOf(floor);
@@ -346,6 +374,18 @@ export function floorBackdrop(floor: BuildingFloorId): string {
  * Region of a floor's painting kept on screen at any window shape: every hotspot's
  * middle half, so each spot stays visible and clickable (stage fractions, 0–1).
  */
+/** Every building painting (rooftop, floors, lift) is 1376×768 */
+export const BUILDING_ART_W = 1376;
+export const BUILDING_ART_H = 768;
+
+/** Lift cutscene frame: the amber floor readout (top) down to the doorway sill always stays on screen */
+export const LIFT_SAFE_AREA: StageSafeArea = { xMin: 0.3, xMax: 0.7, yMin: 0.03, yMax: 0.9 };
+
+/** Safe area of any stop's painting — the rooftop's scene safe area or a floor's hotspots (lift rides frame it the same way) */
+export function stopSafeArea(floor: BuildingFloorId): StageSafeArea {
+  return floor === 'R' ? { ...TERRACE_SAFE_AREA } : floorSafeArea(floor);
+}
+
 export function floorSafeArea(floor: DownstairsFloorId): StageSafeArea {
   const rects = BUILDING_FLOORS[floor].hotspots.map((h) => h.rect);
   return {

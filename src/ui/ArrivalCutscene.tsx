@@ -13,7 +13,7 @@ import {
   stopLiftHum,
 } from '../game/audio/soundEngine.ts';
 import type { SiteId } from '../game/types/game.ts';
-import { preloadSceneBackdrop } from '../game/renderer/shelterScene.ts';
+import { preloadShelterScene } from '../game/renderer/preloadScene.ts';
 
 export interface ArrivalCutsceneProps {
   siteId: SiteId;
@@ -49,7 +49,7 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
   useEffect(() => {
     fadeOutMenuMusic();
     /* Decode the shelter's stage into Pixi's cache so the live scene reveals without a pop-in */
-    preloadSceneBackdrop(siteId);
+    preloadShelterScene(siteId);
     if (!isLift) startSiteAmbience(siteId);
     return () => startSiteAmbience(null);
   }, [siteId, isLift]);
@@ -184,8 +184,8 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
         className="ows-btn-glass"
         style={{
           position: 'absolute',
-          bottom: 'var(--space-md)',
-          right: 'var(--space-md)',
+          bottom: 'var(--hud-bottom)',
+          right: 'var(--hud-right)',
           zIndex: 10,
           padding: 'var(--space-xs) var(--space-md)',
           fontSize: '0.82rem',

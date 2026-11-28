@@ -5,13 +5,13 @@ import { MENDING_PERKS, RECIPES } from '../game/data/recipes.ts';
 import { perkBlocker, recipeBlocker } from '../game/engine/stations.ts';
 import type { SceneStationState, StationActionResult } from '../game/renderer/shelterScene.ts';
 import { playClick, playHover, playLocked } from '../game/audio/soundEngine.ts';
-import { useKeepInView } from './keepInView.ts';
+import { anchoredMenuStyle, useKeepInView } from './keepInView.ts';
 
 export type PopoverStation = 'grill' | 'sewing';
 
 export interface StationPopoverProps {
   station: PopoverStation;
-  /** Station top in canvas-container pixels */
+  /** Station top in screen px inside the stage container (converted from a stage point by the host) */
   anchor: { x: number; y: number };
   title: string;
   stationState: SceneStationState;
@@ -78,12 +78,7 @@ export default function StationPopover({
     }
   };
 
-  const below = anchor.y < FLIP_BELOW_Y;
-  const style: CSSProperties = {
-    left: `clamp(${POPOVER_HALF_WIDTH + 8}px, ${anchor.x}px, calc(100% - ${POPOVER_HALF_WIDTH + 8}px))`,
-    top: below ? anchor.y + 70 : anchor.y - 12,
-    transform: below ? 'translateX(-50%)' : 'translate(-50%, -100%)',
-  };
+  const style: CSSProperties = anchoredMenuStyle(anchor, POPOVER_HALF_WIDTH, FLIP_BELOW_Y, 70, 8);
 
   const tiers = stationState.tiers;
   const heading = station === 'grill' ? 'Cooking' : 'Mending';

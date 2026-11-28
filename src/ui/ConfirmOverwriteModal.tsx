@@ -64,7 +64,7 @@ export default function ConfirmOverwriteModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 'var(--space-md)',
+        padding: '8px',
         background: 'rgba(61, 56, 50, 0.55)',
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',
@@ -73,15 +73,15 @@ export default function ConfirmOverwriteModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="ows-modal-card"
         style={{
           background: 'rgba(250, 248, 245, 0.94)',
           backdropFilter: 'blur(14px)',
           WebkitBackdropFilter: 'blur(14px)',
           border: '1.5px solid var(--terra-200)',
           borderRadius: 'var(--radius-lg)',
-          padding: 'var(--space-lg)',
-          maxWidth: '480px',
-          width: '100%',
+          padding: 'clamp(16px, 4dvh, 24px)',
+          width: '480px',
           boxShadow: '0 14px 42px rgba(61, 56, 50, 0.28)',
           color: 'var(--charcoal)',
         }}

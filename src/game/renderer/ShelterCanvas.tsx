@@ -22,8 +22,11 @@ import {
   type StationMenuAction,
   type StationMenuCallback,
   type SlotMenuCallback,
+  type StageCallback,
   type StationOpenCallback,
 } from './shelterScene.ts';
+import { rendererResolution } from '../engine/stageFit.ts';
+import { currentUiScale, subscribeViewport } from '../../ui/useViewport.ts';
 import type { AssignableStationId } from '../data/scenes/types.ts';
 import { addResources } from '../engine/scavenge.ts';
 
@@ -49,6 +52,8 @@ export interface ShelterCanvasProps {
   onSlotMenuOpen?: SlotMenuCallback;
   /** The traveler reached a door; return true if it leads somewhere (e.g. `stairwell-door`) */
   onDoor?: (doorId: string) => boolean;
+  /** The fitted stage rect (screen px), now and after every refit */
+  onStageChange?: StageCallback;
 }
 
 const NOT_READY: StationActionResult = { ok: false, message: 'The rooftop is still settling in' };
@@ -65,6 +70,7 @@ export default function ShelterCanvas({
   onStationMenuOpen,
   onSlotMenuOpen,
   onDoor,
+  onStageChange,
 }: ShelterCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<ShelterScene | null>(null);
@@ -73,6 +79,7 @@ export default function ShelterCanvas({
   const stationMenuCbRef = useRef(onStationMenuOpen);
   const slotMenuCbRef = useRef(onSlotMenuOpen);
   const doorCbRef = useRef(onDoor);
+  const stageCbRef = useRef(onStageChange);
   /* Crafted perks shape gathering costs (gloves) and strength drift (cloak) */
   const perksRef = useRef<string[]>([]);
 
@@ -82,7 +89,8 @@ export default function ShelterCanvas({
     stationMenuCbRef.current = onStationMenuOpen;
     slotMenuCbRef.current = onSlotMenuOpen;
     doorCbRef.current = onDoor;
-  }, [onStationStateChange, onStationOpen, onStationMenuOpen, onSlotMenuOpen, onDoor]);
+    stageCbRef.current = onStageChange;
+  }, [onStationStateChange, onStationOpen, onStationMenuOpen, onSlotMenuOpen, onDoor, onStageChange]);
 
   useImperativeHandle(ref, () => ({
     requestBuild: (id: string) => sceneRef.current?.requestBuild(id) ?? false,
@@ -182,10 +190,29 @@ export default function ShelterCanvas({
     let scene: ShelterScene | null = null;
     const app = new Application();
 
+    /* The container follows 100dvh, so address-bar slides and window resizes all arrive here */
     const observer = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
-      if (rect) scene?.resize(rect.width, rect.height);
+      if (rect) scene?.resize(rect.width, rect.height, rendererResolution(window.devicePixelRatio));
     });
+    const refit = () => {
+      if (!scene) return;
+      scene.setUiScale(currentUiScale());
+      scene.resize(container.clientWidth, container.clientHeight, rendererResolution(window.devicePixelRatio));
+    };
+    const unsubscribeViewport = subscribeViewport(refit);
+    /* Dragging the window to a screen with another pixel density re-rasterizes at the new ratio */
+    let dprQuery: MediaQueryList | null = null;
+    const watchDpr = () => {
+      dprQuery?.removeEventListener('change', onDprChange);
+      dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      dprQuery.addEventListener('change', onDprChange);
+    };
+    function onDprChange() {
+      watchDpr();
+      refit();
+    }
+    watchDpr();
 
     void app
       .init({
@@ -193,7 +220,7 @@ export default function ShelterCanvas({
         height: Math.max(1, container.clientHeight),
         background: 0xf5efe4,
         antialias: true,
-        resolution: window.devicePixelRatio || 1,
+        resolution: rendererResolution(window.devicePixelRatio),
         autoDensity: true,
       })
       .then(() => {
@@ -205,6 +232,8 @@ export default function ShelterCanvas({
         canvas.style.display = 'block';
         container.appendChild(canvas);
         scene = new ShelterScene(app, stateRef.current);
+        scene.setUiScale(currentUiScale());
+        scene.setStageCallback((stage) => stageCbRef.current?.(stage));
         scene.setRewardCallback(handleReward);
         scene.setBuildCallback(handleBuild);
         scene.setSpendCallback(handleSpend);
@@ -228,6 +257,8 @@ export default function ShelterCanvas({
     return () => {
       disposed = true;
       observer.disconnect();
+      unsubscribeViewport();
+      dprQuery?.removeEventListener('change', onDprChange);
       scene?.destroy();
       scene = null;
       sceneRef.current = null;

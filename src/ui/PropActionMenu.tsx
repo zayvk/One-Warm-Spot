@@ -12,7 +12,7 @@ import {
 } from '../game/engine/stations.ts';
 import type { SceneStationState } from '../game/renderer/shelterScene.ts';
 import { playClick, playHover, playLocked } from '../game/audio/soundEngine.ts';
-import { useKeepInView } from './keepInView.ts';
+import { anchoredMenuStyle, useKeepInView } from './keepInView.ts';
 
 export type StationMenuAction = 'primary' | 'sit' | 'extinguish' | 'upgrade';
 
@@ -53,12 +53,7 @@ function useMenuDismiss(rootRef: RefObject<HTMLDivElement | null>, onClose: () =
 
 /** Anchor above the prop (or below it near the top of the screen), kept on-screen */
 function menuStyle(anchor: { x: number; y: number }): CSSProperties {
-  const below = anchor.y < FLIP_BELOW_Y;
-  return {
-    left: `clamp(${MENU_HALF_WIDTH + 10}px, ${anchor.x}px, calc(100% - ${MENU_HALF_WIDTH + 10}px))`,
-    top: below ? anchor.y + 62 : anchor.y - 12,
-    transform: below ? 'translateX(-50%)' : 'translate(-50%, -100%)',
-  };
+  return anchoredMenuStyle(anchor, MENU_HALF_WIDTH, FLIP_BELOW_Y, 62, 10);
 }
 
 function CostInline({

@@ -37,6 +37,7 @@ export default function AboutModal({ onClose }: AboutModalProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        padding: '8px',
         background: 'rgba(61, 56, 50, 0.55)',
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',
@@ -48,22 +49,18 @@ export default function AboutModal({ onClose }: AboutModalProps) {
         aria-modal="true"
         aria-labelledby="ows-about-title"
         onClick={(e) => e.stopPropagation()}
+        className="ows-modal-card ows-about"
         style={{
           background: 'rgba(250, 248, 245, 0.94)',
           backdropFilter: 'blur(14px)',
           WebkitBackdropFilter: 'blur(14px)',
           border: '1.5px solid var(--terra-200)',
           borderRadius: 'var(--radius-lg)',
-          padding: 'var(--space-xl)',
-          maxWidth: '500px',
-          width: '90vw',
-          maxHeight: '84vh',
-          overflowY: 'auto',
           boxShadow: '0 12px 40px rgba(61, 56, 50, 0.25)',
         }}
       >
         {/* Crest header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
+        <div className="ows-about-crest">
           <img
             src={UI_ASSETS.logoEmblem}
             alt=""
@@ -76,7 +73,6 @@ export default function AboutModal({ onClose }: AboutModalProps) {
             id="ows-about-title"
             style={{
               fontFamily: 'var(--font-game-title)',
-              fontSize: '1.7rem',
               color: 'var(--charcoal)',
               lineHeight: 1.15,
             }}
@@ -85,50 +81,40 @@ export default function AboutModal({ onClose }: AboutModalProps) {
           </h2>
         </div>
 
-        <p style={{ marginBottom: 'var(--space-md)', lineHeight: 1.7 }}>
-          The sky went quiet after the fall, and everyone kept moving. You climbed an old
-          apartment stairwell, found a sunlit rooftop with a cold fire ring and a sagging
-          tarp—and decided to stay.
-        </p>
+        {/* Story and tips stack on tall screens, sit side by side on short landscape phones */}
+        <div className="ows-about-story">
+          <p>
+            The sky went quiet after the fall, and everyone kept moving. You climbed an old
+            apartment stairwell, found a sunlit rooftop with a cold fire ring and a sagging
+            tarp—and decided to stay.
+          </p>
 
-        <p style={{ marginBottom: 'var(--space-lg)', lineHeight: 1.7 }}>
-          <strong>One Warm Spot</strong> is a calm, solo shelter-restoration game. There are
-          no timers to fear, no raids, and no wrong pace—just gather what's left behind,
-          build a warmer shelter, and watch the sky turn.
-        </p>
+          <p>
+            <strong>One Warm Spot</strong> is a calm, solo shelter-restoration game. There are
+            no timers to fear, no raids, and no wrong pace—just gather what's left behind,
+            build a warmer shelter, and watch the sky turn.
+          </p>
+        </div>
 
-        <h3
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '1.05rem',
-            color: 'var(--terra-600)',
-            marginBottom: 'var(--space-sm)',
-          }}
-        >
-          How to play
-        </h3>
-        <ul
-          style={{
-            paddingLeft: 'var(--space-lg)',
-            marginBottom: 'var(--space-lg)',
-            lineHeight: 1.75,
-            color: 'var(--charcoal)',
-          }}
-        >
-          {HOW_TO_PLAY.map((tip) => (
-            <li key={tip}>{tip}</li>
-          ))}
-        </ul>
+        <div className="ows-about-tips">
+          <h3
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '1.05rem',
+              color: 'var(--terra-600)',
+              marginBottom: 'var(--space-sm)',
+            }}
+          >
+            How to play
+          </h3>
+          <ul style={{ paddingLeft: 'var(--space-lg)', color: 'var(--charcoal)' }}>
+            {HOW_TO_PLAY.map((tip) => (
+              <li key={tip}>{tip}</li>
+            ))}
+          </ul>
+        </div>
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            borderTop: '1px solid var(--border)',
-            paddingTop: 'var(--space-md)',
-          }}
-        >
+        <div className="ows-about-footer">
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>One Warm Spot · v0.1</span>
           <button
             onClick={onClose}

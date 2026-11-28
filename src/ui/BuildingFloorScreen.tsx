@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useGameStore } from '../game/store/useGameStore.ts';
+import { useHudStageFrame, useViewport } from './useViewport.ts';
 import {
   BUILDING_FLOORS,
   floorSafeArea,
   floorSpotDoneNotice,
+  floorSpotEnterLabel,
   floorSpotRepairedLabel,
   floorSpotRepairedNotice,
   type BuildingFloorId,
@@ -18,7 +20,7 @@ import {
 } from '../game/engine/terraceState.ts';
 import { addResources } from '../game/engine/scavenge.ts';
 import { RESOURCE_MAP } from '../game/data/resources.ts';
-import { playClick, playHover, playLocked, startSiteAmbience } from '../game/audio/soundEngine.ts';
+import { playClick, playDoorCreak, playHover, playLocked, startSiteAmbience } from '../game/audio/soundEngine.ts';
 import type { MiniGameResult } from '../game/minigames/types.ts';
 import ElevatorPanelModal from './ElevatorPanelModal.tsx';
 import ConnectWiresGame from './minigames/ConnectWiresGame.tsx';
@@ -28,21 +30,6 @@ import DotsAndBoxesGame from './minigames/DotsAndBoxesGame.tsx';
 /** Floor paintings are 1376×768 (the same stage as the lift) */
 const ART_W = 1376;
 const ART_H = 768;
-
-function subscribeResize(onChange: () => void): () => void {
-  window.addEventListener('resize', onChange);
-  return () => window.removeEventListener('resize', onChange);
-}
-const viewportKey = () => `${window.innerWidth}x${window.innerHeight}`;
-
-/** Live window size (re-renders on resize) */
-function useViewport(): { w: number; h: number } {
-  const key = useSyncExternalStore(subscribeResize, viewportKey);
-  return useMemo(() => {
-    const [w, h] = key.split('x').map(Number);
-    return { w, h };
-  }, [key]);
-}
 
 /** Birdsong drifts faintly in from the rooftop */
 const DOWNSTAIRS_AMBIENCE_LEVEL = 0.3;
@@ -76,7 +63,12 @@ export interface BuildingFloorScreenProps {
   floor: DownstairsFloorId;
   /** Ride the lift to another stop (R = back to the rooftop) */
   onRide: (to: BuildingFloorId) => void;
+  /** Step through an opened apartment door into its room */
+  onEnterRoom?: (doorId: string) => void;
 }
+
+/** The hallway fades out this long before the room fades in */
+const ENTER_FADE_MS = 280;
 
 /**
  * One explorable floor of the old apartment building (1–4): its painting on the
@@ -86,7 +78,7 @@ export interface BuildingFloorScreenProps {
  * and pay out their salvage once; the rest say their puzzle is coming soon.
  * The rooftop's day clock rests while you're down here.
  */
-export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScreenProps) {
+export default function BuildingFloorScreen({ floor, onRide, onEnterRoom }: BuildingFloorScreenProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
   const pushNotice = useGameStore((s) => s.pushNotice);
   const selectedMode = useGameStore((s) => s.selectedMode);
@@ -99,14 +91,21 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
   );
   const puzzleSeqRef = useRef(0);
   const [puzzleSession, setPuzzleSession] = useState<{ spot: FloorHotspot; key: number } | null>(null);
+  /* Stepping through a door: the hallway fades out, then the room takes over */
+  const [leaving, setLeaving] = useState(false);
+  const enterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const data = BUILDING_FLOORS[floor];
   const { w: viewW, h: viewH } = useViewport();
   const stage = useMemo(() => fitStage(viewW, viewH, ART_W, ART_H, floorSafeArea(floor)), [viewW, viewH, floor]);
   const showFill = stageLeavesGaps(stage, viewW, viewH);
+  useHudStageFrame(stage);
 
   useEffect(() => {
     startSiteAmbience('terrace', false, DOWNSTAIRS_AMBIENCE_LEVEL);
-    return () => startSiteAmbience(null);
+    return () => {
+      startSiteAmbience(null);
+      if (enterTimer.current) clearTimeout(enterTimer.current);
+    };
   }, []);
 
   /* The glow flare settles back to the hover state */
@@ -123,8 +122,16 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
   const closePanel = useCallback(() => setPanelOpen(false), []);
 
   const onSpotClick = (spot: FloorHotspot) => {
+    if (leaving) return;
     if (spot.kind === 'lift') {
       openPanel();
+      return;
+    }
+    /* An opened room door leads inside */
+    if (spot.enterable && onEnterRoom && repaired.includes(spot.id)) {
+      playDoorCreak();
+      setLeaving(true);
+      enterTimer.current = setTimeout(() => onEnterRoom(spot.id), reduceMotion ? 0 : ENTER_FADE_MS);
       return;
     }
     if (spot.requiresTool === 'axe') {
@@ -196,6 +203,8 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
         overflow: 'hidden',
         background: '#1e1a16',
         animation: 'owsFadeOpacity 300ms ease',
+        opacity: leaving ? 0 : 1,
+        transition: reduceMotion ? undefined : `opacity ${ENTER_FADE_MS}ms ease`,
       }}
     >
       {/* On extreme window shapes the painting stops short of an edge: a soft, dimmed copy fills behind it */}
@@ -237,7 +246,12 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
 
         {data.hotspots.map((spot) => {
           const isRepaired = repaired.includes(spot.id);
-          const label = isRepaired && spot.puzzle ? floorSpotRepairedLabel(spot) : spot.label;
+          const canEnter = isRepaired && Boolean(spot.enterable && onEnterRoom);
+          const label = canEnter
+            ? floorSpotEnterLabel(spot)
+            : isRepaired && spot.puzzle
+              ? floorSpotRepairedLabel(spot)
+              : spot.label;
           return (
             <button
               /* A fresh key per click restarts the glow animation */
@@ -301,32 +315,11 @@ export default function BuildingFloorScreen({ floor, onRide }: BuildingFloorScre
 
       {/* Top-left: where we are (the lift itself opens the floor panel, including ↑ Rooftop) */}
       <header
-        style={{
-          position: 'fixed',
-          top: '16px',
-          left: '16px',
-          zIndex: 30,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-sm)',
-          maxWidth: 'calc(100vw - 128px)',
-          animation: 'owsFadeOpacity 400ms ease both',
-          pointerEvents: 'none',
-        }}
+        className="ows-hud-header"
+        data-hud-top=""
+        style={{ animation: 'owsFadeOpacity 400ms ease both', pointerEvents: 'none' }}
       >
-        <span
-          style={{
-            fontFamily: 'var(--font-game-title)',
-            fontSize: 'clamp(0.95rem, 1.8vw, 1.2rem)',
-            color: '#fff',
-            textShadow: '0 2px 10px rgba(48, 38, 30, 0.65)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {data.name}
-        </span>
+        <span className="ows-hud-place">{data.name}</span>
       </header>
 
       {puzzleSession?.spot.puzzle === 'connect-wires' && (

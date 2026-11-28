@@ -14,6 +14,7 @@ import {
 } from '../../game/minigames/dotsAndBoxes.ts';
 import { useGameStore } from '../../game/store/useGameStore.ts';
 import { playBoxChime, playClaim, playClick, playHover, playLocked } from '../../game/audio/soundEngine.ts';
+import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
 
 /** A natural beat between the opponent's lines, so a chain of boxes can be followed one by one */
 const CPU_DELAY_MS = 340;
@@ -112,16 +113,6 @@ export default function DotsAndBoxesGame({
     else if (status === 'loss') playLocked();
   }, [status]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
 
   /* Keyboard players start on the board, and land back on it when their turn returns */
   useEffect(() => {
@@ -168,6 +159,10 @@ export default function DotsAndBoxesGame({
     onComplete({ outcome: status, mode });
   };
 
+  /* Once finished, × / Escape report the result like Continue */
+  const close = miniGameClose(finished, finish, onCancel);
+  useMiniGameEscape(close);
+
   const lostLocked = status === 'loss' && !allowRetryOnLoss;
   const cpuChaining = cpuTurn && lastMove?.by === 'cpu' && lastMove.completed.length > 0;
   let statusText: string;
@@ -211,7 +206,7 @@ export default function DotsAndBoxesGame({
             </span>
           </span>
           <span className={`ows-mg-badge ows-mg-badge--${mode}`}>{MODE_LABEL[mode]}</span>
-          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={onCancel}>
+          <button type="button" className="ows-mg-close" aria-label="Close" onMouseEnter={playHover} onClick={close}>
             ×
           </button>
         </header>

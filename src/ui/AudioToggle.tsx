@@ -93,18 +93,8 @@ export default function AudioToggle() {
   }, [settingsOpen]);
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        position: 'fixed',
-        top: 'var(--space-md)',
-        right: 'var(--space-md)',
-        zIndex: 60,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-xs)',
-      }}
-    >
+    /* Scales with --ui-scale from the top-right corner; z 75 keeps it above mini-game cards and the lift panel */
+    <div ref={containerRef} className="ows-hud-corner" data-hud-top="">
       <button
         type="button"
         onClick={handleToggleSettings}

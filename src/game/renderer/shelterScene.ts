@@ -48,7 +48,8 @@ import {
 import type { SleepComfort } from '../engine/dayCycle.ts';
 import type { RegrowOutcome } from '../engine/terraceSpawns.ts';
 import { placeStationInSlot, type SlotAssignments } from '../engine/buildSlots.ts';
-import { fitStage, stageLeavesGaps } from '../engine/stageFit.ts';
+/* StageRect: the on-screen cover-fitted backdrop rect; all scene coords are normalized to it */
+import { fitStage, stageLeavesGaps, uiTextScaleFor, type StagePoint, type StageRect } from '../engine/stageFit.ts';
 import { mergeMaterials, windBoxBonus } from '../engine/weather.ts';
 import { WeatherLayer, type WeatherFrame } from './weatherLayer.ts';
 
@@ -134,14 +135,22 @@ export interface SceneStationState {
 }
 export type StationStateCallback = (state: SceneStationState) => void;
 
-/** Open the Cooking / Mending popover anchored above a station (screen pixels) */
-export type StationOpenCallback = (station: 'grill' | 'sewing', anchor: { x: number; y: number }) => void;
+/*
+ * Menu anchors are normalized stage points (0–1 across the painted backdrop), not pixels, so a
+ * menu follows its prop when the stage is refitted on a live resize (convert with `stagePointToPx`).
+ */
+
+/** Open the Cooking / Mending popover anchored above a station */
+export type StationOpenCallback = (station: 'grill' | 'sewing', anchor: StagePoint) => void;
 
 /** Callback when a station (or empty blueprint) opens its contextual action menu */
-export type StationMenuCallback = (stationId: StationId, anchor: { x: number; y: number }) => void;
+export type StationMenuCallback = (stationId: StationId, anchor: StagePoint) => void;
 
 /** Callback when an empty build slot opens its "what to build here" menu */
-export type SlotMenuCallback = (slotId: string, anchor: { x: number; y: number }) => void;
+export type SlotMenuCallback = (slotId: string, anchor: StagePoint) => void;
+
+/** The fitted stage rect changed (screen px) — HUD framing and menu anchors follow it */
+export type StageCallback = (stage: StageRect) => void;
 
 export type StationMenuAction = 'primary' | 'sit' | 'extinguish' | 'upgrade';
 
@@ -233,13 +242,6 @@ export function preloadSceneBackdrop(siteId: SiteId): void {
   void Assets.load<Texture>(sceneBackdropSrc(siteId)).catch(() => {});
 }
 
-/** On-screen rectangle of the cover-fitted backdrop; all scene coords are normalized to it */
-interface StageRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
 /* ═══════════════════════════════════════════
    Anatomical Per-Pose Proportions & Shadows
@@ -478,6 +480,11 @@ export class ShelterScene {
   private onNotice: NoticeCallback | null = null;
   private onDoor: DoorCallback | null = null;
   private onReady: (() => void) | null = null;
+  private onStage: StageCallback | null = null;
+  private emittedStage: StageRect | null = null;
+  /** The HUD's --ui-scale (top-row clearance) and its readable text scale (hover labels, reward lines) */
+  private uiScale = 1;
+  private textScale = 1;
 
   /* Fire, Stars, Fireflies & Burst Particles */
   private readonly starLayer = new Container();
@@ -715,6 +722,22 @@ export class ShelterScene {
     this.onDoor = cb;
   }
 
+  /** Fires with the fitted stage now and after every refit (resize, backdrop load) */
+  setStageCallback(cb: StageCallback | null): void {
+    this.onStage = cb;
+    this.emittedStage = { ...this.stage };
+    cb?.({ ...this.stage });
+  }
+
+  /** Match the DOM HUD's proportional scale (labels and floating reward text) */
+  setUiScale(scale: number): void {
+    if (!(scale > 0) || scale === this.uiScale) return;
+    this.uiScale = scale;
+    this.textScale = uiTextScaleFor(scale);
+    for (const hs of this.hotspots) hs.label.scale.set(this.textScale);
+    this.layout();
+  }
+
   /** Fires once the stage backdrop is decoded and the scene starts fading in */
   setReadyCallback(cb: () => void): void {
     this.onReady = cb;
@@ -867,13 +890,19 @@ export class ShelterScene {
     return { ok: true };
   }
 
-  resize(width: number, height: number): void {
+  /**
+   * Fit the renderer to its container. `resolution` (device pixel ratio, capped by the caller)
+   * changes when the window moves between a laptop screen and an external monitor; the renderer
+   * re-rasterizes at it while every sprite keeps its CSS-px size, and hit-testing follows.
+   */
+  resize(width: number, height: number, resolution?: number): void {
     const w = Math.max(1, Math.floor(width));
     const h = Math.max(1, Math.floor(height));
-    if (w === this.width && h === this.height) return;
+    const res = resolution && resolution > 0 ? resolution : this.app.renderer.resolution;
+    if (w === this.width && h === this.height && res === this.app.renderer.resolution) return;
     this.width = w;
     this.height = h;
-    this.app.renderer.resize(w, h);
+    this.app.renderer.resize(w, h, res);
     this.layout();
     this.applyLighting();
   }
@@ -1186,6 +1215,7 @@ export class ShelterScene {
     /* Keep floor puzzle resets & cleared failures in sync before interactSleep saves `this.terrace` */
     this.terrace.repairedSpots = [...outcome.state.repairedSpots];
     this.terrace.failedTodaySpots = [...outcome.state.failedTodaySpots];
+    this.terrace.roomLayouts = { ...outcome.state.roomLayouts };
 
     const ids = [...outcome.regrownWeeds, ...outcome.refreshedBoxes];
     if (ids.length === 0) return;
@@ -1222,6 +1252,7 @@ export class ShelterScene {
       }),
     });
     label.anchor.set(0.5, 1);
+    label.scale.set(this.textScale);
     label.visible = false;
     const pill = new Graphics();
     pill.visible = false;
@@ -1407,15 +1438,17 @@ export class ShelterScene {
 
   private placeLabel(label: Text, pill: Graphics, rawX: number, rawY: number): void {
     const W = this.width;
-    const pw = label.width + 18;
-    const ph = label.height + 10;
+    const s = this.textScale;
+    const pw = label.width + 18 * s;
+    const ph = label.height + 10 * s;
     const px = Math.max(pw / 2 + 12, Math.min(W - pw / 2 - 12, rawX));
-    const py = Math.max(ph + 64, rawY);
+    /* Stay below the top HUD row, which scales with --ui-scale */
+    const py = Math.max(ph + 64 * this.uiScale, rawY);
 
     label.position.set(px, py);
     pill.clear();
     pill
-      .roundRect(px - pw / 2, py - ph + 4, pw, ph, 10)
+      .roundRect(px - pw / 2, py - ph + 4 * s, pw, ph, 10 * s)
       .fill({ color: 0xfffcf6, alpha: 0.94 })
       .stroke({ color: 0xe8cdb5, width: 1.5 });
   }
@@ -1426,14 +1459,13 @@ export class ShelterScene {
     const top = tier === 0
       ? { x: hs.config.position.x, y: hs.config.position.y - 0.04 }
       : this.stationTop(hs, 1);
-    const anchor = this.toPx(top.x, top.y);
-    this.onStationMenu?.(stationId, anchor);
+    this.onStationMenu?.(stationId, { x: top.x, y: top.y });
   }
 
   private emitSlotMenu(hs: HotspotNode): void {
     if (!hs.slot) return;
     this.onHotspotHover(hs, false);
-    this.onSlotMenu?.(hs.slot.id, this.toPx(hs.config.position.x, hs.config.position.y - 0.04));
+    this.onSlotMenu?.(hs.slot.id, { x: hs.config.position.x, y: hs.config.position.y - 0.04 });
   }
 
   private walkToHotspotAndRun(
@@ -1605,8 +1637,7 @@ export class ShelterScene {
     this.setPose('idle');
     this.interactionLock = false;
     const top = this.stationTop(node, 1);
-    const anchor = this.toPx(top.x, top.y);
-    this.onStationOpen?.(node.config.type === 'grill' ? 'grill' : 'sewing', anchor);
+    this.onStationOpen?.(node.config.type === 'grill' ? 'grill' : 'sewing', { x: top.x, y: top.y });
   }
 
   private disableHotspotInteraction(node: HotspotNode): void {
@@ -2261,6 +2292,7 @@ export class ShelterScene {
       }),
     });
     txt.anchor.set(0.5, 1);
+    txt.scale.set(this.textScale);
     txt.position.set(anchor.x, anchor.y - 34);
     this.labelLayer.addChild(txt);
 
@@ -2495,6 +2527,16 @@ export class ShelterScene {
     }
 
     this.layoutTraveler();
+    this.emitStage();
+  }
+
+  /** Report the fitted stage when it actually moved (layout also runs on sprite loads and builds) */
+  private emitStage(): void {
+    const s = this.stage;
+    const prev = this.emittedStage;
+    if (prev && prev.x === s.x && prev.y === s.y && prev.width === s.width && prev.height === s.height) return;
+    this.emittedStage = { ...s };
+    this.onStage?.({ ...s });
   }
 
   private warmthTarget(): number {

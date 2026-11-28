@@ -27,6 +27,8 @@ export interface ShelterScreenProps {
   onBackToTitle: () => void;
   /** Ride the old lift from the rooftop to a floor picked on the elevator panel */
   onRide?: (to: BuildingFloorId) => void;
+  /** Fired once the Pixi rooftop stage finishes revealing its painted backdrop */
+  onSceneReady?: () => void;
 }
 
 /** Soft loudness for the in-shelter ambience bed */
@@ -44,7 +46,7 @@ function SceneLoader() {
   );
 }
 
-export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenProps) {
+export default function ShelterScreen({ onBackToTitle, onRide, onSceneReady }: ShelterScreenProps) {
   const chosenSite = useGameStore((s) => s.chosenSite);
   const dayPhase = useGameStore((s) => s.dayPhase);
   const weather = useGameStore((s) => s.weather);
@@ -242,7 +244,7 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
       <FloatingRewards callouts={callouts} />
 
       {/* Interactive PixiJS canvas (full viewport) */}
-      <main style={{ position: 'relative', flex: 1, minHeight: 0, background: '#F5EFE4' }}>
+      <main style={{ position: 'relative', flex: 1, minHeight: 0, background: '#3a2d22' }}>
         <Suspense fallback={<SceneLoader />}>
         <ShelterCanvas
           ref={canvasRef}
@@ -252,6 +254,7 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
           onSlotMenuOpen={openSlotMenu}
           onDoor={handleDoor}
           onStageChange={setStage}
+          onReady={onSceneReady}
         />
         </Suspense>
 

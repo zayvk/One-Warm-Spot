@@ -1,3 +1,21 @@
+import type { ReactNode } from 'react';
+
+const REWARD_TOKEN_RE = /(\+\d+\s+\S+(?:\s+[A-Z][A-Za-z-]+)*)/g;
+
+function renderRewardTokens(text: string): ReactNode {
+  const parts = text.split(REWARD_TOKEN_RE);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="ows-reward-token">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
+
 export interface FloatingCallout {
   id: number;
   text: string;
@@ -29,7 +47,7 @@ export default function FloatingRewards({ callouts }: FloatingRewardsProps) {
             top: `${c.y ?? 24}%`,
           }}
         >
-          {c.text}
+          {renderRewardTokens(c.text)}
         </div>
       ))}
     </div>

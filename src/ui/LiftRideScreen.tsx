@@ -3,7 +3,7 @@ import TerraceLiftCutscene from './TerraceLiftCutscene.tsx';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { stopLiftHum } from '../game/audio/soundEngine.ts';
 import { preloadShelterScene } from '../game/renderer/preloadScene.ts';
-import { LIFT_FADE_MS, liftRideHoldMs, type BuildingFloorId } from '../game/data/floors.ts';
+import { liftRideTimeline, type BuildingFloorId } from '../game/data/floors.ts';
 import { isCutsceneSkipKey } from './cutsceneKeys.ts';
 
 export interface LiftRideScreenProps {
@@ -14,12 +14,11 @@ export interface LiftRideScreenProps {
 }
 
 /**
- * Full-screen shell around a floor-to-floor lift ride: fades out as the ride
- * ends, and Skip (button, click, Space / Enter / Escape) jumps straight there.
+ * Full-screen shell around a floor-to-floor lift ride: holds at full opacity into the
+ * destination hand-off (so there is never a flash against bare body), and Skip jumps straight there.
  */
 export default function LiftRideScreen({ fromFloor, toFloor, onArrive }: LiftRideScreenProps) {
   const reduceMotion = useGameStore((s) => s.reduceMotion);
-  const [fading, setFading] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const doneRef = useRef(false);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -36,10 +35,7 @@ export default function LiftRideScreen({ fromFloor, toFloor, onArrive }: LiftRid
   }, [toFloor]);
 
   useEffect(() => {
-    const hold = setTimeout(() => {
-      setFading(true);
-      timersRef.current.push(setTimeout(finish, LIFT_FADE_MS));
-    }, liftRideHoldMs(fromFloor, toFloor));
+    const hold = setTimeout(finish, liftRideTimeline(fromFloor, toFloor).total);
     timersRef.current.push(hold);
     const timers = timersRef.current;
     return () => {
@@ -52,9 +48,8 @@ export default function LiftRideScreen({ fromFloor, toFloor, onArrive }: LiftRid
     timersRef.current.forEach(clearTimeout);
     setSkipped(true);
     stopLiftHum();
-    setFading(true);
-    timersRef.current.push(setTimeout(finish, reduceMotion ? 100 : 200));
-  }, [finish, reduceMotion]);
+    finish();
+  }, [finish]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -75,8 +70,6 @@ export default function LiftRideScreen({ fromFloor, toFloor, onArrive }: LiftRid
         inset: 0,
         zIndex: 10,
         cursor: 'pointer',
-        opacity: fading ? 0 : 1,
-        transition: `opacity ${skipped ? (reduceMotion ? 100 : 200) : LIFT_FADE_MS}ms ease`,
         animation: 'owsFadeOpacity 250ms ease',
       }}
     >

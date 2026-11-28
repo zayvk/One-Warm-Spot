@@ -1,7 +1,6 @@
 import {
   Application,
   Assets,
-  BlurFilter,
   Circle,
   Container,
   Graphics,
@@ -413,6 +412,45 @@ function drawEdgeFeatherCanvas(
   g.putImageData(img, 0, 0);
 }
 
+/**
+ * Builds an edge-clamped blurred fill texture so `bgFill` seamlessly extends the sky and roof edges
+ * without sampling transparent black outside the frame (avoids dark horizontal bands at top/bottom).
+ */
+function buildSoftEdgeFillTexture(texture: Texture): { texture: Texture; owned: boolean } {
+  const src = texture.source?.resource as CanvasImageSource | undefined;
+  const canDraw =
+    src &&
+    ((typeof HTMLImageElement !== 'undefined' && src instanceof HTMLImageElement) ||
+      (typeof HTMLCanvasElement !== 'undefined' && src instanceof HTMLCanvasElement) ||
+      (typeof ImageBitmap !== 'undefined' && src instanceof ImageBitmap));
+  if (!canDraw) return { texture, owned: false };
+
+  const w = 344;
+  const h = 192;
+  const pad = 48;
+  const tmp = document.createElement('canvas');
+  tmp.width = w + pad * 2;
+  tmp.height = h + pad * 2;
+  const tg = tmp.getContext('2d');
+  if (!tg) return { texture, owned: false };
+
+  tg.drawImage(src, pad, pad, w, h);
+  /* Clamp perimeter rows & columns outward so the blur kernel never samples transparent black */
+  tg.drawImage(tmp, pad, pad, w, 1, pad, 0, w, pad);
+  tg.drawImage(tmp, pad, pad + h - 1, w, 1, pad, pad + h, w, pad);
+  tg.drawImage(tmp, pad, 0, 1, h + pad * 2, 0, 0, pad, h + pad * 2);
+  tg.drawImage(tmp, pad + w - 1, 0, 1, h + pad * 2, pad + w, 0, pad, h + pad * 2);
+
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  const og = out.getContext('2d');
+  if (!og) return { texture, owned: false };
+  og.filter = 'blur(14px)';
+  og.drawImage(tmp, -pad, -pad);
+  return { texture: Texture.from(out), owned: true };
+}
+
 /** "+2 🪵  +1 🧵" style material line */
 function formatMaterials(materials: Record<string, number | undefined>, sign = ''): string {
   return Object.entries(materials)
@@ -472,6 +510,7 @@ export class ShelterScene {
   private readonly floorHit = new Graphics();
   private bgSprite: Sprite | null = null;
   private bgFill: Sprite | null = null;
+  private bgFillOwnedTexture: Texture | null = null;
   private bgMask: Sprite | null = null;
   private bgMaskCanvas: HTMLCanvasElement | null = null;
   private bgMaskKey = '';
@@ -962,6 +1001,9 @@ export class ShelterScene {
     this.app.ticker.remove(this.update, this);
     this.floorHit.off('pointerdown', this.handleFloorPointerDown, this);
     this.hotspots = [];
+    this.bgFill?.destroy();
+    this.bgFillOwnedTexture?.destroy(true);
+    this.bgFillOwnedTexture = null;
     this.particles = [];
     this.weatherLayer.destroy();
     this.app.destroy({ removeView: true }, { children: true, texture: false, textureSource: false });
@@ -1017,13 +1059,16 @@ export class ShelterScene {
           this.bgSprite = null;
         }
         this.bgFill?.destroy();
+        this.bgFillOwnedTexture?.destroy(true);
+        this.bgFillOwnedTexture = null;
         this.bgMask?.destroy();
-        /* Soft match-tone copy of the painting behind it — feathered seamlessly where the stage stops short */
-        const fill = new Sprite(texture);
+        /* Soft edge-clamped match-tone copy behind the painting — no dark halo at viewport borders */
+        const fillBuilt = buildSoftEdgeFillTexture(texture);
+        if (fillBuilt.owned) this.bgFillOwnedTexture = fillBuilt.texture;
+        const fill = new Sprite(fillBuilt.texture);
         fill.anchor.set(0.5);
         fill.eventMode = 'none';
-        fill.tint = 0xf2ece3;
-        fill.filters = [new BlurFilter({ strength: 30, quality: 3, resolution: 0.5 })];
+        fill.tint = 0xffffff;
         fill.visible = false;
         this.bgFill = fill;
         const maskCanvas = document.createElement('canvas');
@@ -1065,7 +1110,7 @@ export class ShelterScene {
   /** Lift the veil once the backdrop is ready, and only then let the traveler arrive */
   private revealStage(): void {
     this.backdropReady = true;
-    if (this.state.reduceMotion) this.app.stage.alpha = 1;
+    this.app.stage.alpha = 1;
     this.onReady?.();
     if (!this.entryStarted) {
       this.entryStarted = true;
@@ -2563,8 +2608,8 @@ export class ShelterScene {
     if (this.bgFill) {
       const tex = this.bgFill.texture;
       this.bgFill.visible = hasGaps;
-      this.bgFill.scale.set(Math.max(W / (tex.width || 1), H / (tex.height || 1)) * 1.06);
-      this.bgFill.position.set(this.stage.x + SW / 2, this.stage.y + SH / 2);
+      this.bgFill.scale.set(Math.max(W / (tex.width || 1), H / (tex.height || 1)) * 1.02);
+      this.bgFill.position.set(W / 2, H / 2);
     }
     this.drawFallback();
 

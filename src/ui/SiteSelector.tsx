@@ -278,7 +278,7 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
             color: 'rgba(255, 252, 246, 0.92)',
             fontSize: 'calc(0.86rem * var(--ui-text-scale))',
             textShadow: '0 1px 6px rgba(48, 38, 30, 0.55)',
-            marginBottom: 'calc(12px * var(--ui-text-scale))',
+            marginBottom: 'calc(24px * var(--ui-text-scale))',
             textAlign: 'center',
             maxWidth: 'calc(720px * var(--ui-text-scale))',
           }}

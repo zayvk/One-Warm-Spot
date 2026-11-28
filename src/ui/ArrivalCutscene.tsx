@@ -2,7 +2,7 @@ import { useEffect, useCallback, useState, useRef } from 'react';
 import BackgroundStage from './BackgroundStage.tsx';
 import TerraceLiftCutscene from './TerraceLiftCutscene.tsx';
 import { isCutsceneSkipKey } from './cutsceneKeys.ts';
-import { LIFT_FADE_MS, liftRideHoldMs } from '../game/data/floors.ts';
+import { liftRideTimeline } from '../game/data/floors.ts';
 import { BG_SHELTERS } from '../game/data/media.ts';
 import { SITES } from '../game/data/sites.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
@@ -64,10 +64,14 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
     return () => timers.forEach(clearTimeout);
   }, [reducedAtStart, isLift]);
 
-  /* Auto-complete after duration */
+  /* Auto-complete after duration — lift rides hold opaque right through step-out so there is no white flash */
   useEffect(() => {
-    const holdMs = isLift ? liftRideHoldMs(1, 'R') : reducedAtStart ? REDUCED_DURATION : DURATION;
-    const fadeMs = isLift ? LIFT_FADE_MS : reducedAtStart ? 300 : 600;
+    if (isLift) {
+      timerRef.current = setTimeout(finishOnce, liftRideTimeline(1, 'R').total);
+      return () => clearTimeout(timerRef.current);
+    }
+    const holdMs = reducedAtStart ? REDUCED_DURATION : DURATION;
+    const fadeMs = reducedAtStart ? 300 : 600;
     timerRef.current = setTimeout(() => {
       setPhase('fadeout');
       completeTimerRef.current = setTimeout(finishOnce, fadeMs);
@@ -85,9 +89,13 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
     clearTimeout(completeTimerRef.current);
     setSkipped(true);
     stopLiftHum();
+    if (isLift) {
+      finishOnce();
+      return;
+    }
     setPhase('fadeout');
     completeTimerRef.current = setTimeout(finishOnce, reduceMotion ? 100 : 200);
-  }, [finishOnce, reduceMotion]);
+  }, [finishOnce, reduceMotion, isLift]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -110,8 +118,8 @@ export default function ArrivalCutscene({ siteId, onComplete }: ArrivalCutsceneP
         inset: 0,
         zIndex: 10,
         cursor: 'pointer',
-        opacity: phase === 'fadeout' ? 0 : 1,
-        transition: `opacity ${isLift ? `${LIFT_FADE_MS}ms` : reducedAtStart ? '300ms' : '600ms'} ease`,
+        opacity: !isLift && phase === 'fadeout' ? 0 : 1,
+        transition: !isLift ? `opacity ${reducedAtStart ? '300ms' : '600ms'} ease` : undefined,
         animation: reduceMotion ? 'owsFadeOpacity 250ms ease' : undefined,
       }}
     >

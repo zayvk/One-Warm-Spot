@@ -2,6 +2,7 @@
 
 import { assetUrl } from '../engine/assetUrl.ts';
 import type { ResourceId } from '../types/game.ts';
+import type { DownstairsFloorId } from './floors.ts';
 
 /** Random source returning a float in [0, 1) — injectable for deterministic tests */
 export type RoomRng = () => number;
@@ -40,20 +41,20 @@ export type AnchorZoneType = 'back-wall' | 'side-wall' | 'mid-floor' | 'corner';
 export const ROOM_ART_W = 1376;
 export const ROOM_ART_H = 768;
 
-/** Anatomical height multipliers relative to standing height (mirrors `shelterScene.ts`) */
+/** Anatomical height multipliers calibrated so crouching/kneeling heads & packs stay proportional */
 export const ROOM_POSE_HEIGHT_SCALE: Record<'idle' | 'walk' | RoomActionPose, number> = {
   idle: 1.0,
   walk: 1.0,
   reach: 1.0,
   fix: 1.0,
-  search: 0.72,
-  peek: 0.6,
+  search: 0.68,
+  peek: 0.54,
 };
 
-/** Walkable interior floor rectangle (stage fractions) */
+/** Walkable interior floor rectangle (stage fractions, padded inward from walls/viewport edges) */
 export const ROOM_FLOOR_BOUNDS = {
-  xMin: 0.1,
-  xMax: 0.9,
+  xMin: 0.16,
+  xMax: 0.84,
   yMin: 0.745,
   yMax: 0.955,
 } as const;
@@ -360,7 +361,7 @@ export function roomPropWidth(def: Pick<RoomPropDef, 'aspect'>, scale: number): 
  * plus every placed piece of furniture, so nothing clickable is ever cropped.
  */
 export function roomSafeArea(layout: GeneratedRoomLayout): { xMin: number; xMax: number; yMin: number; yMax: number } {
-  const area = { xMin: 0.22, xMax: 0.78, yMin: 0.2, yMax: 0.9 };
+  const area = { xMin: 0.14, xMax: 0.86, yMin: 0.2, yMax: 0.92 };
   for (const p of layout.props) {
     const def = getRoomProp(layout.roomType, p.propId);
     if (!def) continue;
@@ -501,9 +502,21 @@ export function parseRoomLayout(v: unknown, doorId: string): GeneratedRoomLayout
   return { doorId, roomType: o.roomType, props: props.sort(byDepth) };
 }
 
-/** Traveler entry stance near the room doorway side */
+/** Back button copy returning from an apartment room into its hallway or lobby */
+export function roomBackLabel(floor: DownstairsFloorId): string {
+  return floor === 1 ? '← Back to Lobby' : `← Back to Floor ${floor}`;
+}
+
+/** Resets a room traveler's pose & walk frame cleanly back to idle while keeping their spot */
+export function resetRoomTravelerPose<T extends { pose: string; walkFrame: number }>(
+  actor: T,
+): Omit<T, 'pose'> & { pose: 'idle' } {
+  return { ...actor, pose: 'idle', walkFrame: 0 };
+}
+
+/** Traveler entry stance near the room doorway side (kept clear of the left frame edge) */
 export function roomEntryPoint(): { x: number; y: number } {
-  return { x: 0.13, y: 0.9 };
+  return { x: 0.21, y: 0.9 };
 }
 
 /** Traveler sprite height as a fraction of room stage height, with perspective depth & anatomical pose scaling */

@@ -44,15 +44,28 @@ export default function App() {
   const [ride, setRide] = useState<{ from: BuildingFloorId; to: BuildingFloorId }>({ from: 'R', to: 1 });
   const activeScreen = resolveScreen(screen, chosenSite, roomDoor !== null && roomRevision === sceneRevision);
 
-  /* Brief warm-sepia dissolve between major scene switches (avoids dark flashes on restore / lift transitions) */
+  /* Brief warm-sepia dissolve between major scene switches; holds for shelter until Pixi reveals its backdrop */
   const prevScreenRef = useRef<Screen>(activeScreen);
   const [sepiaTransitionKey, setSepiaTransitionKey] = useState(0);
+  const [holdingShelterReveal, setHoldingShelterReveal] = useState(false);
+
+  const releaseShelterReveal = useCallback(() => {
+    setHoldingShelterReveal(false);
+  }, []);
+
   useEffect(() => {
     if (prevScreenRef.current !== activeScreen) {
       prevScreenRef.current = activeScreen;
       setSepiaTransitionKey((k) => k + 1);
+      setHoldingShelterReveal(activeScreen === 'shelter');
     }
   }, [activeScreen]);
+
+  useEffect(() => {
+    if (!holdingShelterReveal) return;
+    const safety = setTimeout(() => setHoldingShelterReveal(false), 600);
+    return () => clearTimeout(safety);
+  }, [holdingShelterReveal]);
 
   useEffect(() => {
     writeResumeLocation(locationForScreen(activeScreen, floor, ride.to, roomDoor));
@@ -168,7 +181,13 @@ export default function App() {
   } else if (activeScreen === 'room' && roomDoor) {
     content = <ApartmentRoomScreen key={roomDoor} floor={floor} doorId={roomDoor} onBack={leaveRoom} />;
   } else {
-    content = <ShelterScreen onBackToTitle={goToTitle} onRide={(to) => rideFrom('R', to)} />;
+    content = (
+      <ShelterScreen
+        onBackToTitle={goToTitle}
+        onRide={(to) => rideFrom('R', to)}
+        onSceneReady={releaseShelterReveal}
+      />
+    );
   }
 
   return (
@@ -177,7 +196,11 @@ export default function App() {
       <NoticeToasts />
       {content}
       {sepiaTransitionKey > 0 && (
-        <div key={sepiaTransitionKey} className="ows-sepia-dissolve" aria-hidden="true" />
+        <div
+          key={sepiaTransitionKey}
+          className={`ows-sepia-dissolve ${holdingShelterReveal ? 'ows-sepia-dissolve--hold' : ''}`}
+          aria-hidden="true"
+        />
       )}
       <div className="ows-paper-grain" aria-hidden="true" />
     </>

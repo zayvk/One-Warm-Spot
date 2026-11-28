@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { findEnterableDoor, type DownstairsFloorId } from '../game/data/floors.ts';
 import { RESOURCE_MAP } from '../game/data/resources.ts';
@@ -8,6 +8,8 @@ import {
   ROOMS,
   generateRoomLayout,
   getRoomProp,
+  resetRoomTravelerPose,
+  roomBackLabel,
   roomEntryPoint,
   roomPropWidth,
   roomSafeArea,
@@ -247,13 +249,20 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
     return () => clearTimeout(t);
   }, [glowing]);
 
-  const leave = useCallback(() => {
-    if (exitTimer.current) return;
-    cancelSequence();
-    playDoorCreak();
-    setLeaving(true);
-    exitTimer.current = setTimeout(onBack, reduceMotion ? 0 : EXIT_FADE_MS);
-  }, [onBack, reduceMotion, cancelSequence]);
+  const leave = useCallback(
+    (e?: ReactMouseEvent) => {
+      e?.stopPropagation();
+      if (exitTimer.current) return;
+      cancelSequence();
+      setHovered(null);
+      setPuzzleSession(null);
+      setTraveler(resetRoomTravelerPose);
+      playDoorCreak();
+      setLeaving(true);
+      exitTimer.current = setTimeout(onBack, reduceMotion ? 0 : EXIT_FADE_MS);
+    },
+    [onBack, reduceMotion, cancelSequence],
+  );
 
   /* Escape steps back out — unless a popover or dialog is open (Escape closes that instead) */
   useEffect(() => {
@@ -401,15 +410,17 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
   }, [stage, viewW, viewH]);
 
   const closePuzzle = useCallback(() => {
+    cancelSequence();
     setPuzzleSession(null);
-    setTraveler((curr) => ({ ...curr, pose: 'idle', walkFrame: 0 }));
-  }, []);
+    setTraveler(resetRoomTravelerPose);
+  }, [cancelSequence]);
 
   const onPuzzleComplete = useCallback(
     (result: MiniGameResult) => {
+      cancelSequence();
       const session = puzzleSession;
       setPuzzleSession(null);
-      setTraveler((curr) => ({ ...curr, pose: 'idle', walkFrame: 0 }));
+      setTraveler(resetRoomTravelerPose);
       if (!session) return;
       const { placed, def } = session;
       const key = roomPropKey(doorId, def.id);
@@ -434,7 +445,7 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
         pushNotice({ icon: '🔒', title: `${def.label} — try again tomorrow.`, tone: 'build' });
       }
     },
-    [puzzleSession, doorId, searchedProps, spawnCallout, pushNotice],
+    [cancelSequence, puzzleSession, doorId, searchedProps, spawnCallout, pushNotice],
   );
 
   const layerStyle = (depth: number): CSSProperties =>
@@ -641,8 +652,8 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
       </div>
 
       <header className="ows-hud-header ows-room-header" data-hud-top="">
-        <button type="button" className="ows-room-back" onMouseEnter={playHover} onClick={leave}>
-          ← Back to Floor {floor}
+        <button type="button" className="ows-room-back" onMouseEnter={playHover} onClick={(e) => leave(e)}>
+          {roomBackLabel(floor)}
         </button>
         <span className="ows-room-title">{title}</span>
       </header>

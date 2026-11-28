@@ -378,13 +378,27 @@ export default function SafeDialGame({
                   type="button"
                   className="ows-mg-btn ows-safe-turn"
                   aria-label="Turn counter-clockwise"
+                  onMouseEnter={playHover}
                   onPointerDown={(e) => e.button === 0 && startHold(-1)}
                   onPointerUp={stopHold}
                   onPointerLeave={stopHold}
                   onPointerCancel={stopHold}
                   onClick={(e) => e.detail === 0 && turn(-1)}
                 >
-                  ↺
+                  <svg
+                    viewBox="0 0 24 24"
+                    width={20}
+                    height={20}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 7H4v5" />
+                    <path d="M4.5 11.5A8 8 0 1 1 7.2 18.6" />
+                  </svg>
                 </button>
                 <button type="button" className="ows-mg-btn ows-mg-btn--primary ows-safe-set" onMouseEnter={playHover} onClick={lock}>
                   Set
@@ -393,13 +407,27 @@ export default function SafeDialGame({
                   type="button"
                   className="ows-mg-btn ows-safe-turn"
                   aria-label="Turn clockwise"
+                  onMouseEnter={playHover}
                   onPointerDown={(e) => e.button === 0 && startHold(1)}
                   onPointerUp={stopHold}
                   onPointerLeave={stopHold}
                   onPointerCancel={stopHold}
                   onClick={(e) => e.detail === 0 && turn(1)}
                 >
-                  ↻
+                  <svg
+                    viewBox="0 0 24 24"
+                    width={20}
+                    height={20}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M15 7h5v5" />
+                    <path d="M19.5 11.5A8 8 0 1 0 16.8 18.6" />
+                  </svg>
                 </button>
               </div>
             ) : (

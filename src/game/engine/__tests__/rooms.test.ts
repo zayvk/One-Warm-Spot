@@ -23,6 +23,9 @@ import {
   generateRoomLayout,
   getRoomProp,
   parseRoomLayout,
+  resetRoomTravelerPose,
+  roomBackLabel,
+  roomEntryPoint,
   roomPropWidth,
   roomSafeArea,
   roomStandTarget,
@@ -358,14 +361,22 @@ describe('room prop puzzles, poses & rewards', () => {
     );
   });
 
-  it('keeps traveler stand targets inside the walkable floor and respects anatomical pose scaling', () => {
-    expect(ROOM_POSE_HEIGHT_SCALE.search).toBe(0.72);
-    expect(ROOM_POSE_HEIGHT_SCALE.peek).toBe(0.6);
-    expect(roomTravelerScale(0.84, 'search')).toBeCloseTo(roomTravelerScale(0.84, 'idle') * 0.72, 3);
-    expect(roomTravelerScale(0.84, 'peek')).toBeCloseTo(roomTravelerScale(0.84, 'idle') * 0.6, 3);
+  it('keeps traveler spawn and stand targets well inside the viewport and respects calibrated pose scaling', () => {
+    expect(ROOM_POSE_HEIGHT_SCALE.search).toBe(0.68);
+    expect(ROOM_POSE_HEIGHT_SCALE.peek).toBe(0.54);
+    expect(roomTravelerScale(0.84, 'search')).toBeCloseTo(roomTravelerScale(0.84, 'idle') * 0.68, 3);
+    expect(roomTravelerScale(0.84, 'peek')).toBeCloseTo(roomTravelerScale(0.84, 'idle') * 0.54, 3);
+
+    const entry = roomEntryPoint();
+    expect(entry.x).toBeGreaterThanOrEqual(ROOM_FLOOR_BOUNDS.xMin);
+    expect(entry.x).toBeLessThanOrEqual(ROOM_FLOOR_BOUNDS.xMax);
+    expect(ROOM_FLOOR_BOUNDS.xMin).toBeGreaterThan(0.1);
+    expect(ROOM_FLOOR_BOUNDS.xMax).toBeLessThan(0.9);
 
     for (let seed = 1; seed <= 50; seed++) {
       const layout = layoutFor('f1-apt-1a', seed);
+      const safe = roomSafeArea(layout);
+      expect(safe.xMin).toBeLessThanOrEqual(entry.x);
       for (const p of layout.props) {
         const def = getRoomProp(layout.roomType, p.propId)!;
         const t = roomStandTarget(p, def);
@@ -375,6 +386,26 @@ describe('room prop puzzles, poses & rewards', () => {
         expect(t.y).toBeLessThanOrEqual(ROOM_FLOOR_BOUNDS.yMax);
       }
     }
+  });
+
+  it('labels Floor 1 room back button as Back to Lobby and upper floors as Back to Floor N', () => {
+    expect(roomBackLabel(1)).toBe('← Back to Lobby');
+    expect(roomBackLabel(2)).toBe('← Back to Floor 2');
+    expect(roomBackLabel(3)).toBe('← Back to Floor 3');
+    expect(roomBackLabel(4)).toBe('← Back to Floor 4');
+  });
+
+  it('resets the room traveler pose back to idle while preserving room coordinates and facing', () => {
+    const entry = roomEntryPoint();
+    expect(entry.x).toBe(0.21);
+    const crouching = { x: 0.72, y: 0.88, pose: 'peek' as const, facingRight: false, walkFrame: 2 };
+    expect(resetRoomTravelerPose(crouching)).toEqual({
+      x: 0.72,
+      y: 0.88,
+      pose: 'idle',
+      facingRight: false,
+      walkFrame: 0,
+    });
   });
 });
 

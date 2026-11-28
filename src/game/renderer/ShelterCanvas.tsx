@@ -54,6 +54,8 @@ export interface ShelterCanvasProps {
   onDoor?: (doorId: string) => boolean;
   /** The fitted stage rect (screen px), now and after every refit */
   onStageChange?: StageCallback;
+  /** Fired as soon as Pixi has decoded and revealed the shelter backdrop */
+  onReady?: () => void;
 }
 
 const NOT_READY: StationActionResult = { ok: false, message: 'The rooftop is still settling in' };
@@ -71,6 +73,7 @@ export default function ShelterCanvas({
   onSlotMenuOpen,
   onDoor,
   onStageChange,
+  onReady,
 }: ShelterCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<ShelterScene | null>(null);
@@ -80,6 +83,7 @@ export default function ShelterCanvas({
   const slotMenuCbRef = useRef(onSlotMenuOpen);
   const doorCbRef = useRef(onDoor);
   const stageCbRef = useRef(onStageChange);
+  const readyCbRef = useRef(onReady);
   /* Crafted perks shape gathering costs (gloves) and strength drift (cloak) */
   const perksRef = useRef<string[]>([]);
 
@@ -90,7 +94,8 @@ export default function ShelterCanvas({
     slotMenuCbRef.current = onSlotMenuOpen;
     doorCbRef.current = onDoor;
     stageCbRef.current = onStageChange;
-  }, [onStationStateChange, onStationOpen, onStationMenuOpen, onSlotMenuOpen, onDoor, onStageChange]);
+    readyCbRef.current = onReady;
+  }, [onStationStateChange, onStationOpen, onStationMenuOpen, onSlotMenuOpen, onDoor, onStageChange, onReady]);
 
   useImperativeHandle(ref, () => ({
     requestBuild: (id: string) => sceneRef.current?.requestBuild(id) ?? false,
@@ -248,7 +253,10 @@ export default function ShelterCanvas({
         scene.setSlotMenuCallback((slotId, anchor) => slotMenuCbRef.current?.(slotId, anchor));
         scene.setStationStateCallback(handleStationState);
         scene.setReadyCallback(() => {
-          if (!disposed) setReadyRevision(sceneRevision);
+          if (!disposed) {
+            setReadyRevision(sceneRevision);
+            readyCbRef.current?.();
+          }
         });
         sceneRef.current = scene;
         observer.observe(container);

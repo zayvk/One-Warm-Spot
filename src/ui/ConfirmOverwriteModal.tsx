@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { playClick, playHover } from '../game/audio/soundEngine.ts';
 import { exportBackup } from '../game/engine/backup.ts';
 import type { SaveState } from '../game/types/game.ts';
@@ -51,7 +52,7 @@ export default function ConfirmOverwriteModal({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleCancel]);
 
-  return (
+  const modal = (
     <div
       role="dialog"
       aria-modal="true"
@@ -60,14 +61,14 @@ export default function ConfirmOverwriteModal({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 110,
+        zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '8px',
-        background: 'rgba(61, 56, 50, 0.55)',
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
+        background: 'rgba(36, 28, 20, 0.66)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         animation: 'owsModalFade 200ms ease',
       }}
     >
@@ -75,14 +76,14 @@ export default function ConfirmOverwriteModal({
         onClick={(e) => e.stopPropagation()}
         className="ows-modal-card"
         style={{
-          background: 'rgba(250, 248, 245, 0.94)',
+          background: 'rgba(252, 248, 242, 0.98)',
           backdropFilter: 'blur(14px)',
           WebkitBackdropFilter: 'blur(14px)',
           border: '1.5px solid var(--terra-200)',
           borderRadius: 'var(--radius-lg)',
           padding: 'clamp(16px, 4dvh, 24px)',
           width: '480px',
-          boxShadow: '0 14px 42px rgba(61, 56, 50, 0.28)',
+          boxShadow: '0 14px 42px rgba(61, 56, 50, 0.34)',
           color: 'var(--charcoal)',
         }}
       >
@@ -181,4 +182,6 @@ export default function ConfirmOverwriteModal({
       `}</style>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modal, document.body) : modal;
 }

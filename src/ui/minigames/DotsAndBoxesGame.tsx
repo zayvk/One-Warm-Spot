@@ -12,6 +12,7 @@ import {
   type DotsState,
   type DotsStatus,
 } from '../../game/minigames/dotsAndBoxes.ts';
+import { HAND_ASSETS } from '../../game/data/media.ts';
 import { useGameStore } from '../../game/store/useGameStore.ts';
 import { playBoxChime, playClaim, playClick, playHover, playLocked } from '../../game/audio/soundEngine.ts';
 import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
@@ -78,6 +79,8 @@ export default function DotsAndBoxesGame({
   /* Bumped each time the player closes a box, cleared after a moment */
   const [flash, setFlash] = useState(0);
   const [round, setRound] = useState(0);
+  const [chalkPos, setChalkPos] = useState<{ x: number; y: number } | null>(null);
+  const chalkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cardRef = useRef<HTMLElement>(null);
 
   const status = dotsStatus(game);
@@ -122,10 +125,24 @@ export default function DotsAndBoxesGame({
     cardRef.current?.querySelector<SVGGElement>('.ows-dots-edge')?.focus();
   }, [game.turn, finished, round]);
 
+  useEffect(
+    () => () => {
+      if (chalkTimerRef.current) clearTimeout(chalkTimerRef.current);
+    },
+    [],
+  );
+
   const play = (edge: DotsEdge) => {
     if (cpuTurn || finished || game.turn !== 'player') return;
     const r = applyEdgeMove(game, edge);
     if (!r) return;
+    const coords = edgeCoords(edge);
+    setChalkPos({
+      x: (((coords.x1 + coords.x2) / 2) / span) * 100,
+      y: (((coords.y1 + coords.y2) / 2) / span) * 100,
+    });
+    if (chalkTimerRef.current) clearTimeout(chalkTimerRef.current);
+    chalkTimerRef.current = setTimeout(() => setChalkPos(null), 250);
     const over = dotsStatus(r.state) !== 'playing';
     if (r.completedBoxes.length > 0) {
       if (!over) {
@@ -283,6 +300,17 @@ export default function DotsAndBoxesGame({
                 />
               ))}
             </svg>
+            <div className="ows-chalk-clip" aria-hidden="true">
+              <div
+                className={`ows-hand-chalk-wrap ${chalkPos ? 'ows-hand-active' : 'ows-hand-idle'}`}
+                style={{
+                  left: `${chalkPos ? chalkPos.x : 88}%`,
+                  top: `${chalkPos ? chalkPos.y : 88}%`,
+                }}
+              >
+                <img src={HAND_ASSETS.chalk} alt="" draggable={false} className="ows-hand ows-hand-chalk" />
+              </div>
+            </div>
           </div>
 
           <div className="ows-dots-side">

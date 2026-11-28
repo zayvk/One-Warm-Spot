@@ -14,6 +14,7 @@ import {
   type RummageItemId,
   type RummageState,
 } from '../../game/minigames/findTheObject.ts';
+import { HAND_ASSETS } from '../../game/data/media.ts';
 import { useGameStore } from '../../game/store/useGameStore.ts';
 import { playBoxChime, playClaim, playClick, playHover, playRummage } from '../../game/audio/soundEngine.ts';
 import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
@@ -54,6 +55,8 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
   const [dragId, setDragId] = useState<string | null>(null);
   const [hint, setHint] = useState<{ id: string; n: number } | null>(null);
   const [lastFound, setLastFound] = useState<RummageItemId | null>(null);
+  const [handTarget, setHandTarget] = useState<{ x: number; y: number } | null>(null);
+  const handTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const pointer = useRef<PointerTrack | null>(null);
 
@@ -72,6 +75,19 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
     const timer = setTimeout(() => setHint(null), HINT_MS);
     return () => clearTimeout(timer);
   }, [hint]);
+
+  useEffect(
+    () => () => {
+      if (handTimerRef.current) clearTimeout(handTimerRef.current);
+    },
+    [],
+  );
+
+  const reachBriefly = (x: number, y: number) => {
+    setHandTarget({ x, y });
+    if (handTimerRef.current) clearTimeout(handTimerRef.current);
+    handTimerRef.current = setTimeout(() => setHandTarget(null), 420);
+  };
 
 
   /** Screen point → tray fractions */
@@ -98,6 +114,7 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
   /** Tap / Enter on an item: collect a target, scoot clutter aside */
   const activate = (item: PileItem) => {
     if (complete || item.found) return;
+    reachBriefly(item.x, item.y);
     if (item.isTarget) collect(item.instanceId);
     else nudge(item.instanceId);
   };
@@ -129,6 +146,8 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
       playRummage();
     }
     const p = toTray(e.clientX, e.clientY);
+    setHandTarget({ x: p.x, y: p.y });
+    if (handTimerRef.current) clearTimeout(handTimerRef.current);
     setPile((s) => movePileItem(s, t.id, p.x + t.offX, p.y + t.offY));
   };
 
@@ -137,7 +156,11 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
     if (!t || t.pointerId !== e.pointerId) return;
     pointer.current = null;
     setDragId(null);
-    if (t.dragging) return;
+    if (t.dragging) {
+      if (handTimerRef.current) clearTimeout(handTimerRef.current);
+      handTimerRef.current = setTimeout(() => setHandTarget(null), 350);
+      return;
+    }
     const item = byId.get(t.id);
     if (item) activate(item);
   };
@@ -145,6 +168,7 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
   const onPointerCancel = () => {
     pointer.current = null;
     setDragId(null);
+    setHandTarget(null);
   };
 
   const onItemKey = (e: ReactKeyboardEvent<SVGGElement>, item: PileItem) => {
@@ -205,7 +229,7 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
         </header>
 
         <div className="ows-rum-body">
-          <div className="ows-rum-tray">
+          <div className="ows-rum-tray" onPointerLeave={() => { if (!dragId) setHandTarget(null); }}>
             <svg
               key={round}
               ref={svgRef}
@@ -265,6 +289,19 @@ export default function FindTheObjectGame({ mode, title = 'Find the Object', onC
                 />
               )}
             </svg>
+
+            <div
+              className={`ows-hand-rummage-wrap ${dragId ? 'ows-hand-dragging' : ''} ${
+                handTarget && !complete ? 'ows-hand-active' : 'ows-hand-idle'
+              }`}
+              aria-hidden="true"
+              style={{
+                left: `${(handTarget && !complete ? handTarget.x : 0.88) * 100}%`,
+                top: `${(handTarget && !complete ? handTarget.y : 0.86) * 100}%`,
+              }}
+            >
+              <img src={HAND_ASSETS.rummage} alt="" draggable={false} className="ows-hand ows-hand-rummage" />
+            </div>
           </div>
 
           <div className="ows-rum-side">

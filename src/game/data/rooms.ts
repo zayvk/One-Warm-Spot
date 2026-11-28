@@ -1,11 +1,37 @@
 /* ───── Apartment room interiors: room types, curated anchor zones & a random layout generator (pure) ───── */
 
 import { assetUrl } from '../engine/assetUrl.ts';
+import type { ResourceId } from '../types/game.ts';
 
 /** Random source returning a float in [0, 1) — injectable for deterministic tests */
 export type RoomRng = () => number;
 
 export type RoomType = 'bedroom' | 'kitchen' | 'living' | 'study';
+
+/** Action pose performed by the traveler right before inspecting a room prop */
+export type RoomActionPose = 'peek' | 'search' | 'reach' | 'fix';
+
+/** Mini-game wired to a room prop (covers all 7 puzzles across the 20 props) */
+export type RoomPuzzleId =
+  | 'connect-wires'
+  | 'tic-tac-toe'
+  | 'dots-and-lines'
+  | 'jigsaw'
+  | 'find-the-object'
+  | 'safe-dial'
+  | 'hit-the-nail';
+
+export const ROOM_PUZZLE_IDS: readonly RoomPuzzleId[] = [
+  'connect-wires',
+  'tic-tac-toe',
+  'dots-and-lines',
+  'jigsaw',
+  'find-the-object',
+  'safe-dial',
+  'hit-the-nail',
+];
+
+export const ROOM_ACTION_POSES: readonly RoomActionPose[] = ['peek', 'search', 'reach', 'fix'];
 
 /** Where in a room a prop may stand */
 export type AnchorZoneType = 'back-wall' | 'side-wall' | 'mid-floor' | 'corner';
@@ -13,6 +39,24 @@ export type AnchorZoneType = 'back-wall' | 'side-wall' | 'mid-floor' | 'corner';
 /** Room shells and props are painted for the same 1376×768 stage as the floors */
 export const ROOM_ART_W = 1376;
 export const ROOM_ART_H = 768;
+
+/** Anatomical height multipliers relative to standing height (mirrors `shelterScene.ts`) */
+export const ROOM_POSE_HEIGHT_SCALE: Record<'idle' | 'walk' | RoomActionPose, number> = {
+  idle: 1.0,
+  walk: 1.0,
+  reach: 1.0,
+  fix: 1.0,
+  search: 0.72,
+  peek: 0.6,
+};
+
+/** Walkable interior floor rectangle (stage fractions) */
+export const ROOM_FLOOR_BOUNDS = {
+  xMin: 0.1,
+  xMax: 0.9,
+  yMin: 0.745,
+  yMax: 0.955,
+} as const;
 
 export interface RoomPropDef {
   id: string;
@@ -25,6 +69,12 @@ export interface RoomPropDef {
   baseScale: number;
   allowFlip: boolean;
   zones: readonly AnchorZoneType[];
+  /** Pose the traveler strikes upon walking up to this prop */
+  actionPose: RoomActionPose;
+  /** Scavenging mini-game launched after the pose beat */
+  puzzle: RoomPuzzleId;
+  /** Salvage awarded on winning the mini-game */
+  reward: Partial<Record<ResourceId, number>>;
 }
 
 export interface AnchorZone {
@@ -83,8 +133,22 @@ const prop = (
   h: number,
   baseScale: number,
   zones: readonly AnchorZoneType[],
+  actionPose: RoomActionPose,
+  puzzle: RoomPuzzleId,
+  reward: Partial<Record<ResourceId, number>>,
   allowFlip = true,
-): RoomPropDef => ({ id, label, src: assetUrl(`${PROP_DIR}/prop-${room}-${id}.webp`), aspect: w / h, baseScale, allowFlip, zones });
+): RoomPropDef => ({
+  id,
+  label,
+  src: assetUrl(`${PROP_DIR}/prop-${room}-${id}.webp`),
+  aspect: w / h,
+  baseScale,
+  allowFlip,
+  zones,
+  actionPose,
+  puzzle,
+  reward,
+});
 
 /**
  * The five standard spots every shell shares (back wall left / centre / right, side
@@ -124,11 +188,42 @@ export const ROOMS: Record<RoomType, RoomDef> = {
     /* Window on the left wall (sill ~0.62): only low pieces stand under it */
     zones: zonesFor({ fl: 0.725, wallL: 0.235, wallR: 0.79, leftMax: 0.24 }),
     props: [
-      prop('bedroom', 'bed', 'Iron Bed', 640, 455, 0.26, ['back-wall', 'side-wall']),
-      prop('bedroom', 'wardrobe', 'Old Wardrobe', 378, 640, 0.46, ['back-wall', 'side-wall']),
-      prop('bedroom', 'nightstand', 'Bedside Table', 430, 640, 0.16, ['back-wall', 'side-wall', 'corner']),
-      prop('bedroom', 'dresser', 'Chest of Drawers', 556, 640, 0.3, ['back-wall', 'side-wall']),
-      prop('bedroom', 'suitcase', 'Battered Suitcase', 640, 405, 0.11, ['mid-floor', 'corner', 'side-wall']),
+      prop('bedroom', 'bed', 'Iron Bed', 640, 455, 0.26, ['back-wall', 'side-wall'], 'search', 'find-the-object', {
+        cloth: 2,
+        seeds: 1,
+      }),
+      prop('bedroom', 'wardrobe', 'Old Wardrobe', 378, 640, 0.46, ['back-wall', 'side-wall'], 'reach', 'safe-dial', {
+        cloth: 2,
+        timber: 1,
+      }),
+      prop(
+        'bedroom',
+        'nightstand',
+        'Bedside Table',
+        430,
+        640,
+        0.16,
+        ['back-wall', 'side-wall', 'corner'],
+        'peek',
+        'jigsaw',
+        { cloth: 1, seeds: 1, scrap: 1 },
+      ),
+      prop('bedroom', 'dresser', 'Chest of Drawers', 556, 640, 0.3, ['back-wall', 'side-wall'], 'reach', 'hit-the-nail', {
+        timber: 2,
+        cloth: 1,
+      }),
+      prop(
+        'bedroom',
+        'suitcase',
+        'Battered Suitcase',
+        640,
+        405,
+        0.11,
+        ['mid-floor', 'corner', 'side-wall'],
+        'search',
+        'find-the-object',
+        { cloth: 2, scrap: 1 },
+      ),
     ],
   },
   kitchen: {
@@ -140,11 +235,26 @@ export const ROOMS: Record<RoomType, RoomDef> = {
     /* Window on the right wall (sill ~0.6) */
     zones: zonesFor({ fl: 0.74, wallL: 0.215, wallR: 0.785, rightMax: 0.26 }),
     props: [
-      prop('kitchen', 'stove', 'Old Stove', 532, 640, 0.27, ['back-wall', 'side-wall']),
-      prop('kitchen', 'cupboard', 'Kitchen Cupboard', 640, 467, 0.22, ['back-wall', 'side-wall']),
-      prop('kitchen', 'pantry', 'Tall Pantry', 348, 640, 0.43, ['back-wall', 'side-wall']),
-      prop('kitchen', 'fridge', 'Rusty Fridge', 407, 640, 0.38, ['back-wall', 'side-wall']),
-      prop('kitchen', 'table', 'Kitchen Table', 640, 531, 0.21, ['mid-floor', 'corner']),
+      prop('kitchen', 'stove', 'Old Stove', 532, 640, 0.27, ['back-wall', 'side-wall'], 'fix', 'connect-wires', {
+        scrap: 2,
+        food: 1,
+      }),
+      prop('kitchen', 'cupboard', 'Kitchen Cupboard', 640, 467, 0.22, ['back-wall', 'side-wall'], 'fix', 'hit-the-nail', {
+        timber: 2,
+        food: 1,
+      }),
+      prop('kitchen', 'pantry', 'Tall Pantry', 348, 640, 0.43, ['back-wall', 'side-wall'], 'reach', 'jigsaw', {
+        food: 2,
+        water: 1,
+      }),
+      prop('kitchen', 'fridge', 'Rusty Fridge', 407, 640, 0.38, ['back-wall', 'side-wall'], 'reach', 'connect-wires', {
+        food: 2,
+        water: 1,
+      }),
+      prop('kitchen', 'table', 'Kitchen Table', 640, 531, 0.21, ['mid-floor', 'corner'], 'search', 'dots-and-lines', {
+        food: 2,
+        timber: 1,
+      }),
     ],
   },
   living: {
@@ -156,11 +266,35 @@ export const ROOMS: Record<RoomType, RoomDef> = {
     /* Window on the left wall (sill ~0.72); radiator on the right wall */
     zones: zonesFor({ fl: 0.718, wallL: 0.265, wallR: 0.81, leftMax: 0.17, rightMax: 0.3, rightX: 0.8 }),
     props: [
-      prop('living', 'sofa', 'Worn Sofa', 640, 382, 0.21, ['back-wall', 'mid-floor']),
-      prop('living', 'table', 'Coffee Table', 640, 357, 0.11, ['mid-floor', 'corner']),
-      prop('living', 'tv', 'Old Television', 481, 640, 0.29, ['back-wall', 'side-wall', 'corner'], false),
-      prop('living', 'armchair', 'Armchair', 640, 630, 0.23, ['side-wall', 'corner', 'mid-floor']),
-      prop('living', 'sideboard', 'Sideboard', 640, 519, 0.24, ['back-wall', 'side-wall']),
+      prop('living', 'sofa', 'Worn Sofa', 640, 382, 0.21, ['back-wall', 'mid-floor'], 'search', 'find-the-object', {
+        cloth: 2,
+        timber: 1,
+      }),
+      prop('living', 'table', 'Coffee Table', 640, 357, 0.11, ['mid-floor', 'corner'], 'search', 'find-the-object', {
+        food: 1,
+        cloth: 1,
+      }),
+      prop(
+        'living',
+        'tv',
+        'Old Television',
+        481,
+        640,
+        0.29,
+        ['back-wall', 'side-wall', 'corner'],
+        'fix',
+        'connect-wires',
+        { scrap: 3 },
+        false,
+      ),
+      prop('living', 'armchair', 'Armchair', 640, 630, 0.23, ['side-wall', 'corner', 'mid-floor'], 'search', 'dots-and-lines', {
+        cloth: 2,
+        seeds: 1,
+      }),
+      prop('living', 'sideboard', 'Sideboard', 640, 519, 0.24, ['back-wall', 'side-wall'], 'fix', 'hit-the-nail', {
+        timber: 2,
+        scrap: 1,
+      }),
     ],
   },
   study: {
@@ -172,11 +306,36 @@ export const ROOMS: Record<RoomType, RoomDef> = {
     /* Window on the left wall (sill ~0.62) */
     zones: zonesFor({ fl: 0.7, wallL: 0.252, wallR: 0.765, leftMax: 0.24 }),
     props: [
-      prop('study', 'desk', 'Writing Desk', 640, 524, 0.23, ['back-wall', 'side-wall']),
-      prop('study', 'cabinet', 'Filing Cabinet', 384, 640, 0.33, ['back-wall', 'side-wall']),
-      prop('study', 'trunk', 'Old Trunk', 640, 473, 0.14, ['mid-floor', 'corner', 'side-wall']),
-      prop('study', 'bookshelf', 'Bookshelf', 356, 640, 0.43, ['back-wall', 'side-wall']),
-      prop('study', 'safe', 'Iron Safe', 618, 640, 0.2, ['back-wall', 'corner', 'side-wall'], false),
+      prop('study', 'desk', 'Writing Desk', 640, 524, 0.23, ['back-wall', 'side-wall'], 'peek', 'find-the-object', {
+        timber: 1,
+        scrap: 1,
+        seeds: 1,
+      }),
+      prop('study', 'cabinet', 'Filing Cabinet', 384, 640, 0.33, ['back-wall', 'side-wall'], 'peek', 'safe-dial', {
+        scrap: 2,
+        timber: 1,
+      }),
+      prop('study', 'trunk', 'Old Trunk', 640, 473, 0.14, ['mid-floor', 'corner', 'side-wall'], 'search', 'dots-and-lines', {
+        timber: 2,
+        cloth: 2,
+      }),
+      prop('study', 'bookshelf', 'Bookshelf', 356, 640, 0.43, ['back-wall', 'side-wall'], 'reach', 'jigsaw', {
+        timber: 2,
+        seeds: 1,
+      }),
+      prop(
+        'study',
+        'safe',
+        'Iron Safe',
+        618,
+        640,
+        0.2,
+        ['back-wall', 'corner', 'side-wall'],
+        'peek',
+        'safe-dial',
+        { scrap: 2, cloth: 2 },
+        false,
+      ),
     ],
   },
 };
@@ -340,4 +499,36 @@ export function parseRoomLayout(v: unknown, doorId: string): GeneratedRoomLayout
     props.push({ propId: p.propId, zoneId: p.zoneId, x: p.x, y: p.y, scale: p.scale, flipX: p.flipX });
   }
   return { doorId, roomType: o.roomType, props: props.sort(byDepth) };
+}
+
+/** Traveler entry stance near the room doorway side */
+export function roomEntryPoint(): { x: number; y: number } {
+  return { x: 0.13, y: 0.9 };
+}
+
+/** Traveler sprite height as a fraction of room stage height, with perspective depth & anatomical pose scaling */
+export function roomTravelerScale(y: number, pose: 'idle' | 'walk' | RoomActionPose): number {
+  const t = Math.max(0, Math.min(1, (y - 0.72) / 0.24));
+  const standing = 0.39 * (0.88 + 0.36 * t);
+  return Math.round(standing * ROOM_POSE_HEIGHT_SCALE[pose] * 10000) / 10000;
+}
+
+/** Stand target beside a placed prop inside the walkable room floor, plus whether to face right toward it */
+export function roomStandTarget(
+  placed: PlacedRoomProp,
+  def: Pick<RoomPropDef, 'aspect'>,
+): { x: number; y: number; facingRight: boolean } {
+  const halfW = roomPropWidth(def, placed.scale) / 2;
+  const gap = Math.max(0.055, halfW * 0.78 + 0.035);
+  /* Stand on the inward side toward room center when near walls, so the traveler stays on open floorboards */
+  const stepSign = placed.x >= 0.5 ? -1 : 1;
+  const rawX = placed.x + stepSign * gap;
+  const rawY = placed.y + 0.012;
+  const x = Math.min(ROOM_FLOOR_BOUNDS.xMax, Math.max(ROOM_FLOOR_BOUNDS.xMin, rawX));
+  const y = Math.min(ROOM_FLOOR_BOUNDS.yMax, Math.max(ROOM_FLOOR_BOUNDS.yMin, rawY));
+  return {
+    x: Math.round(x * 1000) / 1000,
+    y: Math.round(y * 1000) / 1000,
+    facingRight: placed.x >= x,
+  };
 }

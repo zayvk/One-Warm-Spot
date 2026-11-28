@@ -8,6 +8,7 @@ import {
   type BoardStatus,
   type Cell,
 } from '../../game/minigames/ticTacToe.ts';
+import { HAND_ASSETS } from '../../game/data/media.ts';
 import { useGameStore } from '../../game/store/useGameStore.ts';
 import { playClaim, playClick, playHover, playLocked } from '../../game/audio/soundEngine.ts';
 import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
@@ -72,6 +73,8 @@ export default function TicTacToeGame({
   const [cpuTurn, setCpuTurn] = useState(false);
   /* Bumped on Play Again so the board re-mounts fresh */
   const [round, setRound] = useState(0);
+  const [chalkCell, setChalkCell] = useState<number | null>(null);
+  const chalkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cardRef = useRef<HTMLElement>(null);
 
   const { status, winningLine } = evaluateBoard(board);
@@ -103,12 +106,22 @@ export default function TicTacToeGame({
     cardRef.current?.querySelector<HTMLButtonElement>('.ows-ttt-cell:not(:disabled)')?.focus();
   }, [round]);
 
+  useEffect(
+    () => () => {
+      if (chalkTimerRef.current) clearTimeout(chalkTimerRef.current);
+    },
+    [],
+  );
+
   const play = (i: number) => {
     if (cpuTurn || finished) return;
     const next = applyMove(board, i, 'player');
     if (!next) return;
     playClick();
     setBoard(next);
+    setChalkCell(i);
+    if (chalkTimerRef.current) clearTimeout(chalkTimerRef.current);
+    chalkTimerRef.current = setTimeout(() => setChalkCell(null), 250);
     if (evaluateBoard(next).status === 'playing') setCpuTurn(true);
   };
 
@@ -195,6 +208,17 @@ export default function TicTacToeGame({
               <line pathLength={1} {...strike} />
             </svg>
           )}
+          <div className="ows-chalk-clip" aria-hidden="true">
+            <div
+              className={`ows-hand-chalk-wrap ${chalkCell !== null ? 'ows-hand-active' : 'ows-hand-idle'}`}
+              style={{
+                left: chalkCell !== null ? `${(((chalkCell % 3) + 0.5) / 3) * 100}%` : '88%',
+                top: chalkCell !== null ? `${((Math.floor(chalkCell / 3) + 0.5) / 3) * 100}%` : '88%',
+              }}
+            >
+              <img src={HAND_ASSETS.chalk} alt="" draggable={false} className="ows-hand ows-hand-chalk" />
+            </div>
+          </div>
         </div>
 
         <p className="ows-mg-legend" aria-hidden="true">

@@ -12,7 +12,7 @@ import {
   type JigsawPiece,
   type JigsawState,
 } from '../../game/minigames/jigsaw.ts';
-import { JIGSAW_IMAGES } from '../../game/data/media.ts';
+import { HAND_ASSETS, JIGSAW_IMAGES } from '../../game/data/media.ts';
 import { useGameStore } from '../../game/store/useGameStore.ts';
 import { playClaim, playClick, playHover } from '../../game/audio/soundEngine.ts';
 import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
@@ -104,6 +104,8 @@ export default function JigsawGame({ mode, title = 'Jigsaw Puzzle', onComplete, 
   const [nudge, setNudge] = useState<{ piece: number; n: number } | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [peek, setPeek] = useState(false);
+  const [handGlidingSlot, setHandGlidingSlot] = useState<number | null>(null);
+  const handTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cardRef = useRef<HTMLElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
@@ -143,6 +145,13 @@ export default function JigsawGame({ mode, title = 'Jigsaw Puzzle', onComplete, 
     if (ready) cardRef.current?.querySelector<HTMLButtonElement>('.ows-jig-piece')?.focus();
   }, [ready, puzzle.imageId]);
 
+  useEffect(
+    () => () => {
+      if (handTimerRef.current) clearTimeout(handTimerRef.current);
+    },
+    [],
+  );
+
   const attemptPlace = (pieceId: number, slot: number) => {
     const { state, result } = placePiece(puzzle, pieceId, slot);
     if (result === 'placed') {
@@ -150,6 +159,9 @@ export default function JigsawGame({ mode, title = 'Jigsaw Puzzle', onComplete, 
       setSelected(null);
       setHint(null);
       setSnap((s) => ({ slot, n: (s?.n ?? 0) + 1 }));
+      setHandGlidingSlot(slot);
+      if (handTimerRef.current) clearTimeout(handTimerRef.current);
+      handTimerRef.current = setTimeout(() => setHandGlidingSlot(null), 320);
       if (isSolved(state)) {
         setPeek(false);
         playClaim();
@@ -287,6 +299,10 @@ export default function JigsawGame({ mode, title = 'Jigsaw Puzzle', onComplete, 
   const slotTransform = (p: JigsawPiece) => `translate(${p.col * CELL} ${p.row * CELL})`;
   const dragPiece = drag ? pieces[drag.pieceId] : null;
   const ghostSize = drag ? (drag.cellPx * PIECE_BOX) / CELL : 0;
+  const handSlot = handGlidingSlot ?? (drag && hoverSlot !== null ? hoverSlot : null);
+  const handPiece = handSlot !== null ? pieces[handSlot] : null;
+  const handX = handPiece ? ((handPiece.col + 0.5) / gridSize) * 100 : 88;
+  const handY = handPiece ? ((handPiece.row + 0.5) / gridSize) * 100 : 88;
 
   return (
     <div className="ows-mg-overlay">
@@ -379,6 +395,17 @@ export default function JigsawGame({ mode, title = 'Jigsaw Puzzle', onComplete, 
                   />
                 );
               })}
+            </div>
+
+            <div className="ows-jig-hand-clip" aria-hidden="true">
+              <div
+                className={`ows-hand-pinch-wrap ows-jig-hand-wrap ${
+                  handPiece ? 'ows-hand-active' : 'ows-hand-idle'
+                }`}
+                style={{ left: `${handX}%`, top: `${handY}%` }}
+              >
+                <img src={HAND_ASSETS.pinch} alt="" draggable={false} className="ows-hand ows-hand-pinch" />
+              </div>
             </div>
           </div>
 

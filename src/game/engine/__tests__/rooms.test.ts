@@ -15,6 +15,9 @@ const mem = vi.hoisted(() => {
 import {
   MAX_ROOM_PROPS,
   MIN_ROOM_PROPS,
+  ROOM_ACTION_POSES,
+  ROOM_FLOOR_BOUNDS,
+  ROOM_POSE_HEIGHT_SCALE,
   ROOMS,
   ROOM_TYPES,
   generateRoomLayout,
@@ -22,6 +25,8 @@ import {
   parseRoomLayout,
   roomPropWidth,
   roomSafeArea,
+  roomStandTarget,
+  roomTravelerScale,
   type GeneratedRoomLayout,
   type RoomRng,
 } from '../../data/rooms.ts';
@@ -29,7 +34,11 @@ import { BUILDING_FLOORS, findEnterableDoor } from '../../data/floors.ts';
 import {
   applyFloorNightReset,
   freshTerraceState,
+  isRoomPropFailedToday,
+  isRoomPropSearched,
   loadTerraceState,
+  markStoredRoomPropFailedToday,
+  markStoredRoomPropSearched,
   parseTerraceState,
   saveTerraceState,
   storeRoomLayout,
@@ -329,5 +338,80 @@ describe('resuming inside a room after a refresh', () => {
   it('needs a Terrace run and a real floor', () => {
     expect(parseResumeLocation(stored({ screen: 'room', floor: 2, doorId: 'f2-room-2a' }), 'pipe')).toEqual({ screen: 'title' });
     expect(parseResumeLocation(stored({ screen: 'room', floor: 7, doorId: 'f2-room-2a' }), 'terrace')).toEqual({ screen: 'title' });
+  });
+});
+
+describe('room prop puzzles, poses & rewards', () => {
+  it('assigns every one of the 20 room props a valid actionPose, puzzle, and non-empty reward', () => {
+    const allProps = ROOM_TYPES.flatMap((t) => ROOMS[t].props.map((p) => ({ room: t, ...p })));
+    expect(allProps).toHaveLength(20);
+    const wiredPuzzles = new Set<string>();
+    for (const p of allProps) {
+      expect(ROOM_ACTION_POSES).toContain(p.actionPose);
+      expect(typeof p.puzzle).toBe('string');
+      wiredPuzzles.add(p.puzzle);
+      const rewardEntries = Object.entries(p.reward).filter(([, v]) => typeof v === 'number' && v > 0);
+      expect(rewardEntries.length, `${p.room}:${p.id}`).toBeGreaterThan(0);
+    }
+    expect(wiredPuzzles).toEqual(
+      new Set(['safe-dial', 'hit-the-nail', 'find-the-object', 'jigsaw', 'connect-wires', 'dots-and-lines']),
+    );
+  });
+
+  it('keeps traveler stand targets inside the walkable floor and respects anatomical pose scaling', () => {
+    expect(ROOM_POSE_HEIGHT_SCALE.search).toBe(0.72);
+    expect(ROOM_POSE_HEIGHT_SCALE.peek).toBe(0.6);
+    expect(roomTravelerScale(0.84, 'search')).toBeCloseTo(roomTravelerScale(0.84, 'idle') * 0.72, 3);
+    expect(roomTravelerScale(0.84, 'peek')).toBeCloseTo(roomTravelerScale(0.84, 'idle') * 0.6, 3);
+
+    for (let seed = 1; seed <= 50; seed++) {
+      const layout = layoutFor('f1-apt-1a', seed);
+      for (const p of layout.props) {
+        const def = getRoomProp(layout.roomType, p.propId)!;
+        const t = roomStandTarget(p, def);
+        expect(t.x).toBeGreaterThanOrEqual(ROOM_FLOOR_BOUNDS.xMin);
+        expect(t.x).toBeLessThanOrEqual(ROOM_FLOOR_BOUNDS.xMax);
+        expect(t.y).toBeGreaterThanOrEqual(ROOM_FLOOR_BOUNDS.yMin);
+        expect(t.y).toBeLessThanOrEqual(ROOM_FLOOR_BOUNDS.yMax);
+      }
+    }
+  });
+});
+
+describe('room prop persistence and overnight resets', () => {
+  beforeEach(() => mem.clear());
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('persists searched and daily-failed room props and round-trips through backups', () => {
+    saveTerraceState(withRooms());
+    markStoredRoomPropSearched('f1-apt-1a', 'bed');
+    markStoredRoomPropFailedToday('f2-room-2a', 'safe');
+
+    const stored = loadTerraceState();
+    expect(isRoomPropSearched(stored, 'f1-apt-1a', 'bed')).toBe(true);
+    expect(isRoomPropFailedToday(stored, 'f2-room-2a', 'safe')).toBe(true);
+
+    const parsed = parseBackupText(JSON.stringify(buildBackup(save, stored)));
+    expect(parsed.ok && parsed.terrace?.searchedRoomProps).toEqual(['f1-apt-1a:bed']);
+    expect(parsed.ok && parsed.terrace?.failedRoomPropsToday).toEqual(['f2-room-2a:safe']);
+  });
+
+  it('clears failedRoomPropsToday overnight and strips ${doorId}:* searched keys when wind resets doors', () => {
+    const base: TerraceState = {
+      ...withRooms(),
+      searchedRoomProps: ['f1-apt-1a:bed', 'f2-room-2a:stove'],
+      failedRoomPropsToday: ['f1-apt-1a:dresser', 'f2-room-2a:fridge'],
+    };
+
+    const calm = applyFloorNightReset(base, 'clear');
+    expect(calm.state.searchedRoomProps).toEqual(['f1-apt-1a:bed', 'f2-room-2a:stove']);
+    expect(calm.state.failedRoomPropsToday).toEqual([]);
+
+    const windy = applyFloorNightReset(base, 'wind');
+    expect(windy.state.roomLayouts).toEqual({});
+    expect(windy.state.searchedRoomProps).toEqual([]);
+    expect(windy.state.failedRoomPropsToday).toEqual([]);
   });
 });

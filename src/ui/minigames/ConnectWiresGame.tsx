@@ -10,6 +10,7 @@ import {
   type WireId,
   type WireState,
 } from '../../game/minigames/connectWires.ts';
+import { HAND_ASSETS } from '../../game/data/media.ts';
 import { playBoxChime, playClaim, playClick, playHover, playLocked } from '../../game/audio/soundEngine.ts';
 import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
 
@@ -258,6 +259,17 @@ export default function ConnectWiresGame({ mode, title = 'Connect the Wires', on
 
   const freshId = flash?.ok ? game.left[flash.left] : null;
   const dragId = drag ? game.left[drag.left] : null;
+  const handActive = !fixed && (drag !== null || selected !== null);
+  const handX = drag
+    ? ((hoverRight !== null ? mirror(POST_X) : drag.x) / VB_W) * 100
+    : selected !== null
+      ? (POST_X / VB_W) * 100
+      : 84;
+  const handY = drag
+    ? ((hoverRight !== null ? rowY(hoverRight) : drag.y) / vbH) * 100
+    : selected !== null
+      ? (rowY(selected) / vbH) * 100
+      : 84;
 
   return (
     <div className="ows-mg-overlay">
@@ -282,14 +294,14 @@ export default function ConnectWiresGame({ mode, title = 'Connect the Wires', on
         </header>
 
         <div className="ows-wire-body">
-          <svg
-            ref={svgRef}
-            className={`ows-wire-panel ${fixed ? 'ows-wire-panel--powered' : ''}`}
-            viewBox={`0 0 ${VB_W} ${vbH}`}
-            style={{ ['--wire-ratio' as string]: `${VB_W / vbH}` }}
-            role="group"
-            aria-label="Fuse box wiring"
-          >
+          <div className={`ows-wire-stage ${fixed ? 'ows-wire-panel--powered' : ''}`} style={{ ['--wire-ratio' as string]: `${VB_W / vbH}` }}>
+            <svg
+              ref={svgRef}
+              className="ows-wire-panel"
+              viewBox={`0 0 ${VB_W} ${vbH}`}
+              role="group"
+              aria-label="Fuse box wiring"
+            >
             <defs>
               <linearGradient id={`${uid}-steel`} x1="0" y1="0" x2="0.35" y2="1">
                 <stop offset="0" stopColor="#5a5551" />
@@ -401,7 +413,18 @@ export default function ConnectWiresGame({ mode, title = 'Connect the Wires', on
                 </g>
               );
             })}
-          </svg>
+            </svg>
+
+            <div
+              className={`ows-hand-pinch-wrap ows-wire-hand-wrap ${drag ? 'ows-hand-dragging' : ''} ${
+                handActive ? 'ows-hand-active' : 'ows-hand-idle'
+              }`}
+              aria-hidden="true"
+              style={{ left: `${handX}%`, top: `${handY}%` }}
+            >
+              <img src={HAND_ASSETS.pinch} alt="" draggable={false} className="ows-hand ows-hand-pinch" />
+            </div>
+          </div>
 
           <div className="ows-wire-side">
             <p className={`ows-mg-status ows-mg-status--${statusMod}`} role="status" aria-live="polite">

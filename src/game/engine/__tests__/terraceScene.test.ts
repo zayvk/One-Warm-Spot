@@ -76,6 +76,8 @@ describe('parseTerraceState', () => {
       spawns: null,
       repairedSpots: [],
       failedTodaySpots: [],
+      searchedRoomProps: [],
+      failedRoomPropsToday: [],
       roomLayouts: {},
     });
   });

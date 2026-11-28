@@ -10,6 +10,7 @@ import {
   type Marker,
   type NailState,
 } from '../../game/minigames/hitTheNail.ts';
+import { HAND_ASSETS } from '../../game/data/media.ts';
 import { useGameStore } from '../../game/store/useGameStore.ts';
 import { playClick, playHover, playLocked, playNailClang, playNailFinish, playNailTink } from '../../game/audio/soundEngine.ts';
 import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
@@ -21,8 +22,6 @@ const NAIL_X = [100, 200, 300] as const;
 const SURFACE_Y = 118;
 /** How far an undriven nail stands proud of the plank */
 const NAIL_RISE = 44;
-/** The hammer's handle end: it swings around this point, this far right of the nail */
-const PIVOT_DX = 92;
 
 /** A swing blocks new strikes for this long; the blow lands partway through */
 const SWING_MS = 380;
@@ -230,14 +229,15 @@ export default function HitTheNailGame({
           )}
         </p>
 
-        <svg
-          className="ows-nail-board"
-          viewBox="0 0 400 190"
-          role="button"
-          tabIndex={-1}
-          aria-label="Strike the nail"
-          onClick={() => strike()}
-        >
+        <div className="ows-nail-stage">
+          <svg
+            className="ows-nail-board"
+            viewBox="0 0 400 190"
+            role="button"
+            tabIndex={-1}
+            aria-label="Strike the nail"
+            onClick={() => strike()}
+          >
           <defs>
             <linearGradient id={`${uid}-iron`} x1="0" x2="1">
               <stop offset="0" stopColor="#5b524c" />
@@ -297,20 +297,30 @@ export default function HitTheNailGame({
             </g>
           )}
 
-          {/* The hammer, poised over the active nail; it swings around its handle end */}
-          {!finished || swing ? (
-            <g style={{ transform: `translate(${hammerX + PIVOT_DX}px, ${headTop - 11}px)` }} className="ows-nail-hammer-pos">
-              <g key={swing ? `s${swing.n}` : 'rest'} className={`ows-nail-hammer ${swing ? 'ows-nail-hammer--swing' : ''}`}>
-                <g transform={`translate(${-PIVOT_DX} 0)`}>
-                  <rect x={4} y={-5} width={PIVOT_DX + 4} height={10} rx={4} fill="#a8743f" stroke="#3a281b" strokeWidth={2.5} />
-                  <rect x={PIVOT_DX - 22} y={-6} width={26} height={12} rx={4} fill="#6e4526" stroke="#3a281b" strokeWidth={2} />
-                  <path d="M-17 -11 L17 -11 L19 -6 L19 6 L17 11 L-17 11 L-20 4 L-20 -4 Z" fill={`url(#${uid}-iron)`} stroke="#2e2622" strokeWidth={2.5} strokeLinejoin="round" />
-                  <path d="M-15 -8 L12 -8" stroke="rgba(255, 255, 255, 0.3)" strokeWidth={2} />
-                </g>
-              </g>
-            </g>
-          ) : null}
-        </svg>
+          </svg>
+
+          {/* First-person hammer hand entering from the top-right edge, tracked over the active nail */}
+          {(!finished || swing) && (
+            <div
+              className="ows-nail-hand-pos"
+              aria-hidden="true"
+              style={{
+                left: `${(hammerX / 400) * 100}%`,
+                top: `${((headTop - 4) / 190) * 100}%`,
+              }}
+            >
+              <img
+                key={swing ? `s${swing.n}` : 'rest'}
+                src={HAND_ASSETS.hammer}
+                alt=""
+                draggable={false}
+                className={`ows-hand ows-nail-hand ${
+                  swing ? (swing.hit ? 'ows-nail-hand--hit' : 'ows-nail-hand--miss') : ''
+                }`}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Timing bar */}
         <div className="ows-nail-bar" aria-hidden="true">

@@ -158,6 +158,15 @@ export const UI_ASSETS = {
   logoEmblem: assetUrl('/source/ui/logo-emblem.webp'),
 } as const;
 
+/** First-person gouache traveler hands integrated into the 7 scavenging mini-games */
+export const HAND_ASSETS = {
+  hammer: assetUrl('/source/ui/hands/hand-hammer.webp'),
+  dial: assetUrl('/source/ui/hands/hand-dial.webp'),
+  pinch: assetUrl('/source/ui/hands/hand-pinch.webp'),
+  chalk: assetUrl('/source/ui/hands/hand-chalk.webp'),
+  rummage: assetUrl('/source/ui/hands/hand-rummage.webp'),
+} as const;
+
 /* ───── Arrival Cutscene Art ───── */
 
 /** Terrace elevator arrival: lobby → riding up → doors open onto the roof */

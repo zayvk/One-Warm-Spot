@@ -1273,9 +1273,11 @@ export class ShelterScene {
    */
   private applyOvernightRegrowth(outcome: RegrowOutcome<TerraceState>): void {
     if (this.state.siteId !== 'terrace') return;
-    /* Keep floor puzzle resets & cleared failures in sync before interactSleep saves `this.terrace` */
+    /* Keep floor & room puzzle resets and cleared failures in sync before interactSleep saves `this.terrace` */
     this.terrace.repairedSpots = [...outcome.state.repairedSpots];
     this.terrace.failedTodaySpots = [...outcome.state.failedTodaySpots];
+    this.terrace.searchedRoomProps = [...outcome.state.searchedRoomProps];
+    this.terrace.failedRoomPropsToday = [...outcome.state.failedRoomPropsToday];
     this.terrace.roomLayouts = { ...outcome.state.roomLayouts };
 
     const ids = [...outcome.regrownWeeds, ...outcome.refreshedBoxes];

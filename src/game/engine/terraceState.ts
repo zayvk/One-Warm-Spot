@@ -69,6 +69,10 @@ export interface TerraceState {
   repairedSpots: string[];
   /** Downstairs scavenging spots lost today and locked until tomorrow */
   failedTodaySpots: string[];
+  /** Room props already searched in this run (keyed as `${doorId}:${propId}`) */
+  searchedRoomProps: string[];
+  /** Room props lost today in Challenge mode (keyed as `${doorId}:${propId}`, clears overnight) */
+  failedRoomPropsToday: string[];
   /** Room interiors behind opened doors (door id → layout); dropped when the door re-locks */
   roomLayouts: Record<string, GeneratedRoomLayout>;
 }
@@ -121,6 +125,8 @@ export function emptyTerraceState(spawns: TerraceSpawns | null = null): TerraceS
     spawns,
     repairedSpots: [],
     failedTodaySpots: [],
+    searchedRoomProps: [],
+    failedRoomPropsToday: [],
     roomLayouts: {},
   };
 }
@@ -232,6 +238,8 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
     if (obj.craftedPerks !== undefined && !isStringList(obj.craftedPerks)) return null;
     if (obj.repairedSpots !== undefined && !isStringList(obj.repairedSpots)) return null;
     if (obj.failedTodaySpots !== undefined && !isStringList(obj.failedTodaySpots)) return null;
+    if (obj.searchedRoomProps !== undefined && !isStringList(obj.searchedRoomProps)) return null;
+    if (obj.failedRoomPropsToday !== undefined && !isStringList(obj.failedRoomPropsToday)) return null;
     for (const key of ['planterReady', 'barrelReady']) {
       if (obj[key] !== undefined && typeof obj[key] !== 'boolean') return null;
     }
@@ -272,6 +280,15 @@ function normalizeTerraceState(obj: Record<string, unknown>, strict: boolean): T
   /* Saves from before the downstairs puzzles have none */
   state.repairedSpots = [...new Set(stringList(obj.repairedSpots))];
   state.failedTodaySpots = [...new Set(stringList(obj.failedTodaySpots))];
+  const openDoorSet = new Set(state.repairedSpots);
+  state.searchedRoomProps = [...new Set(stringList(obj.searchedRoomProps))].filter((k) => {
+    const sep = k.indexOf(':');
+    return sep > 0 && openDoorSet.has(k.slice(0, sep));
+  });
+  state.failedRoomPropsToday = [...new Set(stringList(obj.failedRoomPropsToday))].filter((k) => {
+    const sep = k.indexOf(':');
+    return sep > 0 && openDoorSet.has(k.slice(0, sep));
+  });
   const layouts = parseRoomLayouts(obj.roomLayouts, state.repairedSpots, strict);
   if (!layouts) return null;
   state.roomLayouts = layouts;
@@ -404,6 +421,56 @@ const FLOOR_RESET_RULES: Readonly<Record<string, FloorResetRule | undefined>> = 
     .map((h) => [h.id, h.resetRule]),
 );
 
+export function roomPropKey(doorId: string, propId: string): string {
+  return `${doorId}:${propId}`;
+}
+
+export function isRoomPropSearched(
+  state: Pick<TerraceState, 'searchedRoomProps'> | null,
+  doorId: string,
+  propId: string,
+): boolean {
+  return Boolean(state?.searchedRoomProps.includes(roomPropKey(doorId, propId)));
+}
+
+/** Records a room prop as searched (immutable) */
+export function withRoomPropSearched(state: TerraceState, doorId: string, propId: string): TerraceState {
+  const key = roomPropKey(doorId, propId);
+  return state.searchedRoomProps.includes(key)
+    ? state
+    : { ...state, searchedRoomProps: [...state.searchedRoomProps, key] };
+}
+
+/** Marks a room prop searched in stored rooftop state and persists it */
+export function markStoredRoomPropSearched(doorId: string, propId: string): TerraceState {
+  const state = withRoomPropSearched(loadTerraceState(), doorId, propId);
+  saveTerraceState(state);
+  return state;
+}
+
+export function isRoomPropFailedToday(
+  state: Pick<TerraceState, 'failedRoomPropsToday'> | null,
+  doorId: string,
+  propId: string,
+): boolean {
+  return Boolean(state?.failedRoomPropsToday.includes(roomPropKey(doorId, propId)));
+}
+
+/** Records a room prop lost today in Challenge mode (immutable; locked until tomorrow) */
+export function withRoomPropFailedToday(state: TerraceState, doorId: string, propId: string): TerraceState {
+  const key = roomPropKey(doorId, propId);
+  return state.failedRoomPropsToday.includes(key)
+    ? state
+    : { ...state, failedRoomPropsToday: [...state.failedRoomPropsToday, key] };
+}
+
+/** Marks a room prop lost today in stored rooftop state and persists it */
+export function markStoredRoomPropFailedToday(doorId: string, propId: string): TerraceState {
+  const state = withRoomPropFailedToday(loadTerraceState(), doorId, propId);
+  saveTerraceState(state);
+  return state;
+}
+
 export function floorSpotResetRule(spotId: string): FloorResetRule | undefined {
   return FLOOR_RESET_RULES[spotId];
 }
@@ -435,9 +502,27 @@ export function applyFloorNightReset(
 ): { state: TerraceState; resetIds: string[] } {
   const repairedSpots = resetFloorSpotsForNewDay(state.repairedSpots, weather);
   const resetIds = state.repairedSpots.filter((id) => !repairedSpots.includes(id));
-  if (resetIds.length === 0 && state.failedTodaySpots.length === 0) return { state, resetIds };
-  const roomLayouts = Object.fromEntries(Object.entries(state.roomLayouts).filter(([id]) => repairedSpots.includes(id)));
-  return { state: { ...state, repairedSpots, failedTodaySpots: [], roomLayouts }, resetIds };
+  if (resetIds.length === 0 && state.failedTodaySpots.length === 0 && state.failedRoomPropsToday.length === 0) {
+    return { state, resetIds };
+  }
+  const openDoors = new Set(repairedSpots);
+  const keepKey = (k: string) => {
+    const sep = k.indexOf(':');
+    return sep > 0 && openDoors.has(k.slice(0, sep));
+  };
+  const roomLayouts = Object.fromEntries(Object.entries(state.roomLayouts).filter(([id]) => openDoors.has(id)));
+  const searchedRoomProps = resetIds.length > 0 ? state.searchedRoomProps.filter(keepKey) : state.searchedRoomProps;
+  return {
+    state: {
+      ...state,
+      repairedSpots,
+      failedTodaySpots: [],
+      searchedRoomProps,
+      failedRoomPropsToday: [],
+      roomLayouts,
+    },
+    resetIds,
+  };
 }
 
 /** The room behind an opened door, if one has been generated */

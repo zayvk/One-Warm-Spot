@@ -8,9 +8,9 @@ const MAX_IMPORT_BYTES = 512 * 1024;
 
 /**
  * A backup is the regular `SaveState` (which already carries `stats`) plus the
- * Terrace's in-scene state — including `repairedSpots` and `failedTodaySpots`
- * for downstairs scavenging spots. Older backups are plain `SaveState` files,
- * or rooftops without those fields.
+ * Terrace's in-scene state — including `repairedSpots`, `failedTodaySpots`,
+ * `searchedRoomProps`, `failedRoomPropsToday`, and `roomLayouts` for downstairs
+ * scavenging. Older backups are plain `SaveState` files, or rooftops without those fields.
  */
 export type BackupFile = SaveState & { terraceState?: TerraceState };
 

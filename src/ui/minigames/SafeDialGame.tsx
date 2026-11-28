@@ -12,6 +12,7 @@ import {
   type DialTick,
   type SafeState,
 } from '../../game/minigames/safeDial.ts';
+import { HAND_ASSETS } from '../../game/data/media.ts';
 import { playBoxChime, playClick, playDialTick, playHover, playLocked, playSafeOpen } from '../../game/audio/soundEngine.ts';
 import { miniGameClose, useMiniGameEscape } from './miniGameClose.ts';
 
@@ -53,6 +54,8 @@ export default function SafeDialGame({
   const [angle, setAngle] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
   const [catchCue, setCatchCue] = useState(0);
+  const [turnTilt, setTurnTilt] = useState(0);
+  const tiltTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameRef = useRef(game);
   const cardRef = useRef<HTMLElement>(null);
   const drag = useRef<{ pointerId: number; last: number; accum: number } | null>(null);
@@ -78,6 +81,9 @@ export default function SafeDialGame({
     playDialTick(loudest);
     if (loudest === 'catch') setCatchCue((n) => n + 1);
     setAngle((a) => a + steps * NOTCH_DEG);
+    setTurnTilt(steps > 0 ? 5 : -5);
+    if (tiltTimer.current) clearTimeout(tiltTimer.current);
+    tiltTimer.current = setTimeout(() => setTurnTilt(0), 220);
     setHint(null);
     commit(r.state);
   };
@@ -88,7 +94,13 @@ export default function SafeDialGame({
     hold.current = { timer: null, interval: null };
   };
 
-  useEffect(() => stopHold, []);
+  useEffect(
+    () => () => {
+      stopHold();
+      if (tiltTimer.current) clearTimeout(tiltTimer.current);
+    },
+    [],
+  );
 
   const lock = () => {
     const before = gameRef.current;
@@ -103,6 +115,7 @@ export default function SafeDialGame({
       case 'set':
         if (state.status === 'win') playSafeOpen();
         else playBoxChime();
+        setCatchCue((n) => n + 1);
         setHint(null);
         break;
       case 'wrong-direction':
@@ -325,6 +338,16 @@ export default function SafeDialGame({
             <span className="ows-safe-readout" aria-live="off">
               {game.position}
             </span>
+
+            <div className="ows-safe-hand-clip" aria-hidden="true">
+              <div
+                key={`h${catchCue}`}
+                className={`ows-safe-hand-wrap ${catchCue > 0 ? 'ows-safe-hand--jolt' : ''}`}
+                style={{ transform: `rotate(${turnTilt}deg)` }}
+              >
+                <img src={HAND_ASSETS.dial} alt="" draggable={false} className="ows-hand ows-safe-hand" />
+              </div>
+            </div>
           </div>
 
           <div className="ows-safe-side">

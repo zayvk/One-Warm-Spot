@@ -22,7 +22,10 @@ import { addResources } from '../game/engine/scavenge.ts';
 import { RESOURCE_MAP } from '../game/data/resources.ts';
 import { playClick, playDoorCreak, playHover, playLocked, startSiteAmbience } from '../game/audio/soundEngine.ts';
 import type { MiniGameResult } from '../game/minigames/types.ts';
+import { formatRewardCallout } from '../game/engine/rewardCallouts.ts';
 import ElevatorPanelModal from './ElevatorPanelModal.tsx';
+import MaterialPouch from './MaterialPouch.tsx';
+import FloatingRewards, { type FloatingCallout } from './FloatingRewards.tsx';
 import ConnectWiresGame from './minigames/ConnectWiresGame.tsx';
 import TicTacToeGame from './minigames/TicTacToeGame.tsx';
 import DotsAndBoxesGame from './minigames/DotsAndBoxesGame.tsx';
@@ -93,6 +96,10 @@ export default function BuildingFloorScreen({ floor, onRide, onEnterRoom }: Buil
   const [puzzleSession, setPuzzleSession] = useState<{ spot: FloorHotspot; key: number } | null>(null);
   /* Stepping through a door: the hallway fades out, then the room takes over */
   const [leaving, setLeaving] = useState(false);
+  const [touchPreviewId, setTouchPreviewId] = useState<string | null>(null);
+  const isTouchRef = useRef(false);
+  const [callouts, setCallouts] = useState<FloatingCallout[]>([]);
+  const calloutSeqRef = useRef(0);
   const enterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const data = BUILDING_FLOORS[floor];
   const { w: viewW, h: viewH } = useViewport();
@@ -117,9 +124,19 @@ export default function BuildingFloorScreen({ floor, onRide, onEnterRoom }: Buil
 
   const openPanel = useCallback(() => {
     playClick();
+    setTouchPreviewId(null);
     setPanelOpen(true);
   }, []);
   const closePanel = useCallback(() => setPanelOpen(false), []);
+
+  const spawnCallout = useCallback((text: string, xPct?: number, yPct?: number) => {
+    if (!text) return;
+    const id = ++calloutSeqRef.current;
+    setCallouts((curr) => [...curr, { id, text, tone: 'reward', x: xPct, y: yPct }]);
+    setTimeout(() => {
+      setCallouts((curr) => curr.filter((c) => c.id !== id));
+    }, 1500);
+  }, []);
 
   const onSpotClick = (spot: FloorHotspot) => {
     if (leaving) return;
@@ -127,6 +144,14 @@ export default function BuildingFloorScreen({ floor, onRide, onEnterRoom }: Buil
       openPanel();
       return;
     }
+    if (isTouchRef.current && touchPreviewId !== spot.id) {
+      isTouchRef.current = false;
+      playHover();
+      setTouchPreviewId(spot.id);
+      return;
+    }
+    isTouchRef.current = false;
+    setTouchPreviewId(null);
     /* An opened room door leads inside */
     if (spot.enterable && onEnterRoom && repaired.includes(spot.id)) {
       playDoorCreak();
@@ -179,6 +204,10 @@ export default function BuildingFloorScreen({ floor, onRide, onEnterRoom }: Buil
         const store = useGameStore.getState();
         useGameStore.setState({ resources: addResources(store.resources, spot.reward) });
         store._save();
+        const text = formatRewardCallout(spot.reward);
+        const cx = ((stage.x + ((spot.rect.left + spot.rect.width / 2) / 100) * stage.width) / viewW) * 100;
+        const cy = ((stage.y + (spot.rect.top / 100) * stage.height) / viewH) * 100;
+        spawnCallout(text, Math.min(82, Math.max(18, cx)), Math.min(68, Math.max(18, cy)));
       }
       const firstReward = spot.reward ? (Object.keys(spot.reward)[0] as keyof typeof RESOURCE_MAP | undefined) : undefined;
       pushNotice({
@@ -196,12 +225,13 @@ export default function BuildingFloorScreen({ floor, onRide, onEnterRoom }: Buil
 
   return (
     <div
+      onClick={() => setTouchPreviewId(null)}
       style={{
         position: 'fixed',
         inset: 0,
         zIndex: 10,
         overflow: 'hidden',
-        background: '#1e1a16',
+        background: '#3a2d22',
         animation: 'owsFadeOpacity 300ms ease',
         opacity: leaving ? 0 : 1,
         transition: reduceMotion ? undefined : `opacity ${ENTER_FADE_MS}ms ease`,
@@ -246,7 +276,9 @@ export default function BuildingFloorScreen({ floor, onRide, onEnterRoom }: Buil
 
         {data.hotspots.map((spot) => {
           const isRepaired = repaired.includes(spot.id);
+          const isFailed = failedToday.includes(spot.id) && !isRepaired;
           const canEnter = isRepaired && Boolean(spot.enterable && onEnterRoom);
+          const showLockCue = !isRepaired && (spot.requiresTool === 'axe' || (Boolean(spot.puzzle) && !spot.hasSparks));
           const label = canEnter
             ? floorSpotEnterLabel(spot)
             : isRepaired && spot.puzzle
@@ -258,17 +290,40 @@ export default function BuildingFloorScreen({ floor, onRide, onEnterRoom }: Buil
               key={glowing?.id === spot.id ? `${spot.id}-${glowing.key}` : spot.id}
               type="button"
               aria-label={spot.kind === 'lift' ? 'Elevator — choose a floor' : label}
-              className={`ows-lobby-spot ${glowing?.id === spot.id ? 'ows-lobby-spot--glow' : ''}`}
+              className={`ows-lobby-spot ${glowing?.id === spot.id ? 'ows-lobby-spot--glow' : ''} ${
+                touchPreviewId === spot.id ? 'ows-lobby-spot--preview' : ''
+              } ${isFailed ? 'ows-lobby-spot--dim' : ''}`}
               style={{
                 left: `${spot.rect.left}%`,
                 top: `${spot.rect.top}%`,
                 width: `${spot.rect.width}%`,
                 height: `${spot.rect.height}%`,
               }}
+              onPointerDown={(e) => {
+                isTouchRef.current = e.pointerType === 'touch';
+              }}
               onMouseEnter={playHover}
-              onClick={() => onSpotClick(spot)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSpotClick(spot);
+              }}
             >
               <span className="ows-lobby-label">{label}</span>
+              {canEnter && (
+                <span className="ows-spot-cue ows-spot-cue--open" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="12" height="12">
+                    <path d="M6 3.5 L10.5 8 L6 12.5" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  </svg>
+                </span>
+              )}
+              {showLockCue && (
+                <span className="ows-spot-cue ows-spot-cue--lock" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="11" height="11">
+                    <rect x="3.5" y="7" width="9" height="6.5" rx="1.6" stroke="currentColor" strokeWidth="1.4" fill="rgba(52,34,18,0.62)" />
+                    <path d="M5.5 7 V5.2 a2.5 2.5 0 0 1 5 0 V7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+                  </svg>
+                </span>
+              )}
               {spot.hasSparks && !isRepaired && !reduceMotion && (
                 <span className="ows-sparks" aria-hidden="true">
                   {/* The box flashes cold blue in step with the main arc */}
@@ -321,6 +376,9 @@ export default function BuildingFloorScreen({ floor, onRide, onEnterRoom }: Buil
       >
         <span className="ows-hud-place">{data.name}</span>
       </header>
+
+      <MaterialPouch variant="downstairs" />
+      <FloatingRewards callouts={callouts} />
 
       {puzzleSession?.spot.puzzle === 'connect-wires' && (
         <ConnectWiresGame

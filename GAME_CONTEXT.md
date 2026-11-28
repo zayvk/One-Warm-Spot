@@ -330,6 +330,7 @@ Both modes keep the promise: **zero permadeath, zero raids, zero time pressure**
 - **🌦️ Live rooftop weather:** Rain (slanted streaks, floor ripples, misty overcast, patter; +1 barrel water, 2–3 weeds regrow) and Wind (dust motes, tumbling leaves, swaying weeds, gusts; 1–2 cardboard cartons blown in, +1 box material), each with its own distinct overnight effect, and a weather chip in the shelter header.
 - **🚪 Apartment room interiors:** opened apartment doors lead into randomly furnished Bedrooms, Kitchens, Living Rooms and Studies — grounded furniture, window dust, gentle parallax, day/dusk/night & weather light and a muffled room tone — remembered until the wind slams the door shut.
 - **📐 Fully responsive:** one proportional layout from landscape phones to ultrawide monitors (see Art & Audio Direction → Every screen, every size).
+- **✨ Storybook UI & Scene Polish:** Tic-Tac-Toe, Dots & Lines, Title wordmark stability, matching elevator floor stop names, seam-free lift doors, warm-sepia scene crossfades, feathered rooftop sky blending, two-layer floor contact shadows with phase lighting harmony, angled room sunbeams & entry banners, soft radial door cues with touch tap-to-reveal, compact downstairs Material Pouch, and floating reward/build callouts.
 
 ---
 

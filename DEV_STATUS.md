@@ -123,12 +123,14 @@ One-Warm-Spot/
         ├── TerraceLiftCutscene.tsx   # Lift ride between any two stops (fromFloor → toFloor): push-in / step-in, ticking indicator, destination painting + caption; the arrival is the 1 → R ride
         ├── LiftRideScreen.tsx        # Full-screen shell for in-building rides (fade-out, Skip button / click / Space-Enter-Escape)
         ├── ElevatorPanelModal.tsx    # Antique brass floor picker (R, 4, 3, 2, 1; current floor lit & disabled; Cancel / outside click / Escape)
-        ├── BuildingFloorScreen.tsx   # One explorable apartment floor (1–4) from floors.ts on a safe-area stage (fitStage + floorSafeArea, blurred fill on extreme shapes): % hotspots with glow + "puzzle coming soon" toast (or a live puzzle: Floor 3's fuse box → ConnectWiresGame, repaired once per run), fuse-box electric arcs until repaired, the lift (opens the floor panel), floor title; opened room doors read "Enter · …" and lead into ApartmentRoomScreen
-        ├── ApartmentRoomScreen.tsx   # Inside an opened door: generated room on a safe-area stage — grounded props with contact shadows, pointer parallax, window dust, time-of-day/weather light, inspect toasts, ← Back / Escape, room tone
+        ├── BuildingFloorScreen.tsx   # One explorable apartment floor (1–4) from floors.ts on a safe-area stage (fitStage + floorSafeArea, blurred fill on extreme shapes): soft radial glow + diegetic lock/open cues on hotspots, live puzzles (ConnectWires, TicTacToe, DotsAndBoxes), fuse-box electric arcs until repaired, compact MaterialPouch, floating reward callouts, touch tap-to-reveal labels, and lift panel trigger; opened room doors lead into ApartmentRoomScreen
+        ├── ApartmentRoomScreen.tsx   # Inside an opened door: generated room on a safe-area stage — two-layer floor contact shadows, angled window sunbeams + drifting dust, pointer parallax, day/dusk/night/weather prop harmony, compact MaterialPouch, storybook room-entry banner, touch tap-to-reveal tags, ← Back / Escape, room tone
+        ├── MaterialPouch.tsx         # Shared Found Materials Pouch HUD (full rooftop bar + compact downstairs bar) with gain pulse highlights
+        ├── FloatingRewards.tsx       # Brief upward-drifting reward & build callouts (Reduce Motion aware)
         ├── useViewport.ts            # The one visible-viewport source (visualViewport + resize / orientation): useViewport(), installViewportVars() (--app-w / --app-h / --ui-scale / --hud-frame-*), useHudStageFrame(stage)
         ├── buildingStage.ts          # useBuildingStage(safe) + stageBox(): 1376×768 building stages (lift, push-in) fitted with fitStage
-        ├── liftStage.tsx             # Shared lift pieces: StageFill (soft blurred band fill), sliding doors, frame, amber floor readout (sized to the fitted stage), caption
-        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas (lazy-loaded `ShelterCanvas` chunk behind a `.ows-scene-loader` emblem) + ← Title + emblem badge + weather chip (☀️ Clear / 🌧️ Rain / 🍃 Wind, effect tooltip) + 7-item Pouch HUD (hover/focus tooltips) + VitalityDialHud; drives setWeatherAmbience + PropActionMenu + StationPopover; the stairwell door opens ElevatorPanelModal (`onRide`)
+        ├── liftStage.tsx             # Shared lift pieces: StageFill (soft blurred band fill), sliding doors (seam-free center overlap), frame, amber floor readout (sized to the fitted stage), caption
+        ├── ShelterScreen.tsx         # Playable shelter view: full-viewport canvas (lazy-loaded `ShelterCanvas` chunk behind a `.ows-scene-loader` emblem) + ← Title + emblem badge + weather chip (☀️ Clear / 🌧️ Rain / 🍃 Wind, effect tooltip) + shared MaterialPouch + FloatingRewards + VitalityDialHud; drives setWeatherAmbience + PropActionMenu + StationPopover; the stairwell door opens ElevatorPanelModal (`onRide`)
         ├── VitalityDialHud.tsx       # Bottom-left bronze Vitality Medallion (80px; phase sky window + progress ring + centred Day plaque) + slim smoked-glass Stamina/Strength capsule tucked behind it
         ├── PropActionMenu.tsx        # Contextual floating pill above clicked stations: Primary Action (Rest/Sleep/Light/Sit/Extinguish/Harvest/Collect/Cook/Mend) + Upgrade tier action; `SlotBuildMenu` for empty "Build here" slots
         ├── StationPopover.tsx        # Frosted Cooking (grill recipes) / Mending (sewing perks) popover anchored above the station
@@ -815,11 +817,17 @@ Consequence: the 3-phase day cycle (`day`, `dusk`, `night`) and sleeping to adva
 
 - **Platforms:** desktop browsers first; tablets and phones in **landscape** only. Portrait is not a supported layout (no rotate prompt, no portrait tuning). Everything landscape is proportional (see Responsive Layout).
 - **Medallion floor:** the Vitality medallion scales with `--ui-scale` but never below 0.74 (its small Stamina / Strength captions would be unreadable at 0.68).
-- **Elevator names:** the panel uses short stop names; floor headers/captions use full names.
+- **Elevator names:** the brass Elevator Floor Panel labels match the floor headers verbatim (`Ground Floor · Lobby`, `Floor 2 · Residential Hallway`, `Floor 3 · Utility Corridor`, `Floor 4 · Skylight Landing`, `Rooftop Terrace`).
 - **Rest fast-forward:** resting at the shelter moves day → dusk → night immediately (+25 Stamina) — a cozy "skip ahead", so nobody has to wait out the real-time clock.
 - **Sit pause after lighting the fire:** ~0.6s where clicks are ignored so the sit-down is visible.
 - **Generous start pool:** `TEST_MODE_GENEROUS_START` stays on during the build phase; switch off and tune scarcity once more gathering exists.
 - **Downstairs placeholders:** floor scavenging spots without a wired puzzle (e.g. Floor 4's Bookshelf, reserved for Jigsaw) show "puzzle coming soon"; Jigsaw, Find the Object, Safe Dial and Hit the Nail are built and unmounted (see Planned / Next Milestones).
+
+### ✨ Storybook Visual & Live-Playtest Polish Pass
+
+- [x] **Playtest bug fixes:** Locked Tic-Tac-Toe 3×3 grid tracks (`repeat(3, minmax(0, 1fr))`, `aspect-ratio: 1` cells); replaced Unicode glyph legends with crisp inline SVGs in Tic-Tac-Toe and Dots & Lines; widened Dots & Lines header handling cleanly; locked Title wordmark aspect ratio (`763/653`) so action buttons never jump on load; tightened `TravelerPortrait` width (`12px`) to remove stray blank left space on Female/Male pills; matched `ELEVATOR_STOPS` names verbatim to floor headers; removed subpixel inner seam on elevator doors (`liftStage.tsx`) and replaced the dark restore flash with warm-sepia asset preloading + `250ms` sepia crossfade (`App.tsx`, `SiteSelector.tsx`, `TerraceLiftCutscene.tsx`).
+- [x] **Scene grounding & edge blending:** Edge-feathered rooftop `bgFill` seam in `shelterScene.ts` plus subtle rooftop prop contact shadows and Day/Dusk/Night/Rain lighting harmony; two-layer CSS floor contact shadows (`blur(12px)` ambient + `blur(3px)` sepia occlusion), tuned baseboard zone anchors (`rooms.ts`), and time/weather prop filters in `ApartmentRoomScreen`.
+- [x] **Storybook immersion:** Global 3.6% parchment paper-grain overlay (`.ows-paper-grain`), unified antique-brass double-rule card/modal framing, angled room sunbeams matched to each shell's window side, ~2s room-entry storybook banner, soft radial floor door glows with diegetic lock/open cues + touch tap-to-reveal labels, compact `MaterialPouch` downstairs, and floating reward/build callouts (`FloatingRewards` + `rewardCallouts.ts`).
 
 ### 🗺️ Backlog
 

@@ -44,6 +44,16 @@ export default function App() {
   const [ride, setRide] = useState<{ from: BuildingFloorId; to: BuildingFloorId }>({ from: 'R', to: 1 });
   const activeScreen = resolveScreen(screen, chosenSite, roomDoor !== null && roomRevision === sceneRevision);
 
+  /* Brief warm-sepia dissolve between major scene switches (avoids dark flashes on restore / lift transitions) */
+  const prevScreenRef = useRef<Screen>(activeScreen);
+  const [sepiaTransitionKey, setSepiaTransitionKey] = useState(0);
+  useEffect(() => {
+    if (prevScreenRef.current !== activeScreen) {
+      prevScreenRef.current = activeScreen;
+      setSepiaTransitionKey((k) => k + 1);
+    }
+  }, [activeScreen]);
+
   useEffect(() => {
     writeResumeLocation(locationForScreen(activeScreen, floor, ride.to, roomDoor));
   }, [activeScreen, floor, ride.to, roomDoor]);
@@ -166,6 +176,10 @@ export default function App() {
       <AudioToggle />
       <NoticeToasts />
       {content}
+      {sepiaTransitionKey > 0 && (
+        <div key={sepiaTransitionKey} className="ows-sepia-dissolve" aria-hidden="true" />
+      )}
+      <div className="ows-paper-grain" aria-hidden="true" />
     </>
   );
 }

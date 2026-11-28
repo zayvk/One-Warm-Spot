@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { SITES } from '../game/data/sites.ts';
-import { BG_VALLEY, BG_SHELTERS, travelerSpriteSrc } from '../game/data/media.ts';
+import { BG_VALLEY, BG_SHELTERS, CUTSCENE_ASSETS, SCENE_STAGES, travelerSpriteSrc } from '../game/data/media.ts';
 import type { MediaEntry } from '../game/data/media.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import type { SiteId, GameMode, TravelerGender, PlayerStats } from '../game/types/game.ts';
@@ -28,13 +28,16 @@ function TravelerPortrait({ gender }: { gender: TravelerGender }) {
       src={travelerSpriteSrc(gender, 'idle')}
       alt=""
       aria-hidden="true"
+      width={12}
+      height={24}
       draggable={false}
       style={{
-        width: '20px',
-        height: '26px',
+        width: '12px',
+        height: '24px',
         objectFit: 'contain',
-        objectPosition: 'center bottom',
+        objectPosition: 'center center',
         display: 'block',
+        flexShrink: 0,
       }}
     />
   );
@@ -152,6 +155,20 @@ export default function SiteSelector({ onBack, onChosen }: SiteSelectorProps) {
   const lockedSites = modeSites.filter((s) => !isSiteUnlocked(s, stats));
   const modeInfo = MODE_INFO[selectedMode];
   const existingSiteName = SITES.find((s) => s.id === chosenSite)?.name ?? 'your shelter';
+
+  /* Warm-decode arrival lift & stage art so "Restore this shelter" opens with zero dark flash */
+  useEffect(() => {
+    for (const src of [
+      CUTSCENE_ASSETS.terraceLobby,
+      CUTSCENE_ASSETS.terraceLiftFrame,
+      CUTSCENE_ASSETS.terraceLiftDoor,
+      SCENE_STAGES.terrace,
+    ]) {
+      if (!src) continue;
+      const img = new Image();
+      img.src = src;
+    }
+  }, []);
 
   return (
     <>

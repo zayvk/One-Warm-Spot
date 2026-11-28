@@ -147,7 +147,7 @@ export default function TerraceLiftCutscene({ fromFloor, toFloor, reduceMotion, 
   const liftShown = entered && !steppedOut;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#1e1a16' }}>
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#3a2d22' }}>
       {/* Soft blurred fill where the fitted lift stops short of an edge (extreme window shapes) */}
       {lift.fill && <StageFill src={behindIsDestination ? toBackdrop : fromBackdrop} />}
 
@@ -232,7 +232,7 @@ export default function TerraceLiftCutscene({ fromFloor, toFloor, reduceMotion, 
             opacity: inLift ? 0 : 1,
             transition: 'opacity 300ms ease',
             pointerEvents: 'none',
-            background: '#1e1a16',
+            background: '#3a2d22',
           }}
         >
           {push.fill && <StageFill src={fromBackdrop} />}

@@ -15,6 +15,7 @@ import { storeRoomLayout, storedRoomLayout } from '../game/engine/terraceState.t
 import { fitStage, stageLeavesGaps } from '../game/engine/stageFit.ts';
 import { playClick, playDoorCreak, playHover, setRoomTone } from '../game/audio/soundEngine.ts';
 import { useHudStageFrame, useViewport } from './useViewport.ts';
+import MaterialPouch from './MaterialPouch.tsx';
 
 /** The room fades out this long before the hallway fades back in */
 const EXIT_FADE_MS = 280;
@@ -76,8 +77,15 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
   const [glowing, setGlowing] = useState<{ id: string; key: number } | null>(null);
   /* The prop under the pointer / keyboard focus (its name tag sits above the room's light wash) */
   const [hovered, setHovered] = useState<string | null>(null);
+  const [bannerVisible, setBannerVisible] = useState(true);
+  const isTouchRef = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setBannerVisible(false), 2100);
+    return () => clearTimeout(t);
+  }, [doorId]);
 
   const room = ROOMS[layout.roomType];
   const { w: viewW, h: viewH } = useViewport();
@@ -187,6 +195,9 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
         transition: reduceMotion ? undefined : `opacity ${EXIT_FADE_MS}ms ease`,
       }}
       onPointerMove={onPointerMove}
+      onClick={() => {
+        if (hovered) setHovered(null);
+      }}
     >
       {showFill && (
         <img
@@ -231,6 +242,9 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
                   height: `${p.scale * 100}%`,
                   zIndex: i + 1,
                 }}
+                onPointerDown={(e) => {
+                  isTouchRef.current = e.pointerType === 'touch';
+                }}
                 onMouseEnter={() => {
                   playHover();
                   setHovered(p.propId);
@@ -238,9 +252,20 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
                 onMouseLeave={() => setHovered((h) => (h === p.propId ? null : h))}
                 onFocus={() => setHovered(p.propId)}
                 onBlur={() => setHovered((h) => (h === p.propId ? null : h))}
-                onClick={() => inspect(def.label, p.propId)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isTouchRef.current && hovered !== p.propId) {
+                    isTouchRef.current = false;
+                    playHover();
+                    setHovered(p.propId);
+                    return;
+                  }
+                  isTouchRef.current = false;
+                  inspect(def.label, p.propId);
+                }}
               >
-                <span className="ows-room-prop__shadow" aria-hidden="true" />
+                <span className="ows-room-prop__shadow-ambient" aria-hidden="true" />
+                <span className="ows-room-prop__shadow-occlusion" aria-hidden="true" />
                 <span className="ows-room-prop__art">
                   <img
                     src={def.src}
@@ -254,8 +279,13 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
           })}
         </div>
 
-        {/* Dust drifting through the window light */}
+        {/* Angled sunlit beams & dust drifting through the window light */}
         <div className="ows-room-layer ows-room-layer--motes" style={layerStyle(PARALLAX.motes)} aria-hidden="true">
+          <div className={`ows-room-sunbeams ows-room-sunbeams--${room.windowSide}`}>
+            <span className="ows-room-beam ows-room-beam--1" />
+            <span className="ows-room-beam ows-room-beam--2" />
+            <span className="ows-room-beam ows-room-beam--3" />
+          </div>
           <div
             className="ows-room-light"
             style={{
@@ -309,6 +339,20 @@ export default function ApartmentRoomScreen({ floor, doorId, onBack }: Apartment
         </button>
         <span className="ows-room-title">{title}</span>
       </header>
+
+      <MaterialPouch variant="downstairs" />
+
+      {bannerVisible && (
+        <div className="ows-room-banner" aria-hidden="true">
+          <span className="ows-room-banner__title">{door ? door.label : room.name}</span>
+          {door && (
+            <>
+              <span className="ows-room-banner__rule" />
+              <span className="ows-room-banner__sub">{room.name}</span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

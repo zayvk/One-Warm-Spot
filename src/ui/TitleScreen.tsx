@@ -85,6 +85,8 @@ export default function TitleScreen({ onStart, onContinue }: TitleScreenProps) {
           <img
             src={UI_ASSETS.logoTitle}
             alt="One Warm Spot"
+            width={763}
+            height={653}
             draggable={false}
             className="ows-title-logo"
           />

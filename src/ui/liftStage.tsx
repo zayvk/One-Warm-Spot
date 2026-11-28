@@ -22,8 +22,8 @@ export function StageFill({ src }: { src: string }) {
   );
 }
 
-/** The transparent doorway cutout in `terrace-lift-frame.webp` (stage %) */
-const DOORWAY = { left: '35.5%', top: '21.5%', width: '29%', height: '66%' } as const;
+/** The transparent doorway cutout in `terrace-lift-frame.webp` (stage %, slightly tucked behind the frame bezel to avoid edge seams) */
+const DOORWAY = { left: '35.2%', top: '21.2%', width: '29.6%', height: '66.6%' } as const;
 /** Zoom origin for stepping through the doorway */
 export const LIFT_DOORWAY_ORIGIN = '50% 54.5%';
 
@@ -38,7 +38,8 @@ export function LiftDoors({ open, reduceMotion }: { open: boolean; reduceMotion:
         position: 'absolute',
         [side]: 0,
         top: 0,
-        width: '50%',
+        /* Slight center overlap avoids subpixel bright hairlines when panels meet */
+        width: '50.6%',
         height: '100%',
         transform: open && !reduceMotion ? `translateX(${side === 'left' ? '-100%' : '100%'})` : 'translateX(0)',
         opacity: open && reduceMotion ? 0 : 1,
@@ -144,12 +145,13 @@ function DoorPanel({ mirrored }: { mirrored: boolean }) {
       style={{
         position: 'absolute',
         inset: 0,
+        backgroundColor: '#7d8a7c',
         backgroundImage: `url(${CUTSCENE_ASSETS.terraceLiftDoor})`,
         backgroundSize: 'cover',
         backgroundPosition: 'left center',
         transform: mirrored ? 'scaleX(-1)' : undefined,
         /* Soft seam shadow where the two panels meet */
-        boxShadow: 'inset -3px 0 4px rgba(20, 16, 12, 0.35)',
+        boxShadow: 'inset -3px 0 5px rgba(20, 16, 12, 0.42)',
       }}
     />
   );

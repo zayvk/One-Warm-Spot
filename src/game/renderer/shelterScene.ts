@@ -372,6 +372,47 @@ function createRadialTexture(): Texture {
   return Texture.from(canvas);
 }
 
+/** Draw a soft white-to-transparent edge-feather mask for any side where the stage stops short of the viewport */
+function drawEdgeFeatherCanvas(
+  canvas: HTMLCanvasElement,
+  left: boolean,
+  right: boolean,
+  top: boolean,
+  bottom: boolean,
+): void {
+  const size = 128;
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext('2d');
+  if (!g) return;
+  const img = g.createImageData(size, size);
+  const d = img.data;
+  const padX = 0.08;
+  const padY = 0.06;
+  const smooth = (t: number) => {
+    const c = Math.max(0, Math.min(1, t));
+    return c * c * (3 - 2 * c);
+  };
+  for (let y = 0; y < size; y++) {
+    const v = y / (size - 1);
+    const ayL = top ? smooth(v / padY) : 1;
+    const ayR = bottom ? smooth((1 - v) / padY) : 1;
+    const ay = Math.min(ayL, ayR);
+    for (let x = 0; x < size; x++) {
+      const u = x / (size - 1);
+      const axL = left ? smooth(u / padX) : 1;
+      const axR = right ? smooth((1 - u) / padX) : 1;
+      const a = Math.round(Math.min(axL, axR) * ay * 255);
+      const idx = (y * size + x) * 4;
+      d[idx] = 255;
+      d[idx + 1] = 255;
+      d[idx + 2] = 255;
+      d[idx + 3] = a;
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+
 /** "+2 🪵  +1 🧵" style material line */
 function formatMaterials(materials: Record<string, number | undefined>, sign = ''): string {
   return Object.entries(materials)
@@ -390,6 +431,7 @@ const SEARCHED_TINT = 0xcfc5b8;
 interface HotspotNode {
   config: HotspotConfig;
   root: Container;
+  propShadow: Graphics | null;
   propSprite: Sprite | null;
   /** The sprite URL this node should currently show (guards late texture loads) */
   spriteSrc: string;
@@ -430,6 +472,9 @@ export class ShelterScene {
   private readonly floorHit = new Graphics();
   private bgSprite: Sprite | null = null;
   private bgFill: Sprite | null = null;
+  private bgMask: Sprite | null = null;
+  private bgMaskCanvas: HTMLCanvasElement | null = null;
+  private bgMaskKey = '';
   private bgFallback: Graphics | null = null;
   private bgToken = 0;
 
@@ -972,14 +1017,23 @@ export class ShelterScene {
           this.bgSprite = null;
         }
         this.bgFill?.destroy();
-        /* Soft, dimmed copy of the painting behind it — only seen on extreme window shapes */
+        this.bgMask?.destroy();
+        /* Soft match-tone copy of the painting behind it — feathered seamlessly where the stage stops short */
         const fill = new Sprite(texture);
         fill.anchor.set(0.5);
         fill.eventMode = 'none';
-        fill.tint = 0xb8aea3;
-        fill.filters = [new BlurFilter({ strength: 28, quality: 3, resolution: 0.5 })];
+        fill.tint = 0xf2ece3;
+        fill.filters = [new BlurFilter({ strength: 30, quality: 3, resolution: 0.5 })];
         fill.visible = false;
         this.bgFill = fill;
+        const maskCanvas = document.createElement('canvas');
+        this.bgMaskCanvas = maskCanvas;
+        this.bgMaskKey = '';
+        const mask = new Sprite(Texture.from(maskCanvas));
+        mask.anchor.set(0.5);
+        mask.eventMode = 'none';
+        mask.visible = false;
+        this.bgMask = mask;
         const sprite = new Sprite(texture);
         sprite.anchor.set(0.5);
         sprite.eventMode = 'none';
@@ -987,6 +1041,7 @@ export class ShelterScene {
         const base = this.bgFallback ? 1 : 0;
         this.bgLayer.addChildAt(fill, base);
         this.bgLayer.addChildAt(sprite, base + 1);
+        this.bgLayer.addChildAt(mask, base + 2);
         this.layout();
         this.revealStage();
       })
@@ -1163,8 +1218,13 @@ export class ShelterScene {
       root.addChild(blueprint);
     }
 
+    let propShadow: Graphics | null = null;
     let propSprite: Sprite | null = null;
     if (cfg.propSprite || cfg.station || slot) {
+      propShadow = new Graphics();
+      propShadow.eventMode = 'none';
+      propShadow.visible = false;
+      root.addChild(propShadow);
       propSprite = Sprite.from(Texture.EMPTY);
       propSprite.anchor.set(0.5, 1);
       propSprite.eventMode = 'none';
@@ -1176,6 +1236,7 @@ export class ShelterScene {
     const node: HotspotNode = {
       config: cfg,
       root,
+      propShadow,
       propSprite,
       spriteSrc: cfg.propSprite,
       label,
@@ -1385,7 +1446,6 @@ export class ShelterScene {
     node.label.visible = enter;
     node.labelPill.visible = enter;
     if (node.propSprite) {
-      node.propSprite.tint = enter ? 0xfff6e5 : 0xffffff;
       this.applyHotspotSpriteScale(node);
     }
     if (node.blueprint?.visible) {
@@ -1394,6 +1454,7 @@ export class ShelterScene {
     if (enter) {
       this.layoutHotspotLabel(node);
     }
+    this.applyLighting();
   }
 
   private applyHotspotSpriteScale(node: HotspotNode): void {
@@ -1648,9 +1709,9 @@ export class ShelterScene {
     node.root.cursor = 'default';
     node.root.eventMode = 'none';
     if (node.propSprite) {
-      node.propSprite.tint = 0xffffff;
       this.applyHotspotSpriteScale(node);
     }
+    this.applyLighting();
   }
 
   private interactFirepit(node: HotspotNode): void {
@@ -1793,21 +1854,22 @@ export class ShelterScene {
     node.root.cursor = 'default';
     if (node.config.searchedLabel) node.label.text = node.config.searchedLabel;
     if (node.propSprite) {
-      node.propSprite.tint = 0xffffff;
       this.applyHotspotSpriteScale(node);
     }
+    this.applyLighting();
   }
 
   private isEmptiedCrate(node: HotspotNode): boolean {
     return node.config.type === 'searchable' && node.interacted && !node.config.clearsWhenSearched;
   }
 
-  /** Fade a prop's art away (instant under Reduce Motion) */
+  /** Fade a prop's art and shadow away (instant under Reduce Motion) */
   private fadeOutProp(node: HotspotNode): void {
     const sprite = node.propSprite;
     if (!sprite) return;
     if (this.state.reduceMotion) {
       sprite.alpha = 0;
+      if (node.propShadow) node.propShadow.visible = false;
       return;
     }
     const start = performance.now();
@@ -1815,7 +1877,12 @@ export class ShelterScene {
       if (this.disposed || sprite.destroyed) return;
       const p = Math.min(1, (performance.now() - start) / 400);
       sprite.alpha = 1 - p;
-      if (p < 1) requestAnimationFrame(fade);
+      if (node.propShadow) node.propShadow.alpha = 1 - p;
+      if (p < 1) {
+        requestAnimationFrame(fade);
+      } else if (node.propShadow) {
+        node.propShadow.visible = false;
+      }
     };
     requestAnimationFrame(fade);
   }
@@ -1983,6 +2050,7 @@ export class ShelterScene {
       };
       hs.spriteSrc = '';
       if (hs.propSprite) hs.propSprite.visible = false;
+      if (hs.propShadow) hs.propShadow.visible = false;
       if (hs.blueprint) hs.blueprint.visible = true;
     } else {
       hs.config = {
@@ -2048,6 +2116,7 @@ export class ShelterScene {
     };
     hs.spriteSrc = '';
     if (hs.propSprite) hs.propSprite.visible = false;
+    if (hs.propShadow) hs.propShadow.visible = false;
     if (hs.blueprint) hs.blueprint.visible = true;
     this.setHotspotLabel(hs, BUILD_HERE_LABEL);
     this.layout();
@@ -2462,15 +2531,38 @@ export class ShelterScene {
     this.floorHit.rect(0, 0, W, H).fill({ color: 0x000000, alpha: 0.001 });
     this.floorHit.hitArea = new Rectangle(0, 0, W, H);
 
+    const hasGaps = stageLeavesGaps(this.stage, W, H);
     if (this.bgSprite) {
       this.bgSprite.scale.set(SW / (this.bgSprite.texture.width || 1));
       this.bgSprite.position.set(this.stage.x + SW / 2, this.stage.y + SH / 2);
+      if (this.bgMask && this.bgMaskCanvas) {
+        if (hasGaps) {
+          const gapL = this.stage.x > 0.5;
+          const gapR = this.stage.x + SW < W - 0.5;
+          const gapT = this.stage.y > 0.5;
+          const gapB = this.stage.y + SH < H - 0.5;
+          const key = `${gapL}-${gapR}-${gapT}-${gapB}`;
+          if (key !== this.bgMaskKey) {
+            this.bgMaskKey = key;
+            drawEdgeFeatherCanvas(this.bgMaskCanvas, gapL, gapR, gapT, gapB);
+            this.bgMask.texture.source.update();
+          }
+          this.bgMask.visible = true;
+          this.bgMask.position.copyFrom(this.bgSprite.position);
+          this.bgMask.width = SW;
+          this.bgMask.height = SH;
+          this.bgSprite.mask = this.bgMask;
+        } else {
+          this.bgMask.visible = false;
+          this.bgSprite.mask = null;
+        }
+      }
     }
     if (this.bgFill) {
       const tex = this.bgFill.texture;
-      this.bgFill.visible = stageLeavesGaps(this.stage, W, H);
-      this.bgFill.scale.set(Math.max(W / (tex.width || 1), H / (tex.height || 1)) * 1.08);
-      this.bgFill.position.set(W / 2, H / 2);
+      this.bgFill.visible = hasGaps;
+      this.bgFill.scale.set(Math.max(W / (tex.width || 1), H / (tex.height || 1)) * 1.06);
+      this.bgFill.position.set(this.stage.x + SW / 2, this.stage.y + SH / 2);
     }
     this.drawFallback();
 
@@ -2498,14 +2590,18 @@ export class ShelterScene {
       } else if (isBlueprint && hs.blueprint) {
         const rx = this.drawBlueprint(hs);
         hs.root.hitArea = new Circle(0, 0, Math.max(24, rx));
+        if (hs.propShadow) hs.propShadow.visible = false;
       } else if (hs.propSprite && hs.config.propScale && hs.propSprite.texture !== Texture.EMPTY) {
         const pH = SH * hs.config.propScale;
         const pScale = pH / (hs.propSprite.texture.height || 100);
         this.applyHotspotSpriteScale(hs);
 
         const pW = hs.propSprite.texture.width * pScale;
+        this.layoutHotspotShadow(hs, pW);
         const hitRadius = Math.max(30, Math.max(pW, pH) * 0.52);
         hs.root.hitArea = new Circle(0, -pH * 0.48, hitRadius);
+      } else if (hs.propShadow) {
+        hs.propShadow.visible = false;
       }
       if (hs.glows.length) this.layoutStationGlows(hs);
       if (hs.hovered) this.layoutHotspotLabel(hs);
@@ -2896,6 +2992,49 @@ export class ShelterScene {
     }
   }
 
+  private layoutHotspotShadow(node: HotspotNode, propW: number): void {
+    const sh = node.propShadow;
+    if (!sh) return;
+    if (!node.propSprite?.visible || node.propSprite.alpha <= 0.02) {
+      sh.visible = false;
+      return;
+    }
+    const rxOuter = Math.max(14, propW * 0.46);
+    const ryOuter = Math.max(4, propW * 0.085);
+    const rxInner = Math.max(10, propW * 0.34);
+    const ryInner = Math.max(3, propW * 0.055);
+    sh.clear();
+    sh.ellipse(0, 0, rxOuter, ryOuter).fill({ color: 0x26180a, alpha: 0.14 });
+    sh.ellipse(0, 0, rxInner, ryInner).fill({ color: 0x1c1006, alpha: 0.24 });
+    sh.visible = true;
+    sh.alpha = node.propSprite.alpha;
+  }
+
+  private computePropTint(node: HotspotNode, overcast: number): number {
+    const c = this.current;
+    const ambBlend = 0.52 + 0.06 * c.nightFactor;
+    let r = lerp(255, c.mul[0], ambBlend);
+    let g = lerp(255, c.mul[1], ambBlend);
+    let b = lerp(255, c.mul[2], ambBlend);
+    if (overcast > 0.01) {
+      const rainMix = overcast * 0.22 * (1 - 0.5 * c.nightFactor);
+      r = lerp(r, 200, rainMix);
+      g = lerp(g, 212, rainMix);
+      b = lerp(b, 224, rainMix);
+    }
+    if (node.config.type === 'searchable' && node.interacted && !node.config.clearsWhenSearched && !node.config.propSpriteAfter) {
+      r *= ((SEARCHED_TINT >> 16) & 0xff) / 255;
+      g *= ((SEARCHED_TINT >> 8) & 0xff) / 255;
+      b *= (SEARCHED_TINT & 0xff) / 255;
+    }
+    if (node.hovered) {
+      r = lerp(r, 255, 0.26);
+      g = lerp(g, 246, 0.26);
+      b = lerp(b, 229, 0.26);
+    }
+    return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+  }
+
   private applyLighting(): void {
     const c = this.current;
     const { width: W, height: H } = this;
@@ -2914,5 +3053,11 @@ export class ShelterScene {
     this.sunGlow.alpha = c.sunAlpha * (1 - 0.6 * overcast);
     this.sunGlow.position.set(W * c.sunX, H * c.sunY);
     this.warmth.alpha = this.warmthCurrent;
+
+    for (const hs of this.hotspots) {
+      if (hs.propSprite?.visible && hs.propSprite.alpha > 0.01) {
+        hs.propSprite.tint = this.computePropTint(hs, overcast);
+      }
+    }
   }
 }

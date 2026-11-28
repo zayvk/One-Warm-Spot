@@ -287,8 +287,18 @@ export default function DotsAndBoxesGame({
 
           <div className="ows-dots-side">
             <p className="ows-mg-legend" aria-hidden="true">
-              <span className="ows-mg-legend__x">✕ You</span>
-              <span className="ows-mg-legend__o">◯ {OPPONENT}</span>
+              <span className="ows-mg-legend__x">
+                <svg className="ows-mg-legend__swatch" viewBox="0 0 18 18">
+                  <path d="M4 4 L14 14 M14 4 L4 14" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" fill="none" />
+                </svg>
+                <span>You</span>
+              </span>
+              <span className="ows-mg-legend__o">
+                <svg className="ows-mg-legend__swatch" viewBox="0 0 18 18">
+                  <circle cx="9" cy="9" r="5.2" stroke="currentColor" strokeWidth="2.4" fill="none" />
+                </svg>
+                <span>{OPPONENT}</span>
+              </span>
             </p>
             {finished && (
               <footer className="ows-mg-footer">

@@ -342,8 +342,8 @@ export const ELEVATOR_STOPS: readonly ElevatorStop[] = [
   { id: 'R', button: 'R', label: 'Rooftop Terrace' },
   { id: 4, button: '4', label: 'Floor 4 · Skylight Landing' },
   { id: 3, button: '3', label: 'Floor 3 · Utility Corridor' },
-  { id: 2, button: '2', label: 'Floor 2 · Hallway' },
-  { id: 1, button: '1', label: 'Floor 1 · Ground Lobby' },
+  { id: 2, button: '2', label: 'Floor 2 · Residential Hallway' },
+  { id: 1, button: '1', label: 'Ground Floor · Lobby' },
 ];
 
 /** Bottom to top */

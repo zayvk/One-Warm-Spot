@@ -1,11 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ShelterCanvasHandle } from '../game/renderer/ShelterCanvas.tsx';
 import type { SceneStationState } from '../game/renderer/shelterScene.ts';
 import { useGameStore } from '../game/store/useGameStore.ts';
 import { SITES } from '../game/data/sites.ts';
-import { RESOURCE_MAP } from '../game/data/resources.ts';
 import { UI_ASSETS } from '../game/data/media.ts';
 import { getSceneConfig } from '../game/data/scenes/index.ts';
+import { MENDING_PERKS } from '../game/data/recipes.ts';
 import type { StationId } from '../game/data/scenes/types.ts';
 import { stationTierConfig } from '../game/engine/stations.ts';
 import { unplacedStations } from '../game/engine/buildSlots.ts';
@@ -15,7 +15,10 @@ import type { ResourceId } from '../game/types/game.ts';
 import PropActionMenu, { SlotBuildMenu, type StationMenuAction } from './PropActionMenu.tsx';
 import StationPopover, { type PopoverStation } from './StationPopover.tsx';
 import VitalityDialHud from './VitalityDialHud.tsx';
+import { formatRewardCallout, POUCH_RESOURCE_IDS } from '../game/engine/rewardCallouts.ts';
 import ElevatorPanelModal from './ElevatorPanelModal.tsx';
+import MaterialPouch from './MaterialPouch.tsx';
+import FloatingRewards, { type FloatingCallout } from './FloatingRewards.tsx';
 import type { BuildingFloorId } from '../game/data/floors.ts';
 import { stagePointToPx, type StagePoint, type StageRect } from '../game/engine/stageFit.ts';
 import { useHudStageFrame } from './useViewport.ts';
@@ -28,8 +31,6 @@ export interface ShelterScreenProps {
 
 /** Soft loudness for the in-shelter ambience bed */
 const SHELTER_AMBIENCE_LEVEL = 0.55;
-
-const POUCH_IDS: ResourceId[] = ['timber', 'cloth', 'seeds', 'water', 'scrap', 'stone', 'food'];
 
 /* PixiJS and the scene code load on demand (kept out of the main bundle; usually warmed during the arrival / lift ride) */
 const ShelterCanvas = lazy(() => import('../game/renderer/ShelterCanvas.tsx'));
@@ -49,8 +50,10 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
   const weather = useGameStore((s) => s.weather);
   const resources = useGameStore((s) => s.resources);
 
-  const [pulsing, setPulsing] = useState<Partial<Record<ResourceId, boolean>>>({});
-  const [prevResources, setPrevResources] = useState(resources);
+  const prevResourcesRef = useRef(resources);
+  const prevStationStateRef = useRef<SceneStationState | null>(null);
+  const [callouts, setCallouts] = useState<FloatingCallout[]>([]);
+  const calloutSeqRef = useRef(0);
   const canvasRef = useRef<ShelterCanvasHandle>(null);
   /* Null until the scene reports its restored station state */
   const [stationState, setStationState] = useState<SceneStationState | null>(null);
@@ -62,20 +65,55 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
   useHudStageFrame(stage);
   const [elevatorOpen, setElevatorOpen] = useState(false);
 
-  /* Pulse newly found pouch materials (derived as the pouch changes) */
-  if (resources !== prevResources) {
-    setPrevResources(resources);
-    const increased = POUCH_IDS.filter((id) => resources[id] > prevResources[id]);
-    if (increased.length > 0) {
-      setPulsing((curr) => {
-        const next = { ...curr };
-        for (const id of increased) next[id] = true;
-        return next;
-      });
-    }
-  }
+  const enqueueCallout = useCallback((text: string, tone: 'reward' | 'build' = 'reward', y = 24) => {
+    if (!text) return;
+    const id = ++calloutSeqRef.current;
+    setCallouts((curr) => [...curr, { id, text, tone, x: 50, y }]);
+    setTimeout(() => {
+      setCallouts((curr) => curr.filter((c) => c.id !== id));
+    }, 1500);
+  }, []);
 
-  const stations = getSceneConfig(chosenSite)?.stations ?? [];
+  const stations = useMemo(() => getSceneConfig(chosenSite)?.stations ?? [], [chosenSite]);
+
+  /* Float upward callouts whenever materials arrive or a station/perk completes */
+  useEffect(() => {
+    const prev = prevResourcesRef.current;
+    if (resources === prev) return;
+    prevResourcesRef.current = resources;
+    const gained: Partial<Record<ResourceId, number>> = {};
+    let hasGain = false;
+    for (const id of POUCH_RESOURCE_IDS) {
+      const diff = resources[id] - prev[id];
+      if (diff > 0) {
+        gained[id] = diff;
+        hasGain = true;
+      }
+    }
+    if (hasGain) enqueueCallout(formatRewardCallout(gained), 'reward', 22);
+  }, [resources, enqueueCallout]);
+
+  useEffect(() => {
+    if (!stationState) return;
+    const prev = prevStationStateRef.current;
+    prevStationStateRef.current = stationState;
+    if (!prev) return;
+    for (const st of stations) {
+      const nextTier = stationState.tiers[st.id];
+      const prevTier = prev.tiers[st.id];
+      if (nextTier > prevTier) {
+        const cfg = stationTierConfig(st, nextTier);
+        if (cfg) {
+          enqueueCallout(`${prevTier === 0 ? 'Built' : 'Upgraded'} ${cfg.name}!`, 'build', 28);
+        }
+      }
+    }
+    if (stationState.perks.length > prev.perks.length) {
+      const newPerkId = stationState.perks.find((id) => !prev.perks.includes(id));
+      const perk = MENDING_PERKS.find((p) => p.id === newPerkId);
+      if (perk) enqueueCallout(`${perk.icon} ${perk.name}`, 'build', 28);
+    }
+  }, [stationState, stations, enqueueCallout]);
 
   const closePopover = useCallback(() => setPopover(null), []);
   const openPopover = useCallback((station: PopoverStation, anchor: StagePoint) => {
@@ -144,22 +182,7 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
     };
   }, []);
 
-  /* Every pulse settles 700ms after the latest find */
-  useEffect(() => {
-    const active = POUCH_IDS.filter((id) => pulsing[id]);
-    if (active.length === 0) return;
-    const timer = setTimeout(() => {
-      setPulsing((curr) => {
-        const next = { ...curr };
-        for (const id of active) next[id] = false;
-        return next;
-      });
-    }, 700);
-    return () => clearTimeout(timer);
-  }, [pulsing]);
-
   const siteName = SITES.find((s) => s.id === chosenSite)?.name ?? 'your shelter';
-  const pouchResources = POUCH_IDS.map((id) => RESOURCE_MAP[id]).filter((r) => r !== undefined);
   const popoverStation = popover ? stations.find((s) => s.id === popover.station) : undefined;
   const popoverTitle =
     popoverStation && stationState
@@ -215,22 +238,8 @@ export default function ShelterScreen({ onBackToTitle, onRide }: ShelterScreenPr
       </header>
 
       {/* Enlarged, horizontally centered Found Materials Pouch with instant hover tooltips */}
-      <div className="ows-hud-bar ows-pouch-bar" aria-label="Found Materials Pouch" data-hud-top="">
-        {pouchResources.map((r) => (
-          <span
-            key={r.id}
-            tabIndex={0}
-            aria-label={`${r.name}: ${resources[r.id]}`}
-            className={`ows-pouch-item ${pulsing[r.id] ? 'ows-pouch-item--pulse' : ''}`}
-          >
-            <span aria-hidden="true">{r.emoji}</span>
-            <span>{resources[r.id]}</span>
-            <span className="ows-pouch-tooltip" role="tooltip">
-              {r.name}
-            </span>
-          </span>
-        ))}
-      </div>
+      <MaterialPouch variant="rooftop" />
+      <FloatingRewards callouts={callouts} />
 
       {/* Interactive PixiJS canvas (full viewport) */}
       <main style={{ position: 'relative', flex: 1, minHeight: 0, background: '#F5EFE4' }}>

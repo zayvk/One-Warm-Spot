@@ -45,6 +45,8 @@ export interface RoomDef {
   type: RoomType;
   name: string;
   shell: string;
+  /** Which side of the painted shell has the sunlit window */
+  windowSide: 'left' | 'right';
   /** Where the window light falls, for the drifting dust motes (stage fractions) */
   light: { x: number; y: number; w: number; h: number };
   props: readonly RoomPropDef[];
@@ -97,15 +99,15 @@ function zonesFor(o: {
   rightMax?: number;
   rightX?: number;
 }): AnchorZone[] {
-  const backY = o.fl + 0.012;
+  const backY = o.fl + 0.016;
   const back = { x: 0.018, yMin: 0, yMax: 0.008 };
-  const floor = { x: 0.025, yMin: -0.01, yMax: 0.01 };
+  const floor = { x: 0.025, yMin: -0.008, yMax: 0.008 };
   return [
     { id: 'back-left', type: 'back-wall', x: o.wallL + 0.11, y: backY, depthScale: 1, jitter: back },
     { id: 'back-center', type: 'back-wall', x: (o.wallL + o.wallR) / 2, y: backY, depthScale: 1, jitter: back },
     { id: 'back-right', type: 'back-wall', x: o.wallR - 0.11, y: backY, depthScale: 1, jitter: back },
-    { id: 'left-mid', type: 'side-wall', x: 0.15, y: 0.835, depthScale: 1.15, jitter: floor, maxHeight: o.leftMax },
-    { id: 'right-mid', type: 'side-wall', x: o.rightX ?? 0.85, y: 0.835, depthScale: 1.15, jitter: floor, maxHeight: o.rightMax },
+    { id: 'left-mid', type: 'side-wall', x: 0.15, y: 0.818, depthScale: 1.15, jitter: floor, maxHeight: o.leftMax },
+    { id: 'right-mid', type: 'side-wall', x: o.rightX ?? 0.85, y: 0.818, depthScale: 1.15, jitter: floor, maxHeight: o.rightMax },
     { id: 'center-floor', type: 'mid-floor', x: 0.5, y: 0.87, depthScale: 1.2, jitter: { x: 0.04, yMin: -0.01, yMax: 0.01 }, maxHeight: 0.3 },
     { id: 'front-left', type: 'corner', x: 0.16, y: 0.955, depthScale: 1.3, jitter: floor, maxHeight: 0.33 },
     { id: 'front-right', type: 'corner', x: 0.84, y: 0.955, depthScale: 1.3, jitter: floor, maxHeight: 0.33 },
@@ -117,6 +119,7 @@ export const ROOMS: Record<RoomType, RoomDef> = {
     type: 'bedroom',
     name: 'Bedroom',
     shell: assetUrl('/source/rooms/room-bedroom-shell.webp'),
+    windowSide: 'left',
     light: { x: 0.12, y: 0.12, w: 0.42, h: 0.62 },
     /* Window on the left wall (sill ~0.62): only low pieces stand under it */
     zones: zonesFor({ fl: 0.725, wallL: 0.235, wallR: 0.79, leftMax: 0.24 }),
@@ -132,6 +135,7 @@ export const ROOMS: Record<RoomType, RoomDef> = {
     type: 'kitchen',
     name: 'Kitchen',
     shell: assetUrl('/source/rooms/room-kitchen-shell.webp'),
+    windowSide: 'right',
     light: { x: 0.5, y: 0.1, w: 0.42, h: 0.6 },
     /* Window on the right wall (sill ~0.6) */
     zones: zonesFor({ fl: 0.74, wallL: 0.215, wallR: 0.785, rightMax: 0.26 }),
@@ -147,6 +151,7 @@ export const ROOMS: Record<RoomType, RoomDef> = {
     type: 'living',
     name: 'Living Room',
     shell: assetUrl('/source/rooms/room-living-shell.webp'),
+    windowSide: 'left',
     light: { x: 0.1, y: 0.14, w: 0.46, h: 0.64 },
     /* Window on the left wall (sill ~0.72); radiator on the right wall */
     zones: zonesFor({ fl: 0.718, wallL: 0.265, wallR: 0.81, leftMax: 0.17, rightMax: 0.3, rightX: 0.8 }),
@@ -162,6 +167,7 @@ export const ROOMS: Record<RoomType, RoomDef> = {
     type: 'study',
     name: 'Study',
     shell: assetUrl('/source/rooms/room-study-shell.webp'),
+    windowSide: 'left',
     light: { x: 0.12, y: 0.1, w: 0.4, h: 0.62 },
     /* Window on the left wall (sill ~0.62) */
     zones: zonesFor({ fl: 0.7, wallL: 0.252, wallR: 0.765, leftMax: 0.24 }),

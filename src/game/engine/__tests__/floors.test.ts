@@ -154,7 +154,7 @@ describe('building floor config', () => {
     });
   });
 
-  it('offers every stop on the elevator panel, top to bottom, with the right painting & caption', () => {
+  it('offers every stop on the elevator panel, top to bottom, with matching floor captions', () => {
     expect(ELEVATOR_STOPS.map((s) => s.id)).toEqual(['R', 4, 3, 2, 1]);
     expect(floorBackdrop('R')).toBe(SCENE_STAGES.terrace);
     const captions = (['R', 1, 2, 3, 4] as BuildingFloorId[]).map((f) => floorCaption(f, 'Old Apartment Terrace'));
@@ -164,6 +164,13 @@ describe('building floor config', () => {
       'Floor 2 · Residential Hallway',
       'Floor 3 · Utility Corridor',
       'Floor 4 · Skylight Landing',
+    ]);
+    expect(ELEVATOR_STOPS.map((s) => s.label)).toEqual([
+      'Rooftop Terrace',
+      floorCaption(4),
+      floorCaption(3),
+      floorCaption(2),
+      floorCaption(1),
     ]);
   });
 });
